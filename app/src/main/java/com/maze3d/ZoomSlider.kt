@@ -9,7 +9,7 @@ import android.view.View
 
 /** Slim vertical slider: slide up to zoom in, down to zoom out. Value is 0..1. */
 class ZoomSlider(context: Context, private val onChange: (Float) -> Unit) : View(context) {
-    var value = 0.4f
+    var value = 0.67f
         set(v) { field = v.coerceIn(0f, 1f); invalidate() }
     private val d = resources.displayMetrics.density
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFFFFF }

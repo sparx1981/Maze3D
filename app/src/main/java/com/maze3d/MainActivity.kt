@@ -21,6 +21,9 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.maze3d.core.Vec3
+import javax.microedition.khronos.egl.EGL10
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.egl.EGLDisplay
 import com.maze3d.gl.MazeRenderer
 
 class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
@@ -32,7 +35,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var sensors: SensorManager
     private var gravitySensor: Sensor? = null
     private var baseline: Vec3? = null
-    private var tiltBtn: TextView? = null
 
     private var twistAngle = 0f
     private var lastX = 0f
@@ -50,7 +52,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         renderer = MazeRenderer(this)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
-            setEGLConfigChooser(8, 8, 8, 8, 24, 0)
+            setEGLConfigChooser(MsaaChooser())
             preserveEGLContextOnPause = true
             setRenderer(renderer)
         }
@@ -66,42 +68,70 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private fun dp(v: Float) = (v * resources.displayMetrics.density).toInt()
 
-    private fun pill(text: String, onClick: (TextView) -> Unit): TextView = TextView(this).apply {
-        this.text = text
-        setTextColor(Color.WHITE)
-        textSize = 14f
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        gravity = Gravity.CENTER
-        setPadding(dp(16f), dp(10f), dp(16f), dp(10f))
-        background = GradientDrawable().apply {
-            cornerRadius = dp(22f).toFloat()
-            setColor(Color.argb(120, 20, 22, 28))
-            setStroke(dp(1f), Color.argb(70, 255, 255, 255))
+    private var accent = Color.rgb(120, 200, 255)
+    private val toggles = ArrayList<Pair<TextView, () -> Boolean>>()
+
+    private fun glass(active: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(20f).toFloat()
+        if (active) {
+            setColor(Color.argb(210, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1f), Color.argb(160, 255, 255, 255))
+        } else {
+            setColor(Color.argb(110, 12, 14, 20))
+            setStroke(dp(1f), Color.argb(60, 255, 255, 255))
         }
-        setOnClickListener { onClick(this); performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
     }
 
-    private fun setActive(v: TextView, on: Boolean) {
-        (v.background as GradientDrawable).setColor(if (on) Color.argb(200, 70, 120, 220) else Color.argb(120, 20, 22, 28))
+    private fun pill(text: String, toggle: (() -> Boolean)? = null, onClick: (TextView) -> Unit): TextView = TextView(this).apply {
+        this.text = text.uppercase()
+        setTextColor(Color.WHITE)
+        textSize = 11.5f
+        letterSpacing = 0.12f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        gravity = Gravity.CENTER
+        setPadding(dp(14f), dp(10f), dp(14f), dp(10f))
+        background = glass(toggle?.invoke() ?: false)
+        if (toggle != null) toggles.add(this to toggle)
+        setOnClickListener {
+            onClick(this)
+            toggle?.let { t -> background = glass(t()) }
+            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        }
     }
+
+    private fun refreshToggles() { for ((v, t) in toggles) v.background = glass(t()) }
+
+    private lateinit var title: TextView
+    private lateinit var clock: TextView
+    private lateinit var finishName: TextView
 
     private fun buildOverlay(): View {
         val layer = FrameLayout(this)
-        hud = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(6f, 0f, 2f, Color.BLACK)
+        val sans = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        title = TextView(this).apply {
+            setTextColor(Color.argb(230, 255, 255, 255)); textSize = 12f; letterSpacing = 0.22f; typeface = sans
+            setShadowLayer(8f, 0f, 2f, Color.argb(160, 0, 0, 0))
         }
-        layer.addView(hud, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
-            setMargins(dp(20f), dp(36f), 0, 0)
+        clock = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 34f; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            setShadowLayer(12f, 0f, 3f, Color.argb(170, 0, 0, 0))
+        }
+        finishName = TextView(this).apply {
+            setTextColor(Color.argb(150, 255, 255, 255)); textSize = 11f; letterSpacing = 0.08f; typeface = sans
+            setShadowLayer(8f, 0f, 2f, Color.argb(160, 0, 0, 0))
+        }
+        col.addView(title); col.addView(clock); col.addView(finishName)
+        layer.addView(col, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
+            setMargins(dp(22f), dp(34f), 0, 0)
         })
+
         banner = TextView(this).apply {
-            text = "Solved!"
-            setTextColor(Color.WHITE)
-            textSize = 34f
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-            setShadowLayer(14f, 0f, 3f, Color.BLACK)
+            text = "SOLVED"
+            setTextColor(Color.WHITE); textSize = 30f; letterSpacing = 0.35f
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            setShadowLayer(18f, 0f, 4f, Color.argb(200, 0, 0, 0))
             alpha = 0f
         }
         layer.addView(banner, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
@@ -109,24 +139,29 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val slider = ZoomSlider(this) { v -> glView.queueEvent { renderer.setZoomLevel(v) } }
         layer.addView(slider, FrameLayout.LayoutParams(dp(48f), dp(260f), Gravity.END or Gravity.CENTER_VERTICAL).apply { setMargins(0, 0, dp(6f), 0) })
 
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        val tilt = pill("Tilt") { v ->
-            val on = !renderer.tiltMode
-            setTilt(on); setActive(v, on)
+        val qualityNames = arrayOf("Low", "Medium", "High")
+        var quality = 2
+        val q = pill("Quality " + qualityNames[quality]) { v ->
+            quality = (quality + 2) % 3
+            v.text = ("Quality " + qualityNames[quality]).uppercase()
+            val level = quality
+            glView.queueEvent { renderer.setQualityLevel(level) }
         }
-        tiltBtn = tilt
-        val hint = pill("Hint") { v ->
-            renderer.hintOn = !renderer.hintOn; setActive(v, renderer.hintOn)
+        layer.addView(q, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
+
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val tilt = pill("Tilt", { renderer.tiltMode }) { setTilt(!renderer.tiltMode) }
+        val hint = pill("Hint", { renderer.hintOn }) {
+            renderer.hintOn = !renderer.hintOn
             glView.queueEvent { renderer.resetHint() }
         }
-        setActive(hint, true)
-        val follow = pill("Follow") { v -> renderer.followOn = !renderer.followOn; setActive(v, renderer.followOn) }
+        val follow = pill("Follow", { renderer.followOn }) { renderer.followOn = !renderer.followOn }
         val ball = pill("Ball") { glView.queueEvent { renderer.resetMarble() } }
         val next = pill("New") { glView.queueEvent { renderer.requestNew() } }
         for (b in listOf(tilt, hint, follow, ball, next)) {
-            bar.addView(b, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4f), 0, dp(4f), 0) })
+            bar.addView(b, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(3f), 0, dp(3f), 0) })
         }
-        layer.addView(bar, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(0, 0, 0, dp(28f)) })
+        layer.addView(bar, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(0, 0, 0, dp(30f)) })
         return layer
     }
 
@@ -215,13 +250,41 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     // ---- renderer callbacks (GL thread) -------------------------------------------------
     override fun onHud(shape: String, seconds: Int, solved: Boolean) {
         runOnUiThread {
-            hud.text = "$shape   %d:%02d".format(seconds / 60, seconds % 60)
-            banner.animate().alpha(if (solved) 1f else 0f).setDuration(300).start()
+            title.text = shape.uppercase()
+            clock.text = "%d:%02d".format(seconds / 60, seconds % 60)
+            banner.animate().alpha(if (solved) 1f else 0f).setDuration(350).start()
+        }
+    }
+
+    override fun onFinish(name: String, accent: Vec3) {
+        runOnUiThread {
+            this.accent = Color.rgb((accent.x * 255).toInt(), (accent.y * 255).toInt(), (accent.z * 255).toInt())
+            finishName.text = name
+            refreshToggles()
         }
     }
 
     override fun onImpact(strength: Float) {
         runOnUiThread { glView.performHapticFeedback(if (strength > 0.5f) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK) }
+    }
+
+    /** Picks a 4x MSAA config when the device offers one, falling back gracefully. */
+    private class MsaaChooser : GLSurfaceView.EGLConfigChooser {
+        override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
+            fun attempt(samples: Int): EGLConfig? {
+                val attribs = intArrayOf(
+                    EGL10.EGL_RED_SIZE, 8, EGL10.EGL_GREEN_SIZE, 8, EGL10.EGL_BLUE_SIZE, 8, EGL10.EGL_ALPHA_SIZE, 8,
+                    EGL10.EGL_DEPTH_SIZE, 24, EGL10.EGL_STENCIL_SIZE, 0,
+                    0x3040 /* EGL_RENDERABLE_TYPE */, 0x40 /* EGL_OPENGL_ES3_BIT */,
+                    EGL10.EGL_SAMPLE_BUFFERS, if (samples > 0) 1 else 0, EGL10.EGL_SAMPLES, samples,
+                    EGL10.EGL_NONE
+                )
+                val n = IntArray(1)
+                val out = arrayOfNulls<EGLConfig>(1)
+                return if (egl.eglChooseConfig(display, attribs, out, 1, n) && n[0] > 0) out[0] else null
+            }
+            return attempt(4) ?: attempt(2) ?: attempt(0) ?: throw IllegalStateException("No suitable EGL config")
+        }
     }
 
     companion object { const val TILT_GAIN = 3.0f }

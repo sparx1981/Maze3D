@@ -27,6 +27,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     interface Host {
         fun onHud(shape: String, seconds: Int, solved: Boolean)
         fun onImpact(strength: Float)
+        fun onFinish(name: String, accent: Vec3)
     }
 
     private enum class Phase { GROW, PLAY, SOLVED, SINK }
@@ -39,6 +40,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     // ---- GL resources ---------------------------------------------------------------------
     private var sceneProg = 0
+    private var shadowSceneProg = 0
+    private var shadowMarbleProg = 0
+    private var shadow: ShadowMap? = null
+    @Volatile var quality = 2
+    private var appliedQuality = -1
+    private val lightDir = Vec3(0.45f, 0.82f, 0.55f).normalized()
+    private val lightVP = FloatArray(16)
     private var marbleProg = 0
     private var bgProg = 0
     private var emptyVao = IntArray(1)
@@ -66,7 +74,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var orient = Quat.fromAxisAngle(Vec3(1f, 0.3f, 0f), 0.5f)
     private var angVel = Vec3.ZERO
     private var dragging = false
-    private var zoom = 1.6f + (0.55f - 1.6f) * 0.4f
+    private var zoom = 1.6f + (0.55f - 1.6f) * 0.67f
     private var width = 1
     private var height = 1
     private val proj = FloatArray(16)
@@ -85,6 +93,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         sceneProg = Shaders.program(Shaders.SCENE_VS, Shaders.SCENE_FS)
         marbleProg = Shaders.program(Shaders.MARBLE_VS, Shaders.MARBLE_FS)
         bgProg = Shaders.program(Shaders.BG_VS, Shaders.BG_FS)
+        shadowSceneProg = Shaders.program(Shaders.SCENE_VS, Shaders.SHADOW_FS)
+        shadowMarbleProg = Shaders.program(Shaders.MARBLE_VS, Shaders.SHADOW_FS)
+        locs.clear(); shadow = null; appliedQuality = -1
+        ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
         sphere = GlMesh.unitSphere()
         floorMesh = GlMesh(GlMesh.SCENE)
@@ -122,7 +134,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val m = Maze(k.createMesh(), seed)
         maze = m
         marble = Marble(m)
-        pal = Palette.random(rnd)
+        pal = Palette.random(rnd, pal)
+        host.onFinish(pal.name, pal.accent)
         val b = SceneBuilder(m, pal)
         builder = b
         floorMesh!!.let { val mb = b.floor(); it.upload(mb.vertices(), mb.indices()) }
@@ -146,6 +159,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1 }
 
     fun resetHint() { threadCell = -1 }
+
+    fun setQualityLevel(q: Int) { quality = q.coerceIn(0, 2) }
 
     /** [v] in 0..1: 1 is closest. */
     fun setZoomLevel(v: Float) { zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
@@ -254,45 +269,90 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (sp > 1e-4f) rollQ = (Quat.fromAxisAngle(omega, sp * dt) * rollQ).normalized()
     }
 
+    private fun applyQuality() {
+        if (appliedQuality == quality) return
+        appliedQuality = quality
+        shadow?.release()
+        shadow = when (quality) { 2 -> ShadowMap(2048); 1 -> ShadowMap(1024); else -> null }
+        if (shadow?.ok == false) { shadow?.release(); shadow = null }
+    }
+
+    private fun drawScene(prog: Int, vp: FloatArray, shadowPass: Boolean) {
+        GLES30.glUseProgram(prog)
+        GLES30.glUniformMatrix4fv(loc(prog, "uVP"), 1, false, vp, 0)
+        GLES30.glUniformMatrix4fv(loc(prog, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(prog, "uGrowT"), growT)
+        if (shadowPass) { floorMesh?.draw(); wallMesh?.draw() }
+    }
+
     private fun draw() {
+        applyQuality()
         GLES30.glClearColor(0f, 0f, 0f, 1f)
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val m = maze ?: return
         val mb = marble ?: return
+        orient.toMatrix(model)
 
-        // backdrop
+        // ---- shadow pass ------------------------------------------------------------------
+        val sm = shadow
+        if (sm != null) {
+            sm.begin()
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+            GLES30.glDepthFunc(GLES30.GL_LEQUAL)
+            GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+            GLES30.glPolygonOffset(2f, 4f)
+            drawScene(shadowSceneProg, lightVP, true)
+            GLES30.glUseProgram(shadowMarbleProg)
+            GLES30.glUniformMatrix4fv(loc(shadowMarbleProg, "uVP"), 1, false, lightVP, 0)
+            GLES30.glUniformMatrix4fv(loc(shadowMarbleProg, "uModel"), 1, false, model, 0)
+            GLES30.glUniform3f(loc(shadowMarbleProg, "uCenter"), mb.position.x, mb.position.y, mb.position.z)
+            GLES30.glUniform1f(loc(shadowMarbleProg, "uRadius"), mb.radius)
+            sphere?.draw()
+            GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+            sm.end(width, height)
+        }
+
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+
+        // ---- backdrop ---------------------------------------------------------------------
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glUseProgram(bgProg)
         GLES30.glUniform3f(loc(bgProg, "uTop"), pal.bgTop.x, pal.bgTop.y, pal.bgTop.z)
         GLES30.glUniform3f(loc(bgProg, "uBottom"), pal.bgBottom.x, pal.bgBottom.y, pal.bgBottom.z)
+        GLES30.glUniform1f(loc(bgProg, "uAspect"), width.toFloat() / height)
         GLES30.glBindVertexArray(emptyVao[0])
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
 
-        orient.toMatrix(model)
-
+        // ---- main scene -------------------------------------------------------------------
         GLES30.glUseProgram(sceneProg)
         GLES30.glUniformMatrix4fv(loc(sceneProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(sceneProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniformMatrix4fv(loc(sceneProg, "uLightVP"), 1, false, lightVP, 0)
         GLES30.glUniform3f(loc(sceneProg, "uCam"), 0f, 0f, camDist)
+        GLES30.glUniform3f(loc(sceneProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
         GLES30.glUniform1f(loc(sceneProg, "uTime"), time)
         GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
+        if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
+        else { GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
 
-        scene(0.25f, 24f, 0f); floorMesh?.draw()
-        scene(0.9f, 70f, 0f); wallMesh?.draw()
+        scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
+        scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
-        scene(0f, 8f, 0.9f); markerMesh?.draw()
-        if (hintOn) { scene(0f, 8f, 0.55f); threadMesh?.draw() }
+        scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
+        if (hintOn) { scene(Mat.FLAT, 0.5f, 0f, 0.55f); threadMesh?.draw() }
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
 
-        // marble
+        // ---- marble -----------------------------------------------------------------------
         GLES30.glUseProgram(marbleProg)
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uModel"), 1, false, model, 0)
         GLES30.glUniform3f(loc(marbleProg, "uCam"), 0f, 0f, camDist)
+        GLES30.glUniform3f(loc(marbleProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
         GLES30.glUniform3f(loc(marbleProg, "uCenter"), mb.position.x, mb.position.y, mb.position.z)
         GLES30.glUniform1f(loc(marbleProg, "uRadius"), mb.radius)
         GLES30.glUniform3f(loc(marbleProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
@@ -315,9 +375,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_BLEND)
     }
 
-    private fun scene(spec: Float, shine: Float, emissive: Float) {
-        GLES30.glUniform1f(loc(sceneProg, "uSpec"), spec)
-        GLES30.glUniform1f(loc(sceneProg, "uShine"), shine)
+    private fun scene(mat: Int, rough: Float, metal: Float, emissive: Float) {
+        GLES30.glUniform1i(loc(sceneProg, "uMat"), mat)
+        GLES30.glUniform1f(loc(sceneProg, "uRough"), rough)
+        GLES30.glUniform1f(loc(sceneProg, "uMetal"), metal)
         GLES30.glUniform1f(loc(sceneProg, "uEmissive"), emissive)
     }
 

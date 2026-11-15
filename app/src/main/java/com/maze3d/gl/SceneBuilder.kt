@@ -13,7 +13,7 @@ import kotlin.math.sin
 class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     private val surface = maze.mesh.surface
     private val cs = maze.cellSize
-    val wallHeight = cs * 0.36f
+    val wallHeight = maze.marbleRadius * 1.6f
     val wallHalfThickness = maze.wallHalfThickness
 
     fun floor(): MeshBuilder {
@@ -41,58 +41,72 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
+    /** One half of the wall cross-section: (lateral fraction, height fraction, normal lateral, normal up). */
+    private fun halfProfile(): List<FloatArray> {
+        val t = wallHalfThickness
+        val rr = t * 0.62f
+        val list = ArrayList<FloatArray>()
+        list.add(floatArrayOf(1f, -0.08f, 1f, 0f))
+        list.add(floatArrayOf(1f, (wallHeight - rr) / wallHeight, 1f, 0f))
+        for (k in 1..5) {
+            val th = (PI / 2 * k / 6).toFloat()
+            val lat = (t - rr + rr * cos(th)) / t
+            val ht = (wallHeight - rr + rr * sin(th)) / wallHeight
+            list.add(floatArrayOf(lat, ht, cos(th), sin(th)))
+        }
+        list.add(floatArrayOf((t - rr) / t, 1f, 0f, 1f))
+        return list
+    }
+
     fun walls(): MeshBuilder {
         val mb = MeshBuilder()
         val t = wallHalfThickness
-        val sink = cs * 0.03f
+        val half = halfProfile()
+        // full loop: left side up and over the top, then down the right side
+        val prof = ArrayList<FloatArray>()
+        for (q in half) prof.add(floatArrayOf(-q[0], q[1], -q[2], q[3]))
+        for (q in half.reversed()) prof.add(q)
+        val lowC = pal.wall * 0.35f
+        val topC = pal.wall * 1.05f
+
         for (e in 0 until maze.edgeCount) {
             if (!maze.isWall(e)) continue
             val a0 = maze.mesh.vertices[maze.edgeA[e]]
             val b0 = maze.mesh.vertices[maze.edgeB[e]]
             val dir = (b0 - a0).normalized()
-            val a = a0 - dir * t
-            val b = b0 + dir * t
-            val na = surface.normal(a0)
-            val nb = surface.normal(b0)
-            val sa = (dir cross na).normalized() * t
-            val sb = (dir cross nb).normalized() * t
+            val ends = arrayOf(a0 - dir * t, b0 + dir * t)
             val dl = (maze.depthFromStart[maze.edgeCellL[e]] + maze.depthFromStart[maze.edgeCellR[e]]) * 0.5f / maze.maxDepth
             val delay = dl * 0.75f + 0.05f * hash(e)
 
-            val lowC = pal.wall * 0.42f
-            val topC = pal.wall * 1.12f
-            val midC = pal.wall * 0.8f
-            val hA = na * wallHeight
-            val hB = nb * wallHeight
-            val dA = na * sink
-            val dB = nb * sink
-
-            fun base(p: Vec3, s: Vec3, dn: Vec3) = p + s - dn
-            val a1 = base(a, sa, dA); val a2 = base(a, -sa, dA)
-            val b1 = base(b, sb, dB); val b2 = base(b, -sb, dB)
-            val z = Vec3.ZERO
-
-            fun face(p0: Vec3, p1: Vec3, l0: Vec3, l1: Vec3, n: Vec3, c0: Vec3, c1: Vec3, flip: Boolean) {
-                val i0 = mb.vertex(p0, n, c0, z, delay)
-                val i1 = mb.vertex(p1, n, c0, z, delay)
-                val i2 = mb.vertex(p1, n, c1, l1, delay)
-                val i3 = mb.vertex(p0, n, c1, l0, delay)
-                if (flip) mb.quad(i0, i3, i2, i1) else mb.quad(i0, i1, i2, i3)
+            val rings = Array(2) { r ->
+                val base = ends[r]
+                val n = surface.normal(if (r == 0) a0 else b0)
+                val side = (dir cross n).normalized()
+                IntArray(prof.size) { k ->
+                    val q = prof[k]
+                    val pos = base + side * (q[0] * t)
+                    val nrm = (side * q[2] + n * q[3]).normalized()
+                    val h = q[1].coerceIn(0f, 1f)
+                    val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
+                    // positions sit at the base plane; the lift vector raises them as the wall grows
+                    val lift = n * (q[1] * wallHeight)
+                    mb.vertex(pos, nrm, col, lift, delay)
+                }
             }
-            val nAvg = (na + nb).normalized()
-            // side +
-            face(a1, b1, hA, hB, sa.normalized(), lowC, midC, false)
-            // side -
-            face(a2, b2, hA, hB, -sa.normalized(), lowC, midC, true)
-            // end caps
-            face(a1, a2, hA, hA, -dir, lowC, midC, false)
-            face(b1, b2, hB, hB, dir, lowC, midC, true)
-            // top: four corners lifted, fully on the lift vector
-            val t0 = mb.vertex(a1, nAvg, topC, hA, delay)
-            val t1 = mb.vertex(b1, nAvg, topC, hB, delay)
-            val t2 = mb.vertex(b2, nAvg, topC, hB, delay)
-            val t3 = mb.vertex(a2, nAvg, topC, hA, delay)
-            mb.quad(t0, t1, t2, t3)
+            for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
+
+            // end caps (flat)
+            for (r in 0..1) {
+                val base = ends[r]
+                val n = surface.normal(if (r == 0) a0 else b0)
+                val side = (dir cross n).normalized()
+                val cn = if (r == 0) -dir else dir
+                val idx = IntArray(prof.size) { k ->
+                    val q = prof[k]
+                    mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * wallHeight), delay)
+                }
+                for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
+            }
         }
         return mb
     }
