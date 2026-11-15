@@ -121,6 +121,7 @@ uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood,
 uniform float uRough;
 uniform float uMetal;
 uniform float uShadowOn;
+uniform float uAlpha;
 uniform float uTexel;
 uniform mat4 uLightVP;
 uniform sampler2DShadow uShadow;
@@ -204,7 +205,7 @@ void main() {
     if (uMat == 4) {            // markers and the thread: glowing, unlit
         vec3 e = vCol * pow(vec3(1.0), vec3(2.2)) * uEmissive * (1.0 + 0.2 * sin(uTime * 3.0));
         vec3 col = albedo * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0)) * 0.6 + pow(vCol, vec3(2.2)) * uEmissive * (1.0 + 0.2 * sin(uTime * 3.0)) * 2.2;
-        outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
+        outColor = vec4(finish(col, gl_FragCoord.xy), uAlpha);
         return;
     }
 

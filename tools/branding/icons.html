@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101216;font-family:sans-serif;color:#cfd3dc">
+<div id="sheet" style="display:flex;gap:28px;padding:28px;align-items:flex-start"></div>
+<script>
+const SZ=512;
+function mk(id,draw){const c=document.createElement('canvas');c.width=c.height=SZ;c.id=id;draw(c.getContext('2d'));return c}
+const img=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=src});
+function squircle(g,s,r){g.beginPath();g.roundRect(0,0,s,s,r);}
+(async()=>{
+  const sph=await img('ic_sphere.png'), tor=await img('ic_torus.png');
+  const sheet=document.getElementById('sheet');
+  // A: glossy chrome marble on a maze-carved sphere
+  const A=mk('A',g=>{
+    const bg=g.createLinearGradient(0,0,SZ,SZ);bg.addColorStop(0,'#1c2a4a');bg.addColorStop(1,'#07090f');
+    squircle(g,SZ,112);g.fillStyle=bg;g.fill();g.save();squircle(g,SZ,112);g.clip();
+    const gl=g.createRadialGradient(SZ*.4,SZ*.35,10,SZ*.5,SZ*.5,SZ*.7);gl.addColorStop(0,'rgba(120,170,255,.35)');gl.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gl;g.fillRect(0,0,SZ,SZ);
+    g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=30;g.shadowOffsetY=18;
+    g.drawImage(sph,-30,-30,SZ+60,SZ+60);
+    g.shadowColor='rgba(0,0,0,.55)';g.shadowBlur=18;g.shadowOffsetY=10;
+    const mx=SZ*.745,my=SZ*.775,mr=40;
+    const mgr=g.createRadialGradient(mx-mr*.35,my-mr*.4,2,mx,my,mr);mgr.addColorStop(0,'#ffffff');mgr.addColorStop(.25,'#dfe8f5');mgr.addColorStop(.6,'#6f7f98');mgr.addColorStop(.85,'#232a3a');mgr.addColorStop(1,'#a9b9d4');
+    g.fillStyle=mgr;g.beginPath();g.arc(mx,my,mr,0,7);g.fill();g.shadowColor='transparent';
+    g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.ellipse(mx-mr*.33,my-mr*.42,mr*.2,mr*.12,-.6,0,7);g.fill();
+    g.restore();
+  });
+  // B: flat minimal glyph
+  const B=mk('B',g=>{
+    squircle(g,SZ,112);g.fillStyle='#14171e';g.fill();g.save();squircle(g,SZ,112);g.clip();
+    const cx=SZ/2,cy=SZ/2;g.lineCap='round';
+    const ring=(r,a0,a1,col,w)=>{g.beginPath();g.arc(cx,cy,r,a0,a1);g.strokeStyle=col;g.lineWidth=w;g.stroke()};
+    ring(190,.35,5.5,'#3fd0c9',30);ring(130,-.9,4.3,'#3fd0c9',30);ring(70,1.4,7.4,'#3fd0c9',30);
+    // gaps joined by radial links
+    g.strokeStyle='#3fd0c9';g.lineWidth=30;[[190,130,5.7],[130,70,4.5]].forEach(([r0,r1,a])=>{g.beginPath();g.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);g.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);g.stroke()});
+    const mg=g.createRadialGradient(cx-8,cy-10,2,cx,cy,34);mg.addColorStop(0,'#fff6c8');mg.addColorStop(1,'#f2b632');
+    g.fillStyle=mg;g.beginPath();g.arc(cx,cy,30,0,7);g.fill();g.restore();
+  });
+  // C: glowing maze ring with a single bright marble
+  const C=mk('C',g=>{
+    const bg=g.createRadialGradient(SZ*.5,SZ*.45,10,SZ*.5,SZ*.5,SZ*.75);bg.addColorStop(0,'#3a2a6a');bg.addColorStop(1,'#0a0716');
+    squircle(g,SZ,112);g.fillStyle=bg;g.fill();g.save();squircle(g,SZ,112);g.clip();
+    g.globalCompositeOperation='lighter';const gl=g.createRadialGradient(SZ/2,SZ/2,60,SZ/2,SZ/2,260);gl.addColorStop(0,'rgba(255,120,150,.25)');gl.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gl;g.fillRect(0,0,SZ,SZ);g.globalCompositeOperation='source-over';
+    g.drawImage(tor,-60,-40,SZ+120,SZ+120);
+    const mg=g.createRadialGradient(SZ*.74,SZ*.42,2,SZ*.75,SZ*.43,30);mg.addColorStop(0,'#ffffff');mg.addColorStop(.5,'#9fe8ff');mg.addColorStop(1,'#2a8fc0');
+    g.shadowColor='#7fe0ff';g.shadowBlur=40;g.fillStyle=mg;g.beginPath();g.arc(SZ*.75,SZ*.43,26,0,7);g.fill();g.restore();
+  });
+  for(const [c,label] of [[A,'A  Chrome marble on maze sphere'],[B,'B  Flat minimal glyph'],[C,'C  Glowing ring maze']]){
+    const w=document.createElement('div');w.style.cssText='display:flex;flex-direction:column;gap:10px;align-items:center';
+    w.appendChild(c);
+    const row=document.createElement('div');row.style.cssText='display:flex;gap:14px;align-items:center';
+    for(const [sz,rad] of [[96,'50%'],[64,'22%'],[40,'50%']]){const d=document.createElement('canvas');d.width=d.height=sz;d.style.borderRadius=rad;d.getContext('2d').drawImage(c,0,0,sz,sz);row.appendChild(d)}
+    w.appendChild(row);const t=document.createElement('div');t.textContent=label;t.style.fontSize='15px';w.appendChild(t);sheet.appendChild(w);
+  }
+  document.title='ready';
+})();
+</script>

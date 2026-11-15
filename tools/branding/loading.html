@@ -1,0 +1,105 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000"><canvas id="c" width="540" height="960"></canvas>
+<script>
+const q=new URLSearchParams(location.search);const MODE=q.get('m');const c=document.getElementById('c');const g=c.getContext('2d');const W=540,H=960;
+const NAME='ORBYRINTH', SUB='3D MARBLE MAZE';
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));const ease=x=>x*x*(3-2*x);const easeOut=x=>1-Math.pow(1-x,3);
+function rng(seed){let s=seed;return()=> (s=(s*1664525+1013904223)>>>0)/4294967296}
+function bgGrad(top,bot){const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,top);gr.addColorStop(1,bot);g.fillStyle=gr;g.fillRect(0,0,W,H);
+  const v=g.createRadialGradient(W/2,H*.45,60,W/2,H*.45,H*.7);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=v;g.fillRect(0,0,W,H)}
+function title(a,y=720,sub=true){g.save();g.globalAlpha=a;g.textAlign='center';g.fillStyle='#fff';g.font='300 44px sans-serif';
+  g.letterSpacing='14px';g.shadowColor='rgba(120,200,255,.6)';g.shadowBlur=18;g.fillText(NAME,W/2+7,y);g.shadowBlur=0;
+  if(sub){g.globalAlpha=a*.6;g.font='500 14px sans-serif';g.letterSpacing='8px';g.fillText(SUB,W/2+4,y+36)}g.restore()}
+function progress(p){const w=220,x=(W-w)/2,y=860;g.fillStyle='rgba(255,255,255,.15)';g.fillRect(x,y,w,3);
+  const gr=g.createLinearGradient(x,0,x+w,0);gr.addColorStop(0,'#58d6ff');gr.addColorStop(1,'#ffd36a');g.fillStyle=gr;g.shadowColor='#7fe0ff';g.shadowBlur=12;g.fillRect(x,y,w*p,3);g.shadowBlur=0}
+
+// ---------- A: marble tracing a thread around a maze sphere
+const R1=rng(7);const segs=[];
+(function(){const LA=14,LO=28;
+  for(let i=0;i<LA;i++)for(let j=0;j<LO;j++){const la0=-80+160*i/LA,la1=-80+160*(i+1)/LA,lo0=360*j/LO,lo1=360*(j+1)/LO;
+    if(R1()<.6)segs.push([la0,lo0,la0,lo1]);if(R1()<.55)segs.push([la0,lo0,la1,lo0]);}
+})();
+function proj(la,lo,rot,tilt){const a=la*Math.PI/180,b=(lo+rot)*Math.PI/180;let x=Math.cos(a)*Math.sin(b),y=-Math.sin(a),z=Math.cos(a)*Math.cos(b);
+  const ct=Math.cos(tilt),st=Math.sin(tilt);const y2=y*ct-z*st,z2=y*st+z*ct;return[x,y2,z2]}
+function drawA(t){
+  bgGrad('#101a33','#04060c');const cx=W/2,cy=410,R=170,rot=t*55,tilt=.35;
+  const halo=g.createRadialGradient(cx,cy,R*.8,cx,cy,R*1.9);halo.addColorStop(0,'rgba(80,160,255,.22)');halo.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=halo;g.fillRect(0,0,W,H);
+  const grow=easeOut(clamp(t/.9));g.save();g.translate(cx,cy);g.scale(grow,grow);
+  const sg=g.createRadialGradient(-R*.35,-R*.4,R*.1,0,0,R);sg.addColorStop(0,'#3d6a8a');sg.addColorStop(.6,'#14283d');sg.addColorStop(1,'#060b14');
+  g.fillStyle=sg;g.beginPath();g.arc(0,0,R,0,7);g.fill();
+  g.lineCap='round';g.lineWidth=3;
+  for(const [la0,lo0,la1,lo1] of segs){const n=lo0!==lo1?4:2;g.beginPath();let on=false,zmax=-1;
+    for(let k=0;k<=n;k++){const f=k/n;const p=proj(la0+(la1-la0)*f,lo0+(lo1-lo0)*f,rot,tilt);if(p[2]>0){const X=p[0]*R,Y=p[1]*R;on?g.lineTo(X,Y):g.moveTo(X,Y);on=true;zmax=Math.max(zmax,p[2])}else on=false}
+    g.strokeStyle=`rgba(${160+60*zmax|0},${190+40*zmax|0},255,${.25+.55*zmax})`;g.stroke()}
+  // golden thread: spiral from south to north pole, draws itself
+  const P=ease(clamp((t-.5)/2.2));const N=260;
+  const pts=[];for(let k=0;k<=N*P;k++){const f=k/N;pts.push(proj(-78+156*f,f*1080,rot,tilt))}
+  g.lineWidth=5;g.shadowColor='#ffcb5a';g.shadowBlur=14;
+  for(let k=1;k<pts.length;k++){const a=pts[k-1],b=pts[k];if(a[2]>0&&b[2]>0){g.strokeStyle=`rgba(255,${200+30*b[2]|0},90,${.5+.5*b[2]})`;g.beginPath();g.moveTo(a[0]*R,a[1]*R);g.lineTo(b[0]*R,b[1]*R);g.stroke()}}
+  g.shadowBlur=0;
+  if(pts.length){const h=pts[pts.length-1];const vis=h[2]>0;const mx=h[0]*R,my=h[1]*R;
+    g.globalAlpha=vis?1:.3;const m=g.createRadialGradient(mx-4,my-5,1,mx,my,13);m.addColorStop(0,'#fff');m.addColorStop(.35,'#cfdcf0');m.addColorStop(.8,'#3a4660');m.addColorStop(1,'#9fb4d6');
+    g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=8;g.fillStyle=m;g.beginPath();g.arc(mx,my,13,0,7);g.fill();g.shadowBlur=0;g.globalAlpha=1}
+  g.restore();
+  // rim light
+  g.save();g.translate(cx,cy);g.strokeStyle='rgba(140,200,255,.35)';g.lineWidth=2;g.beginPath();g.arc(0,0,R*grow,Math.PI*1.05,Math.PI*1.7);g.stroke();g.restore();
+  title(ease(clamp((t-2.0)/.8)));progress(clamp(t/2.9));
+}
+
+// ---------- B: maze walls rising in a ripple
+const R2=rng(3);const N2=11;const open=[];(function(){
+  const vis=Array.from({length:N2},()=>Array(N2).fill(false));const wallR=[],wallD=[];
+  for(let i=0;i<N2;i++){wallR.push(Array(N2).fill(true));wallD.push(Array(N2).fill(true))}
+  const st=[[0,0]];vis[0][0]=true;
+  while(st.length){const [x,y]=st[st.length-1];const nb=[[1,0],[-1,0],[0,1],[0,-1]].map(d=>[x+d[0],y+d[1],d]).filter(([a,b])=>a>=0&&b>=0&&a<N2&&b<N2&&!vis[a][b]);
+    if(!nb.length){st.pop();continue}const [a,b,d]=nb[Math.floor(R2()*nb.length)];vis[a][b]=true;
+    if(d[0]===1)wallR[x][y]=false;if(d[0]===-1)wallR[a][b]=false;if(d[1]===1)wallD[x][y]=false;if(d[1]===-1)wallD[a][b]=false;st.push([a,b])}
+  window.WALLS=[];
+  for(let x=0;x<=N2;x++)for(let y=0;y<=N2;y++){
+    if(y<N2&&(x===0||x===N2||wallR[x-1][y]))WALLS.push([x,y,x,y+1]);
+    if(x<N2&&(y===0||y===N2||wallD[x][y-1]))WALLS.push([x,y,x+1,y]);}
+})();
+function iso(x,y,z){const s=22;return[W/2+(x-y)*s,330+(x+y)*s*.5-z]}
+function drawB(t){
+  bgGrad('#14100f','#050404');
+  const cxm=N2/2;
+  // floor
+  g.save();const fl=[iso(0,0,0),iso(N2,0,0),iso(N2,N2,0),iso(0,N2,0)];g.beginPath();fl.forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p));g.closePath();
+  const fg=g.createLinearGradient(0,300,0,600);fg.addColorStop(0,'#5b3a24');fg.addColorStop(1,'#2e1c10');g.fillStyle=fg;g.shadowColor='rgba(0,0,0,.7)';g.shadowBlur=40;g.shadowOffsetY=30;g.fill();g.restore();
+  const items=WALLS.map(w=>{const mx=(w[0]+w[2])/2,my=(w[1]+w[3])/2;const d=Math.hypot(mx-cxm,my-cxm)/ (N2*.75);
+    const h=34*ease(clamp((t*1.05-.15-d*1.0)/.45));return {w,h,key:mx+my}}).sort((a,b)=>a.key-b.key);
+  for(const {w,h} of items){if(h<.5)continue;const [x0,y0,x1,y1]=w;
+    const a=iso(x0,y0,0),b=iso(x1,y1,0),at=iso(x0,y0,h),bt=iso(x1,y1,h);
+    g.fillStyle='#8a6a3a';g.beginPath();g.moveTo(...a);g.lineTo(...b);g.lineTo(...bt);g.lineTo(...at);g.closePath();g.fill();       // face
+    // brass top
+    const th=3.2;const o=(x1===x0)?[th/22/2,0]:[0,th/22/2];
+    g.fillStyle='#f3cf7a';const A1=iso(x0,y0,h),B1=iso(x1,y1,h),A2=iso(x0+(x1===x0?.1:0),y0+(y1===y0?.1:0),h),B2=iso(x1+(x1===x0?.1:0),y1+(y1===y0?.1:0),h);
+    g.beginPath();g.moveTo(...A1);g.lineTo(...B1);g.lineTo(...B2);g.lineTo(...A2);g.closePath();g.fill();
+    g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.moveTo(...a);g.lineTo(...b);g.lineTo(...bt);g.lineTo(...at);g.closePath();g.fill()}
+  // marble rolls along the first corridor once walls are up
+  const mp=clamp((t-1.6)/1.2);const pos=iso(.5+Math.min(mp*3.5,3.5)*0.0+0.0,.5+mp*3.2,9);
+  if(mp>0){g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=6;const m=g.createRadialGradient(pos[0]-3,pos[1]-4,1,pos[0],pos[1],9);m.addColorStop(0,'#fff');m.addColorStop(.4,'#cfdcf0');m.addColorStop(1,'#46506a');g.fillStyle=m;g.beginPath();g.arc(pos[0],pos[1],9,0,7);g.fill();g.shadowBlur=0}
+  title(ease(clamp((t-2.0)/.8)),720);progress(clamp(t/2.9));
+}
+
+// ---------- C: particles swirl and settle into the name
+let TP=null;function targets(){const o=document.createElement('canvas');o.width=W;o.height=200;const x=o.getContext('2d');x.fillStyle='#fff';x.font='300 56px sans-serif';x.letterSpacing='12px';x.textAlign='center';x.textBaseline='middle';x.fillText(NAME,W/2+6,100);
+  const d=x.getImageData(0,0,W,200).data;const pts=[];for(let yy=0;yy<200;yy+=2)for(let xx=0;xx<W;xx+=2)if(d[(yy*W+xx)*4+3]>128)pts.push([xx,yy+380]);return pts}
+const R3=rng(11);
+function drawC(t){
+  if(!TP){TP=targets();window.PS=TP.map((p,i)=>({tx:p[0],ty:p[1],a:R3()*6.283,r:140+R3()*320,d:R3()*.9,s:.6+R3()*1.4,hue:R3()}))}
+  bgGrad('#0e0a1c','#030208');
+  g.globalCompositeOperation='lighter';
+  const cx=W/2,cy=H*.43;
+  for(const p of PS){const f=ease(clamp((t-.25-p.d*.9)/1.3));const spin=p.a+(1-f)*5.5+t*.4*(1-f);const rr=p.r*(1-f);
+    const x=p.tx*f+(cx+Math.cos(spin)*rr)*(1-f),y=p.ty*f+(cy+Math.sin(spin)*rr*.55)*(1-f);
+    const tw=.6+.4*Math.sin(t*5+p.hue*40);const a=(.25+.75*f)*tw;const rad=p.s*(1+.6*(1-f));
+    const col=p.hue<.5?`rgba(120,200,255,${a})`:`rgba(255,200,110,${a})`;
+    g.fillStyle=col;g.beginPath();g.arc(x,y,rad,0,7);g.fill();
+    g.fillStyle=col.replace(/[\d.]+\)$/,(a*.18)+')');g.beginPath();g.arc(x,y,rad*4,0,7);g.fill()}
+  g.globalCompositeOperation='source-over';
+  const sg=ease(clamp((t-2.0)/.7));g.save();g.globalAlpha=sg*.55;g.textAlign='center';g.fillStyle='#fff';g.font='500 14px sans-serif';g.letterSpacing='8px';g.fillText(SUB,W/2+4,H*.43+170+36+30);g.restore();
+  progress(clamp(t/2.9));
+}
+window.draw=t=>{g.clearRect(0,0,W,H);({A:drawA,B:drawB,C:drawC})[MODE](t);document.title='ready'};
+window.draw(0);
+</script>

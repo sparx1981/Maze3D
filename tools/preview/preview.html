@@ -1,10 +1,11 @@
-<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000">
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000"><script>if(new URLSearchParams(location.search).get('bg')==='0')document.body.style.background='transparent'</script>
 <canvas id="c" width="540" height="1080" style="width:540px;height:1080px"></canvas>
 <script>
 // WebGL2 re-implementation of MazeRenderer.draw() used only to preview shaders/scene from a desktop browser.
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('c');
-const gl = canvas.getContext('webgl2', {antialias: true, alpha: false, depth: true});
+if(q.get('w')){canvas.width=+q.get('w');canvas.height=+q.get('h');canvas.style.width=q.get('w')+'px';canvas.style.height=q.get('h')+'px'}
+const gl = canvas.getContext('webgl2', {antialias: true, alpha: q.get('bg')==='0', premultipliedAlpha: true, depth: true});
 function compile(t, s){ const o=gl.createShader(t); gl.shaderSource(o,s); gl.compileShader(o); if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)+'\n'+s.split('\n').map((l,i)=>(i+1)+': '+l).join('\n')); return o; }
 function prog(vs, fs){ const p=gl.createProgram(); gl.attachShader(p,compile(gl.VERTEX_SHADER,vs)); gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); p.u={}; return p; }
 function U(p,n){ if(!(n in p.u)) p.u[n]=gl.getUniformLocation(p,n); return p.u[n]; }
@@ -57,7 +58,7 @@ async function main(){
   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE) throw new Error('fbo incomplete');
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 
-  const M=D.marble, pal=D.pal;
+  const M=D.marble, pal=D.pal; if(q.get('marble')){const m=q.get('marble').split(',').map(Number);M.pos=m.slice(0,3);M.r=m[3]}
   const marbleU=(p,vpm)=>{gl.useProgram(p);gl.uniformMatrix4fv(U(p,'uVP'),false,vpm);gl.uniformMatrix4fv(U(p,'uModel'),false,model);gl.uniform3fv(U(p,'uCenter'),M.pos);gl.uniform1f(U(p,'uRadius'),M.r)};
 
   if(shadowOn){
@@ -67,9 +68,9 @@ async function main(){
     marbleU(shMarble,lightVP);draw(sphere);
     gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,W,H);
   }
-  gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-  gl.disable(gl.DEPTH_TEST);gl.useProgram(bgP);gl.uniform3fv(U(bgP,'uTop'),pal.bgTop);gl.uniform3fv(U(bgP,'uBottom'),pal.bgBottom);gl.uniform1f(U(bgP,'uAspect'),W/H);
-  const e=gl.createVertexArray();gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.bindVertexArray(null);
+  gl.clearColor(0,0,0,q.get('bg')==='0'?0:1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const e=gl.createVertexArray();gl.disable(gl.DEPTH_TEST);if(q.get('bg')!=='0'){gl.useProgram(bgP);gl.uniform3fv(U(bgP,'uTop'),pal.bgTop);gl.uniform3fv(U(bgP,'uBottom'),pal.bgBottom);gl.uniform1f(U(bgP,'uAspect'),W/H);
+  gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.bindVertexArray(null);}
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
 
   const sp=sceneP;gl.useProgram(sp);

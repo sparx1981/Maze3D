@@ -32,6 +32,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fun onImpact(strength: Float)
         fun onFinish(name: String, accent: Vec3)
         fun onToast(message: String)
+        /** [cooldown] seconds until the next hint (0 = ready); [active] while the thread is showing. */
+        fun onHint(cooldown: Int, active: Boolean)
         val audio: Audio
     }
 
@@ -41,7 +43,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     // ---- inputs (written from the UI thread) --------------------------------------------
     @Volatile var tiltMode = false
-    @Volatile var hintOn = true
+    @Volatile var hintActive = false
     @Volatile var followOn = false
     @Volatile var deviceGravity = Vec3(0f, -1f, 0f)
 
@@ -65,6 +67,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var lastSparkAt = 0f
     private var impactSparkSeed = 0
     private var lastTouchAt = -10f
+    private var hintLeft = 0f
+    private var hintCool = 0f
+    private var lastHintCode = -1
     private var zoomFollow = 1f
     private val audio: Audio get() = host.audio
     private var doorPrevG = FloatArray(0)
@@ -189,6 +194,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
         fallTimer = 0f
+        hintLeft = 0f; hintCool = 0f
         goalBursted = false
         host.onFinish(pal.name + listOfNotNull(if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
@@ -209,7 +215,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1 }
 
-    fun resetHint() { threadCell = -1 }
+    /** Timed hint: shows the golden thread for [HINT_SECONDS], then it fades; usable again after [HINT_COOLDOWN]. */
+    fun requestHint() {
+        if (phase != Phase.PLAY || hintCool > 0f) { if (hintCool > 0f) host.onToast("Hint ready in ${kotlin.math.ceil(hintCool).toInt()}s"); return }
+        hintLeft = HINT_SECONDS
+        hintCool = HINT_COOLDOWN
+        threadCell = -1
+    }
 
     fun setQualityLevel(q: Int) { quality = q.coerceIn(0, 2) }
 
@@ -357,7 +369,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             lastHud = code
             host.onHud(kind.label, sec, phase == Phase.SOLVED)
         }
-        if (hintOn && mb.cell != threadCell && phase != Phase.SINK) {
+        if (hintLeft > 0f) hintLeft = max(0f, hintLeft - dt)
+        if (hintCool > 0f) hintCool = max(0f, hintCool - dt)
+        if (phase == Phase.SINK) { hintLeft = 0f; hintCool = 0f }
+        val hintCode = kotlin.math.ceil(hintCool).toInt() * 2 + (if (hintLeft > 0f) 1 else 0)
+        if (hintCode != lastHintCode) {
+            lastHintCode = hintCode
+            hintActive = hintLeft > 0f
+            host.onHint(kotlin.math.ceil(hintCool).toInt(), hintActive)
+        }
+        if (hintLeft > 0f && mb.cell != threadCell && phase != Phase.SINK) {
             threadCell = mb.cell
             builder?.thread(mb.cell)?.let { t -> threadMesh?.upload(t.vertices(), t.indices(), dynamic = true) }
         }
@@ -488,6 +509,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uTime"), time)
         GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
         if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
@@ -502,7 +524,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
         scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
-        if (hintOn) { scene(Mat.FLAT, 0.5f, 0f, 0.55f); threadMesh?.draw() }
+        if (hintLeft > 0f) {
+            val alpha = min(min((HINT_SECONDS - hintLeft) / 0.35f, hintLeft / 1.3f), 1f).coerceIn(0f, 1f)
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), alpha)
+            scene(Mat.FLAT, 0.5f, 0f, 0.55f); threadMesh?.draw()
+            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        }
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
 
         // ---- marble -----------------------------------------------------------------------
@@ -599,5 +629,5 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private fun loc(prog: Int, name: String): Int =
         locs.getOrPut("$prog:$name") { GLES30.glGetUniformLocation(prog, name) }
 
-    companion object { const val GRAVITY = 3.2f }
+    companion object { const val GRAVITY = 3.2f; const val HINT_SECONDS = 6f; const val HINT_COOLDOWN = 20f }
 }

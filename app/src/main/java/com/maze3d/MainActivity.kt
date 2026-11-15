@@ -110,6 +110,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private fun refreshToggles() { for ((v, t) in toggles) v.background = glass(t()) }
 
     private lateinit var toast: TextView
+    private var hintPill: TextView? = null
     private lateinit var title: TextView
     private lateinit var clock: TextView
     private lateinit var finishName: TextView
@@ -173,10 +174,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val tilt = pill("Tilt", { renderer.tiltMode }) { setTilt(!renderer.tiltMode) }
-        val hint = pill("Hint", { renderer.hintOn }) {
-            renderer.hintOn = !renderer.hintOn
-            glView.queueEvent { renderer.resetHint() }
-        }
+        val hint = pill("Hint", { renderer.hintActive }) { glView.queueEvent { renderer.requestHint() } }
+        hintPill = hint
         val follow = pill("Follow cam", { renderer.followOn }) {
             renderer.followOn = !renderer.followOn
             getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putBoolean("follow", renderer.followOn).apply()
@@ -285,6 +284,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             title.text = shape.uppercase()
             clock.text = "%d:%02d".format(seconds / 60, seconds % 60)
             banner.animate().alpha(if (solved) 1f else 0f).setDuration(350).start()
+        }
+    }
+
+    override fun onHint(cooldown: Int, active: Boolean) {
+        runOnUiThread {
+            hintPill?.text = (if (cooldown > 0 && !active) "Hint $cooldown" else "Hint").uppercase()
+            hintPill?.alpha = if (cooldown > 0 && !active) 0.6f else 1f
+            refreshToggles()
         }
     }
 
