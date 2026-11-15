@@ -6,7 +6,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /** Ring buffer of footprint decals (sand and mud trails), drawn as instanced quads. */
-class TrailBuffer(private val max: Int = 3600) {
+class TrailBuffer(private val max: Int = 7000) {
     private val data = FloatArray(max * 8)
     private val vao = IntArray(1)
     private val vbo = IntArray(1)

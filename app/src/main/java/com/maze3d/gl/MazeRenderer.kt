@@ -70,6 +70,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var sceneProg = 0
     private var shadowSceneProg = 0
     private var holeProg = 0
+    private var lidProg = 0
+    private var lidMesh: GlMesh? = null
+    private val holeUniform = FloatArray(16 * 4)
+    private var holeCount = 0
     private var smokeProg = 0
     private var cube: ReflectionCube? = null
     private var cubeFace = 0
@@ -205,7 +209,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         bgProg = Shaders.program(Shaders.BG_VS, Shaders.BG_FS)
         shadowSceneProg = Shaders.program(Shaders.SCENE_VS, Shaders.SHADOW_FS)
         shadowMarbleProg = Shaders.program(Shaders.MARBLE_VS, Shaders.SHADOW_FS)
-        holeProg = Shaders.program(Shaders.SCENE_VS, Shaders.HOLE_FS)
+        holeProg = Shaders.program(Shaders.SCENE_VS, Shaders.PIT_FS)
+        lidProg = Shaders.program(Shaders.LID_VS, Shaders.LID_FS)
         sparkProg = Shaders.program(Shaders.SPARK_VS, Shaders.SPARK_FS)
         post.init()
         sparks.init()
@@ -229,6 +234,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         doorMesh = GlMesh(GlMesh.SCENE)
         holeMesh = GlMesh(GlMesh.SCENE)
+        lidMesh = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1; postOn = false
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
@@ -398,7 +404,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             Door(mid, m.mesh.surface.normal(mid), false)
         }
         doorMesh!!.let { val mb = b.doors(hz.doorEdges, hz.doorPhase); it.upload(mb.vertices(), mb.indices()) }
-        holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
+        holeMesh!!.let { val mb = b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, m.cellSize * 1.0f); it.upload(mb.vertices(), mb.indices()) }
+        lidMesh!!.let { val mb = b.lids(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
+        holeCount = minOf(hz.holeCells.size, 16)
+        holeUniform.fill(0f)
+        for (i in 0 until holeCount) {
+            val c = m.centers[hz.holeCells[i]]
+            holeUniform[i * 4] = c.x; holeUniform[i * 4 + 1] = c.y; holeUniform[i * 4 + 2] = c.z; holeUniform[i * 4 + 3] = hz.holeRadius * 1.03f
+        }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
         val wa = rnd.nextFloat() * 6.2831853f
@@ -581,7 +594,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                             audio.fall(panOf(m.centers[hz.holeCells[h]]))
                             host.onToast("Fell into a hole - back to the start")
                             fallFrom = mb.position
-                            fallTo = m.centers[hz.holeCells[h]] - mb.surface.normal(m.centers[hz.holeCells[h]]) * (mb.radius * 2.5f)
+                            fallTo = m.centers[hz.holeCells[h]] - mb.surface.normal(m.centers[hz.holeCells[h]]) * (m.cellSize * 0.8f)
                             sparks.burst(m.centers[hz.holeCells[h]], mb.surface.normal(m.centers[hz.holeCells[h]]), 10, 0.5f, pal.accent)
                         }
                     }
@@ -697,21 +710,38 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
     }
 
-    /** Footprints, kicked-up dust or mud, and the dirt that builds up on the marble. */
+    /** Footprints, kicked-up dust or mud, flying grains and clumps, and the dirt that builds up on the marble. */
     private fun layTrail(mb: Marble, m: Maze, dt: Float) {
         val n = mb.surface.normal(mb.position)
         val under = mb.position - n * mb.radius
-        val size = mb.radius * 1.15f
+        val size = mb.radius * (if (terrain == Terrain.MUD) 1.25f else 1.1f)
         val last = trail.last
-        if (last == null || (under - last).length() > size * 0.45f) trail.add(under, n, size, time)
         val spd = mb.velocity.length() / (m.cellSize * 4f)
+        // stamp densely along the path so the groove is continuous; fast rolling digs a slightly wider track
+        if (last == null || (under - last).length() > size * 0.24f) trail.add(under, n, size * (1f + 0.25f * spd.coerceAtMost(1f)), time)
         dirt = (dirt + spd * dt * (if (terrain == Terrain.MUD) 0.35f else 0.18f)).coerceAtMost(1f)
-        if (spd > 0.15f && time - dustAt > 0.05f) {
+        val vdir = if (mb.velocity.lengthSq() > 1e-8f) mb.velocity.normalized() else Vec3.ZERO
+        if (spd > 0.12f && time - dustAt > 0.04f) {
             dustAt = time
-            if (terrain == Terrain.SAND) dust.puff(under, n, 1, 0.045f, Vec3(0.85f, 0.72f, 0.5f))
-            else {
-                dust.puff(under, n, 1, 0.03f, Vec3(0.22f, 0.14f, 0.09f))
-                if (spd > 0.4f) sparks.emit(under, (n + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)).normalized() * (0.25f * spd), 0.3f, Vec3(0.3f, 0.2f, 0.12f), 0.01f)
+            if (terrain == Terrain.SAND) {
+                // a soft plume behind the marble, plus grains thrown up and back
+                dust.puff(under - vdir * (mb.radius * 0.5f), n, 1, 0.05f + 0.03f * spd, Vec3(0.88f, 0.75f, 0.54f))
+                repeat(1 + (spd * 2f).toInt()) {
+                    val v = (n * 0.9f - vdir * 0.5f + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.7f).normalized() * (0.18f + 0.3f * spd * rnd.nextFloat())
+                    sparks.emit(under, v, 0.32f, Vec3(0.55f, 0.43f, 0.26f), 0.0045f)
+                }
+            } else {
+                // heavy clumps flung to the sides; when fast, some land as splats beside the track
+                dust.puff(under, n, 1, 0.028f, Vec3(0.16f, 0.10f, 0.06f))
+                if (spd > 0.3f) {
+                    val side = (n cross vdir).normalized() * (if (rnd.nextBoolean()) 1f else -1f)
+                    val v = (n * 0.7f + side * (0.6f + rnd.nextFloat() * 0.6f) - vdir * 0.3f).normalized() * (0.22f + 0.35f * spd)
+                    dust.emit(under, v, 0.45f, Vec3(0.12f, 0.075f, 0.045f), 0.016f + 0.01f * rnd.nextFloat())
+                    if (rnd.nextFloat() < 0.35f * spd) {
+                        val land = mb.surface.project(under + side * (mb.radius * (1.6f + 2.2f * rnd.nextFloat())) - vdir * (mb.radius * 1.0f * rnd.nextFloat()))
+                        trail.add(land, mb.surface.normal(land), mb.radius * (0.22f + 0.35f * rnd.nextFloat()), time)
+                    }
+                }
             }
         }
     }
@@ -872,13 +902,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
         else { GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
 
+        GLES30.glUniform1i(loc(sceneProg, "uHoleN"), holeCount)
+        if (holeCount > 0) GLES30.glUniform4fv(loc(sceneProg, "uHoleC"), 16, holeUniform, 0)
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
+        GLES30.glUniform1i(loc(sceneProg, "uHoleN"), 0)
         scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
         doorMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         drawTrail(vpm, cam)
-        drawHoles(vpm)
+        drawHoles(vpm, cam)
         drawPuddles(vpm, cam)
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
@@ -983,9 +1016,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val k = 1f - fallTimer / 0.55f
             val e = k * k
             drawPos = Vec3.lerp(fallFrom, fallTo, e)
-            drawR = mb.radius * (1f - 0.85f * e)
+            drawR = mb.radius * (1f - 0.35f * e)
         }
-        if (terrain != Terrain.NONE) drawPos -= mb.surface.normal(mb.position) * (mb.radius * (if (terrain == Terrain.MUD) 0.16f else 0.07f))
+        if (terrain != Terrain.NONE) drawPos -= mb.surface.normal(mb.position) * (mb.radius * (if (terrain == Terrain.MUD) 0.3f else 0.12f))
         GLES30.glUniform1f(loc(marbleProg, "uDirt"), if (terrain == Terrain.NONE) dirt else dirt)
         if (terrain == Terrain.MUD) GLES30.glUniform3f(loc(marbleProg, "uDirtCol"), 0.14f, 0.08f, 0.045f) else GLES30.glUniform3f(loc(marbleProg, "uDirtCol"), 0.62f, 0.46f, 0.26f)
         GLES30.glUniform3f(loc(marbleProg, "uCenter"), drawPos.x, drawPos.y, drawPos.z)
@@ -1130,25 +1163,26 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(sceneProg)
     }
 
-    private fun drawHoles(vpm: FloatArray) {
+    private fun drawHoles(vpm: FloatArray, cam: Vec3) {
         val hz = hazards ?: return
         if (!hz.hasHoles) return
         GLES30.glUseProgram(holeProg)
         GLES30.glUniformMatrix4fv(loc(holeProg, "uVP"), 1, false, vpm, 0)
         GLES30.glUniformMatrix4fv(loc(holeProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniform1f(loc(holeProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(holeProg, "uGrowT"), 1.35f)
         GLES30.glUniform1f(loc(holeProg, "uTime"), time)
         GLES30.glUniform1f(loc(holeProg, "uDoorMode"), 0f)
-        GLES30.glUniform1f(loc(holeProg, "uAppear"), (growT - 0.2f).coerceIn(0f, 1f))
         GLES30.glUniform3f(loc(holeProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
         GLES30.glUniform3f(loc(holeProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
-        GLES30.glEnable(GLES30.GL_BLEND)
-        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
-        GLES30.glPolygonOffset(-2f, -2f)
         holeMesh?.draw()
-        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
-        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(lidProg)
+        GLES30.glUniformMatrix4fv(loc(lidProg, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(lidProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(lidProg, "uTime"), time)
+        GLES30.glUniform3f(loc(lidProg, "uCam"), cam.x, cam.y, cam.z)
+        GLES30.glUniform3f(loc(lidProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
+        GLES30.glUniform3f(loc(lidProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        lidMesh?.draw()
         GLES30.glUseProgram(sceneProg)
     }
 

@@ -147,10 +147,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
-    /** Floor holes: a quad per hole; the fragment shader draws the animated opening from uv in aCol.xy, phase in aCol.z. */
-    fun holes(cells: IntArray, phases: FloatArray, radius: Float): MeshBuilder {
+    /** Shaft wall, glowing bottom and hazard rim for each hole (see Shaders.PIT_FS for the vertex encoding). */
+    fun pits(cells: IntArray, phases: FloatArray, radius: Float, depth: Float): MeshBuilder {
         val mb = MeshBuilder()
-        val ext = 1.4f
+        val seg = 28
         for (i in cells.indices) {
             val c = cells[i]
             val ctr = maze.centers[c]
@@ -158,14 +158,80 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
             t1 = (t1 - n * (t1 dot n)).normalized()
             val t2 = n cross t1
-            val ids = IntArray(4)
-            val us = floatArrayOf(-1f, 1f, 1f, -1f)
-            val vs = floatArrayOf(-1f, -1f, 1f, 1f)
-            for (k in 0..3) {
-                val p = surface.project(ctr + (t1 * us[k] + t2 * vs[k]) * (radius * ext))
-                ids[k] = mb.vertex(p + surface.normal(p) * (cs * 0.01f), surface.normal(p), Vec3(us[k] * ext, vs[k] * ext, phases[i]))
+            val ph = phases[i]
+            fun rimPt(k: Int, rr: Float): Vec3 {
+                val ang = (2 * PI * k / seg).toFloat()
+                val p = surface.project(ctr + (t1 * cos(ang) + t2 * sin(ang)) * rr)
+                return p
             }
-            mb.quad(ids[0], ids[1], ids[2], ids[3])
+            // shaft: three rings so the gradient and seam lines sample smoothly
+            val rings = 6
+            val wall = Array(rings + 1) { j ->
+                IntArray(seg + 1) { k ->
+                    val ang = (2 * PI * k / seg).toFloat()
+                    val dir = t1 * cos(ang) + t2 * sin(ang)
+                    val top = rimPt(k, radius)
+                    val d01 = j / rings.toFloat()
+                    val pos = top - n * (depth * d01) - dir * (0f)
+                    mb.vertex(pos, -dir, Vec3(d01, 0f, ph))
+                }
+            }
+            for (j in 0 until rings) for (k in 0 until seg) mb.quad(wall[j][k], wall[j][k + 1], wall[j + 1][k + 1], wall[j + 1][k])
+            // bottom disc
+            val centre = mb.vertex(ctr - n * depth, n, Vec3(0f, 1f, ph))
+            val bot = IntArray(seg + 1) { k ->
+                val ang = (2 * PI * k / seg).toFloat()
+                mb.vertex(ctr - n * depth + (t1 * cos(ang) + t2 * sin(ang)) * radius, n, Vec3(1f, 1f, ph))
+            }
+            for (k in 0 until seg) mb.tri(centre, bot[k], bot[k + 1])
+            // hazard rim (an annulus lying on the floor)
+            val inner = IntArray(seg + 1); val outer = IntArray(seg + 1)
+            for (k in 0..seg) {
+                val a01 = k / seg.toFloat()
+                val pi0 = rimPt(k % seg, radius * 0.98f); val po = rimPt(k % seg, radius * 1.34f)
+                inner[k] = mb.vertex(pi0 + surface.normal(pi0) * (cs * 0.012f), surface.normal(pi0), Vec3(a01, 2.0f, ph))
+                outer[k] = mb.vertex(po + surface.normal(po) * (cs * 0.012f), surface.normal(po), Vec3(a01, 2.99f, ph))
+            }
+            for (k in 0 until seg) mb.quad(inner[k], inner[k + 1], outer[k + 1], outer[k])
+        }
+        return mb
+    }
+
+    /** Two half-disc lids per hole that slide apart along t1; aLift carries the slide vector, aDelay the phase. */
+    fun lids(cells: IntArray, phases: FloatArray, radius: Float): MeshBuilder {
+        val mb = MeshBuilder()
+        val seg = 14
+        val lift = cs * 0.018f
+        for (i in cells.indices) {
+            val c = cells[i]
+            val ctr = maze.centers[c]
+            val n = surface.normal(ctr)
+            var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
+            t1 = (t1 - n * (t1 dot n)).normalized()
+            val t2 = n cross t1
+            val ph = phases[i].coerceIn(0f, 0.999f)
+            val rr = radius * 1.04f
+            for (side in intArrayOf(-1, 1)) {
+                val slide = t1 * (side * radius * 1.3f)
+                // fan of the half disc on the side where u has the sign [side]
+                val cn = mb.vertex(ctr + n * lift, n, Vec3(0f, 0f, 0f), slide, ph)
+                val arc = IntArray(seg + 1)
+                for (k in 0..seg) {
+                    val ang = (-PI / 2 + PI * k / seg).toFloat()
+                    val u = cos(ang) * side; val v = sin(ang)
+                    val p = surface.project(ctr + (t1 * u + t2 * v) * rr)
+                    arc[k] = mb.vertex(p + surface.normal(p) * lift, surface.normal(p), Vec3(u, v, 0f), slide, ph)
+                }
+                for (k in 0 until seg) mb.tri(cn, arc[k], arc[k + 1])
+                // thin skirt down the straight cut so the slab has thickness
+                val e0 = ctr + t2 * (-rr) ; val e1 = ctr + t2 * rr
+                val a0 = surface.project(e0); val a1 = surface.project(e1)
+                val v0 = mb.vertex(a0 + surface.normal(a0) * lift, t1 * side.toFloat(), Vec3(0f, 0f, 0f), slide, ph)
+                val v1 = mb.vertex(a1 + surface.normal(a1) * lift, t1 * side.toFloat(), Vec3(0f, 0f, 0f), slide, ph)
+                val v2 = mb.vertex(a1 - surface.normal(a1) * (cs * 0.01f), t1 * side.toFloat(), Vec3(0f, 0f, 0f), slide, ph)
+                val v3 = mb.vertex(a0 - surface.normal(a0) * (cs * 0.01f), t1 * side.toFloat(), Vec3(0f, 0f, 0f), slide, ph)
+                mb.quad(v0, v1, v2, v3)
+            }
         }
         return mb
     }

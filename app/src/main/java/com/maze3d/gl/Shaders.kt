@@ -120,6 +120,8 @@ uniform float uEmissive;
 uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood, 4 flat/emissive
 uniform float uRough;
 uniform float uMetal;
+uniform int uHoleN;
+uniform vec4 uHoleC[16];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
 uniform float uShadowOn;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uAlpha;
@@ -177,6 +179,10 @@ vec3 bumpN(vec3 N, vec3 p, float h) {
 }
 
 void main() {
+    for (int i = 0; i < 16; i++) {                         // real holes: the floor is cut away
+        if (i >= uHoleN) break;
+        if (distance(vLocal, uHoleC[i].xyz) < uHoleC[i].w) discard;
+    }
     vec3 N = normalize(vNrm);
     vec3 V = normalize(uCam - vWorld);
     vec3 albedo = pow(vCol, vec3(2.2));
@@ -524,6 +530,107 @@ void main() {
 }
 """
 
+    /**
+     * Hole pit (walls, glowing floor, hazard rim). aCol.x = depth 0..1 (wall) / radius 0..1 (bottom) / angle 0..1 (rim),
+     * aCol.y = surface type (0 wall, 1 bottom, 2.x rim with radial fraction x), aCol.z = animation phase.
+     */
+    const val PIT_FS = """#version 300 es
+precision highp float;
+uniform float uTime;
+uniform vec3 uAccent;
+in vec3 vWorld;
+in vec3 vNrm;
+in vec3 vCol;
+out vec4 outColor;
+""" + COMMON + """
+void main() {
+    float type = vCol.y;
+    float ph = vCol.z;
+    float s = sin(0.9 * uTime + ph * 6.2831853);
+    float open = smoothstep(0.0, 0.6, s);
+    vec3 acc = pow(uAccent, vec3(2.2));
+    vec3 N = normalize(vNrm);
+    float lit = 0.20 + 0.55 * max(dot(N, uLightDir), 0.0);
+    vec3 col;
+    if (type < 0.5) {                                       // shaft wall: dark steel, ring seams, light from the bottom
+        float d = vCol.x;
+        float seam = 1.0 - smoothstep(0.0, 0.07, abs(fract(d * 5.0) - 0.5) - 0.40);
+        col = vec3(0.10, 0.11, 0.14) * lit * pow(1.0 - d, 1.6);
+        col += acc * (0.02 + 2.2 * pow(d, 4.0)) * (0.75 + 0.25 * sin(uTime * 2.0 + ph * 6.0));
+        col += acc * seam * 0.22 * (0.3 + d);
+    } else if (type < 1.5) {                                // bottom: a glowing well
+        float r = vCol.x;
+        col = acc * (1.9 - 1.4 * r) * (0.8 + 0.2 * sin(uTime * 3.0 - r * 9.0));
+    } else {                                                // hazard rim: amber/black chevrons
+        float ang = vCol.x, rad = fract(type);
+        float stripes = step(0.5, fract(ang * 28.0 + rad * 2.2));
+        col = mix(vec3(0.015), vec3(0.95, 0.66, 0.05), stripes) * (0.35 + 0.9 * max(dot(N, uLightDir), 0.0));
+        // warning light blinks while the lid is moving or about to open
+        float moving = step(0.01, open) * (1.0 - step(0.999, open));
+        float soon = step(0.0, cos(0.9 * uTime + ph * 6.2831853)) * step(s, 0.0) * step(-0.5, s);
+        float blink = max(moving, soon) * (0.5 + 0.5 * sin(uTime * 14.0));
+        col += vec3(1.0, 0.45, 0.05) * blink * 2.2 * stripes;
+    }
+    outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
+}
+"""
+
+    /** Sliding lid plates: aLift is the slide vector, aDelay the animation phase. Same open/close curve as the hole logic. */
+    const val LID_VS = """#version 300 es
+uniform mat4 uVP;
+uniform mat4 uModel;
+uniform float uTime;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+layout(location=3) in vec3 aLift;
+layout(location=4) in float aDelay;
+out vec3 vWorld;
+out vec3 vNrm;
+out vec3 vCol;
+void main() {
+    float open = smoothstep(0.0, 0.6, sin(0.9 * uTime + aDelay * 6.2831853));
+    vec4 w = uModel * vec4(aPos + aLift * open, 1.0);
+    vWorld = w.xyz;
+    vNrm = mat3(uModel) * aNrm;
+    vCol = aCol;
+    gl_Position = uVP * w;
+}
+"""
+
+    const val LID_FS = """#version 300 es
+precision highp float;
+uniform vec3 uCam;
+uniform vec3 uAccent;
+in vec3 vWorld;
+in vec3 vNrm;
+in vec3 vCol;
+out vec4 outColor;
+""" + COMMON + """
+void main() {
+    vec3 N = normalize(vNrm);
+    vec3 V = normalize(uCam - vWorld);
+    vec2 uv = vCol.xy;                         // -1..1 across the whole (closed) disc
+    float r = length(uv);
+    vec3 steel = vec3(0.17, 0.19, 0.23);
+    float tread = 0.5 + 0.5 * sin(uv.x * 38.0) * sin(uv.y * 38.0);
+    steel *= 0.82 + 0.28 * tread;
+    float border = smoothstep(0.70, 0.74, r);
+    float stripes = step(0.5, fract((atan(uv.y, uv.x) / 6.2831853) * 26.0 + r * 2.0));
+    vec3 haz = mix(vec3(0.03), vec3(0.95, 0.66, 0.05), stripes);
+    vec3 albedo = mix(steel, haz, border);
+    float seam = 1.0 - smoothstep(0.0, 0.035, abs(uv.x));
+    albedo *= 1.0 - 0.8 * seam;
+    float NoV = max(dot(N, V), 1e-3);
+    float NoL = max(dot(N, uLightDir), 0.0);
+    vec3 R = reflect(-V, N);
+    float F = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+    vec3 col = albedo * (irradiance(N) * 0.9 + vec3(1.0, 0.94, 0.86) * 1.2 * NoL)
+             + envMap(R, 0.30) * (0.10 + 0.45 * F) * (1.0 - border);
+    outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
+}
+"""
+
     /** Footprint decals: one instanced quad per recorded marble position, lying on the surface. */
     const val TRAIL_VS = """#version 300 es
 uniform mat4 uVP;
@@ -534,6 +641,8 @@ layout(location=1) in vec4 aNS;     // xyz = local surface normal, w = half size
 out vec2 vUv;
 out float vAge;
 out vec3 vNrm;
+out vec3 vT1;
+out vec3 vT2;
 out vec3 vWorld;
 void main() {
     const vec2 C[6] = vec2[6](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
@@ -545,89 +654,74 @@ void main() {
     vec3 p = aPA.xyz + (t1 * c.x + t2 * c.y) * aNS.w + n * 0.004;
     vec4 w = uModel * vec4(p, 1.0);
     vWorld = w.xyz;
-    vNrm = mat3(uModel) * n;
+    mat3 M = mat3(uModel);
+    vNrm = M * n; vT1 = M * t1; vT2 = M * t2;
     vUv = c;
     vAge = uTime - aPA.w;
     gl_Position = uVP * w;
 }
 """
 
+    /**
+     * Lit footprints: the groove/berm height profile is turned into a surface normal, so grooves catch the light
+     * like real displaced sand or mud instead of being flat stains. Sand is matte, mud wet and glossy.
+     */
     const val TRAIL_FS = """#version 300 es
 precision highp float;
 uniform float uKind;      // 0 sand, 1 mud
-uniform float uPass;      // 0 = raised ridges, 1 = grooves
+uniform float uPass;      // 0 = raised berms, 1 = grooves
 uniform vec3 uCam;
 uniform vec3 uLightDir;
 in vec2 vUv;
 in float vAge;
 in vec3 vNrm;
+in vec3 vT1;
+in vec3 vT2;
 in vec3 vWorld;
 out vec4 outColor;
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 void main() {
     float r = length(vUv);
     if (r > 1.0 || vAge < 0.0) discard;
     bool mud = uKind > 0.5;
-    float life = mud ? 150.0 : 50.0;                            // sand blows back in, mud stays
+    float life = mud ? 170.0 : 55.0;                             // sand blows back in, mud stays
     float fade = 1.0 - smoothstep(life * 0.3, life, vAge);
     if (fade <= 0.01) discard;
     vec3 N = normalize(vNrm);
-    float lit = 0.40 + 0.60 * max(dot(N, uLightDir), 0.0);
+    // height profile: a groove in the middle, berms of pushed-aside material on either side
+    float groove = 1.0 - smoothstep(0.20, 0.66, r);
+    float berm = smoothstep(0.50, 0.78, r) * (1.0 - smoothstep(0.78, 1.0, r));
+    float h = -groove * 1.0 + berm * 0.7;
+    float dh = (-(-smoothstep(0.20, 0.66, r) + 0.0) * 0.0);              // placeholder to keep the derivative explicit below
+    float eps = 0.02;
+    float r2 = r + eps;
+    float g2 = 1.0 - smoothstep(0.20, 0.66, r2);
+    float b2 = smoothstep(0.50, 0.78, r2) * (1.0 - smoothstep(0.78, 1.0, r2));
+    float dhdr = ((-g2 + b2 * 0.7) - h) / eps;
+    vec2 dir = r > 1e-4 ? vUv / r : vec2(0.0);
+    vec3 Np = normalize(N - (vT1 * dir.x + vT2 * dir.y) * dhdr * (mud ? 0.55 : 0.45));
+    float lit = 0.34 + 0.72 * max(dot(Np, uLightDir), 0.0);
+    float cavity = 1.0 - 0.35 * groove;                          // ambient occlusion inside the groove
     vec3 col; float a;
     if (uPass < 0.5) {
-        float ridge = smoothstep(0.50, 0.82, r) * (1.0 - smoothstep(0.82, 1.0, r));
-        col = (mud ? vec3(0.22, 0.13, 0.08) : vec3(0.97, 0.83, 0.58)) * lit * (mud ? 0.9 : 1.0);
-        a = ridge * (mud ? 0.60 : 0.34) * fade;
+        col = (mud ? vec3(0.30, 0.18, 0.10) : vec3(0.93, 0.78, 0.53)) * lit;
+        a = berm * (mud ? 0.75 : 0.5) * fade;
     } else {
-        float groove = 1.0 - smoothstep(0.30, 0.80, r);
-        col = (mud ? vec3(0.045, 0.028, 0.018) : vec3(0.60, 0.46, 0.29)) * lit;
-        if (mud) {                                               // wet sheen along the groove
+        vec3 base = mud ? vec3(0.085, 0.052, 0.032) : vec3(0.66, 0.51, 0.33);
+        col = base * lit * cavity;
+        float grain = hash(floor(vWorld.xy * 900.0) + floor(vWorld.zx * 900.0));
+        if (!mud) col *= 0.93 + 0.14 * grain;                    // fine sand grain inside the track
+        if (mud) {                                               // wet sheen: sharp glints from the tilted groove walls
             vec3 V = normalize(uCam - vWorld);
             vec3 H = normalize(uLightDir + V);
-            col += vec3(0.55, 0.5, 0.42) * pow(max(dot(N, H), 0.0), 60.0) * groove * 0.5;
+            float spec = pow(max(dot(Np, H), 0.0), 90.0);
+            col += vec3(0.75, 0.68, 0.56) * spec * 0.9 * groove;
+            col += vec3(0.10, 0.12, 0.14) * pow(1.0 - max(dot(Np, V), 0.0), 3.0) * 0.5 * groove;   // sky sheen at grazing angles
         }
-        a = groove * (mud ? 0.88 : 0.60) * fade;
+        a = groove * (mud ? 0.92 : 0.7) * fade;
     }
     if (a < 0.01) discard;
     outColor = vec4(col, a);
-}
-"""
-
-    /** Floor hole: uv in aCol.xy, phase in aCol.z (see Hazards.holeOpen: smoothstep(0, 0.6, sin(0.9 t + 2 pi phase))). */
-    const val HOLE_FS = """#version 300 es
-precision highp float;
-uniform float uTime;
-uniform float uAppear;
-uniform vec3 uAccent;
-in vec3 vCol;
-in vec3 vNrm;
-out vec4 outColor;
-""" + COMMON + """
-void main() {
-    vec2 uv = vCol.xy;
-    float r = length(uv);
-    float ph = 0.9 * uTime + vCol.z * 6.2831853;
-    float s = sin(ph);
-    float a = smoothstep(0.0, 0.6, s) * uAppear;
-    float R = a;                        // opening radius in uv units (1.0 = full hole)
-    float fw = fwidth(r) * 1.5;
-    float lip = 1.0 - smoothstep(0.0, 0.12 + fw, abs(r - R - 0.06));   // glowing rim just outside
-    float inside = 1.0 - smoothstep(R - fw, R + fw, r);
-    float rimGlow = smoothstep(R - 0.4, R, r) * inside;
-    vec3 acc = pow(uAccent, vec3(2.2));
-    vec3 col = mix(vec3(0.004, 0.004, 0.008), acc * 1.4, rimGlow * 0.55);
-    float alpha = max(inside, lip * 0.9 * step(0.02, a));
-    col = mix(col, acc * 2.2, lip * (1.0 - inside) * 0.9);
-
-    // A shut hole is never invisible: a faint ring marks the spot and pulses just before it opens.
-    float ring = 1.0 - smoothstep(0.0, 0.06 + fw, abs(r - 1.0));
-    float soon = step(0.0, cos(ph)) * smoothstep(-0.6, -0.05, min(s, 0.0)) * step(s, 0.0);
-    float warn = (0.30 + 0.70 * soon * (0.65 + 0.35 * sin(uTime * 16.0))) * (1.0 - smoothstep(0.0, 0.25, a)) * uAppear;
-    float ringA = ring * warn;
-    col = mix(col, acc * 2.4, ringA * step(alpha, ringA));
-    alpha = max(alpha, ringA);
-
-    if (alpha < 0.01) discard;
-    outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
 }
 """
 
