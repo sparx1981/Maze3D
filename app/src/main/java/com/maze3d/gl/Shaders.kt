@@ -68,7 +68,7 @@ void main() {
     float sp = pow(max(dot(N, H1), 0.0), uShine) * uSpec;
     vec3 refl = env(reflect(-V, N));
     float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-    lit += refl * (uSpec * 0.22 + fres * 0.12) * mix(vec3(1.0), vCol, 0.55);
+    lit += refl * (uSpec * 0.32 + fres * 0.14) * mix(vec3(1.0), vCol, 0.55);
     lit += vec3(1.0, 0.95, 0.85) * sp;
     lit += vCol * uEmissive * (0.85 + 0.15 * sin(uTime * 3.0));
     // filmic-ish tone map + gamma
@@ -160,7 +160,8 @@ out vec4 outColor;
 void main() {
     vec3 c = mix(uBottom, uTop, smoothstep(0.0, 1.0, vUv.y));
     float v = length(vUv - vec2(0.5, 0.55));
-    c *= 1.0 - 0.55 * smoothstep(0.25, 0.85, v);
+    c += uTop * 0.35 * (1.0 - smoothstep(0.0, 0.55, v));
+    c *= 1.0 - 0.6 * smoothstep(0.3, 0.9, v);
     c = pow(c, vec3(1.0 / 2.2));
     outColor = vec4(c, 1.0);
 }

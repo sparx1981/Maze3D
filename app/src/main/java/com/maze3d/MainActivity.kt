@@ -13,7 +13,8 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
+import kotlin.math.atan2
+import kotlin.math.acos
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -33,7 +34,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var baseline: Vec3? = null
     private var tiltBtn: TextView? = null
 
-    private lateinit var scale: ScaleGestureDetector
+    private var twistAngle = 0f
     private var lastX = 0f
     private var lastY = 0f
     private var lastT = 0L
@@ -53,13 +54,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             preserveEGLContextOnPause = true
             setRenderer(renderer)
         }
-        scale = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(d: ScaleGestureDetector): Boolean {
-                val s = d.scaleFactor
-                glView.queueEvent { renderer.nudgeZoom(s) }
-                return true
-            }
-        })
         glView.setOnTouchListener { _, e -> onTouch(e) }
 
         val root = FrameLayout(this)
@@ -112,6 +106,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         }
         layer.addView(banner, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
+        val slider = ZoomSlider(this) { v -> glView.queueEvent { renderer.setZoomLevel(v) } }
+        layer.addView(slider, FrameLayout.LayoutParams(dp(48f), dp(260f), Gravity.END or Gravity.CENTER_VERTICAL).apply { setMargins(0, 0, dp(6f), 0) })
+
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val tilt = pill("Tilt") { v ->
             val on = !renderer.tiltMode
@@ -135,26 +132,40 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     // ---- touch: drag to rotate, pinch to zoom -------------------------------------------
     private fun onTouch(e: MotionEvent): Boolean {
-        scale.onTouchEvent(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = e.x; lastY = e.y; lastT = e.eventTime; multiTouch = false
                 glView.queueEvent { renderer.dragStart() }
             }
-            MotionEvent.ACTION_POINTER_DOWN -> multiTouch = true
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                multiTouch = true
+                if (e.pointerCount == 2) twistAngle = pointerAngle(e)
+            }
             MotionEvent.ACTION_MOVE -> {
-                if (!multiTouch && !scale.isInProgress) {
+                if (e.pointerCount >= 2) {
+                    // two fingers twist the model about the view axis
+                    val a = pointerAngle(e)
+                    var d = a - twistAngle
+                    if (d > Math.PI) d -= (2 * Math.PI).toFloat()
+                    if (d < -Math.PI) d += (2 * Math.PI).toFloat()
+                    twistAngle = a
+                    glView.queueEvent { renderer.twist(-d) }
+                } else if (!multiTouch) {
                     val dx = e.x - lastX; val dy = e.y - lastY
                     val dt = (e.eventTime - lastT) / 1000f
                     glView.queueEvent { renderer.drag(dx, dy, dt) }
                 }
                 lastX = e.x; lastY = e.y; lastT = e.eventTime
             }
-            MotionEvent.ACTION_POINTER_UP -> { lastX = e.x; lastY = e.y }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (e.pointerCount == 3) twistAngle = pointerAngle(e)
+            }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> glView.queueEvent { renderer.dragEnd() }
         }
         return true
     }
+
+    private fun pointerAngle(e: MotionEvent) = atan2(e.getY(1) - e.getY(0), e.getX(1) - e.getX(0))
 
     // ---- tilt control -------------------------------------------------------------------
     private fun setTilt(on: Boolean) {
@@ -162,19 +173,29 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         sensors.unregisterListener(this)
         if (on) {
             baseline = null
+            smoothed = null
             gravitySensor?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         } else {
             renderer.deviceGravity = Vec3(0f, -1f, 0f)
         }
     }
 
+    private var smoothed: Vec3? = null
+
     override fun onSensorChanged(ev: SensorEvent) {
         // Device axes equal screen axes (portrait locked). Gravity "down" is minus the sensor vector.
-        val down = Vec3(-ev.values[0], -ev.values[1], -ev.values[2]).normalized()
-        val base = baseline ?: down.also { baseline = it }
+        val raw = Vec3(-ev.values[0], -ev.values[1], -ev.values[2]).normalized()
+        val down = smoothed?.let { Vec3.lerp(it, raw, 0.3f).normalized() } ?: raw
+        smoothed = down
         // Whatever angle the phone is held at when Tilt is enabled counts as "level".
-        val q = com.maze3d.core.Quat.fromTo(base, Vec3(0f, -1f, 0f))
-        renderer.deviceGravity = q.rotate(down)
+        val base = baseline ?: down.also { baseline = it }
+        val dev = com.maze3d.core.Quat.fromTo(base, down)
+        val angle = 2f * acos(dev.w.coerceIn(-1f, 1f))
+        val axis = Vec3(dev.x, dev.y, dev.z)
+        // Amplify: a gentle phone tilt becomes a strong push on the marble.
+        val boosted = if (axis.lengthSq() < 1e-10f) com.maze3d.core.Quat.IDENTITY
+            else com.maze3d.core.Quat.fromAxisAngle(axis, minOf(angle * TILT_GAIN, 2.0f))
+        renderer.deviceGravity = boosted.rotate(Vec3(0f, -1f, 0f))
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -202,4 +223,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     override fun onImpact(strength: Float) {
         runOnUiThread { glView.performHapticFeedback(if (strength > 0.5f) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK) }
     }
+
+    companion object { const val TILT_GAIN = 3.0f }
 }

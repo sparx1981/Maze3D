@@ -66,7 +66,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var orient = Quat.fromAxisAngle(Vec3(1f, 0.3f, 0f), 0.5f)
     private var angVel = Vec3.ZERO
     private var dragging = false
-    private var zoom = 1f
+    private var zoom = 1.6f + (0.55f - 1.6f) * 0.4f
     private var width = 1
     private var height = 1
     private val proj = FloatArray(16)
@@ -147,7 +147,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     fun resetHint() { threadCell = -1 }
 
-    fun nudgeZoom(scale: Float) { zoom = (zoom / scale).coerceIn(0.55f, 1.6f); updateCamera() }
+    /** [v] in 0..1: 1 is closest. */
+    fun setZoomLevel(v: Float) { zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
+
+    /** Rotate about the view axis (two-finger twist). */
+    fun twist(angle: Float) { orient = (Quat.fromAxisAngle(Vec3(0f, 0f, 1f), angle) * orient).normalized() }
 
     // ---- touch ---------------------------------------------------------------------------
     fun dragStart() { dragging = true; angVel = Vec3.ZERO }

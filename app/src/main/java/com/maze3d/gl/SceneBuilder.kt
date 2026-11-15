@@ -18,7 +18,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
 
     fun floor(): MeshBuilder {
         val mb = MeshBuilder()
-        val sub = 3
+        val sub = 4
         for (c in 0 until maze.cellCount) {
             val p = Array(4) { maze.mesh.vertices[maze.mesh.cellVertex(c, it)] }
             val wallEdges = (0..3).map { maze.cellEdges[c * 4 + it] }.filter { maze.isWall(it) }
@@ -31,7 +31,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 var d = 1e9f
                 for (e in wallEdges) d = min(d, distToSegment(pt, maze.mesh.vertices[maze.edgeA[e]], maze.mesh.vertices[maze.edgeB[e]]))
                 d = max(0f, d - wallHalfThickness)
-                val ao = 1f - 0.62f * exp(-d / (cs * 0.15f))
+                val ao = 1f - 0.7f * exp(-d / (cs * 0.2f))
                 base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)))
             }
             for (a in 0 until sub) for (b in 0 until sub) {
@@ -100,6 +100,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     fun markers(): MeshBuilder {
         val mb = MeshBuilder()
         disc(mb, maze.start, cs * 0.42f, cs * 0.30f, Vec3(0.35f, 0.75f, 1f))
+        disc(mb, maze.goal, cs * 0.64f, cs * 0.40f, Vec3(0.55f, 0.42f, 0.12f), 0.0004f)
         disc(mb, maze.goal, cs * 0.40f, 0f, Vec3(1f, 0.86f, 0.30f))
         disc(mb, maze.goal, cs * 0.22f, 0f, Vec3(0.55f, 1f, 0.6f), 0.0012f)
         return mb
