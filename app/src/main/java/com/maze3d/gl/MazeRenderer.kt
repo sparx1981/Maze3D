@@ -3,6 +3,8 @@ package com.maze3d.gl
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import com.maze3d.audio.Audio
+import com.maze3d.audio.NoAudio
 import com.maze3d.core.Hazards
 import com.maze3d.core.Marble
 import com.maze3d.core.Maze
@@ -29,6 +31,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fun onHud(shape: String, seconds: Int, solved: Boolean)
         fun onImpact(strength: Float)
         fun onFinish(name: String, accent: Vec3)
+        val audio: Audio
     }
 
     private enum class Phase { GROW, PLAY, SOLVED, SINK }
@@ -60,6 +63,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var goalBursted = false
     private var lastSparkAt = 0f
     private var impactSparkSeed = 0
+    private val audio: Audio get() = host.audio
+    private var doorPrevG = FloatArray(0)
+    private var holePrevOpen = FloatArray(0)
     private var shadowMarbleProg = 0
     private var shadow: ShadowMap? = null
     @Volatile var quality = 2
@@ -186,6 +192,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         rollQ = Quat.IDENTITY
         growT = 0f
         phase = Phase.GROW
+        audio.levelGrow()
         playSeconds = 0f
         lastHud = -1
         updateCamera()
@@ -194,7 +201,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Request a fresh labyrinth; walls sink first. */
     fun requestNew(k: ShapeKind? = null) {
         nextKind = k ?: ShapeKind.values().filter { it != kind }.let { it[rnd.nextInt(it.size)] }
-        if (phase != Phase.SINK) phase = Phase.SINK
+        if (phase != Phase.SINK) { phase = Phase.SINK; audio.levelSink() }
     }
 
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1 }
@@ -275,14 +282,17 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1
                         val sc = m.centers[m.start]
                         sparks.burst(sc, mb.surface.normal(sc), 28, 0.9f, Vec3(0.4f, 0.8f, 1f))
+                        audio.respawn(panOf(sc))
                     }
                 } else {
                     mb.clock = time
                     mb.step(gLocal, dt)
                     rollMarble(mb, dt)
+                    audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f), pal.floorMat == Mat.WOOD)
                     if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
                         lastSparkAt = time
                         sparks.impact(mb.impactPos, mb.impactDir, min(mb.lastImpact / 3f, 1f), pal.wall * 1.2f)
+                        audio.impact(min(mb.lastImpact / 3f, 1f), panOf(mb.impactPos))
                     }
                     if (mb.lastImpact > 0.9f && time - lastImpactAt > 0.12f) {
                         lastImpactAt = time
@@ -294,6 +304,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         val h = hz.fellInto(mb.cell, under, time)
                         if (h >= 0) {
                             fallTimer = 0.55f
+                            audio.fall(panOf(m.centers[hz.holeCells[h]]))
                             fallFrom = mb.position
                             fallTo = m.centers[hz.holeCells[h]] - mb.surface.normal(m.centers[hz.holeCells[h]]) * (mb.radius * 2.5f)
                             sparks.burst(m.centers[hz.holeCells[h]], mb.surface.normal(m.centers[hz.holeCells[h]]), 10, 0.5f, pal.accent)
@@ -306,12 +317,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             Phase.SOLVED -> {
                 if (!goalBursted) {
                     goalBursted = true
+                    audio.goal()
                     val gc = m.centers[m.goal]
                     sparks.burst(gc, mb.surface.normal(gc), 70, 1.5f, Vec3(1f, 0.85f, 0.35f))
                     sparks.burst(gc, mb.surface.normal(gc), 40, 0.8f, Vec3(0.6f, 1f, 0.7f))
                 }
                 solvedTimer += dt
-                if (solvedTimer > 1.6f) { phase = Phase.SINK; nextKind = pickNext() }
+                if (solvedTimer > 1.6f) { phase = Phase.SINK; nextKind = pickNext(); audio.levelSink() }
             }
             Phase.SINK -> {
                 growT -= dt / 0.8f
@@ -319,6 +331,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
         }
 
+        if (phase != Phase.PLAY || fallTimer > 0f) audio.roll(0f, false)
+        audio.wind(cloudAmt)
         val gl = orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY
         sparks.update(dt, gl)
         val cloudTarget = if (useClouds && phase != Phase.SINK) 1f else 0f
@@ -336,16 +350,44 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
-    /** Slam sparks the moment a door finishes closing. */
+    /** Door/hole state changes: slam sparks and the matching sounds, positioned relative to the marble. */
     private fun updateDoors(m: Maze) {
         val hz = hazards ?: return
+        val mb = marble ?: return
+        if (doorPrevG.size != doors.size) doorPrevG = FloatArray(doors.size) { hz.doorHeight(it, time) }
         for (i in doors.indices) {
-            val closed = hz.doorClosed(i, time)
+            val g = hz.doorHeight(i, time)
+            val closed = g > 0.5f
             if (closed && !doors[i].closed && phase == Phase.PLAY) {
                 sparks.burst(doors[i].mid, doors[i].normal, 6, 0.5f, pal.door)
             }
             doors[i].closed = closed
+            val prev = doorPrevG[i]
+            if (phase == Phase.PLAY) {
+                if (prev <= 0.02f && g > 0.02f) audio.doorClose(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
+                else if (prev >= 0.98f && g < 0.98f) audio.doorOpen(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
+            }
+            doorPrevG[i] = g
         }
+        if (holePrevOpen.size != hz.holeCells.size) holePrevOpen = FloatArray(hz.holeCells.size) { hz.holeOpen(it, time) }
+        for (i in hz.holeCells.indices) {
+            val o = hz.holeOpen(i, time)
+            val c = m.centers[hz.holeCells[i]]
+            if (phase == Phase.PLAY) {
+                if (holePrevOpen[i] < 0.05f && o >= 0.05f) audio.holeOpen(proximity(c, mb.position) * 0.8f, panOf(c))
+                else if (holePrevOpen[i] > 0.6f && o <= 0.6f) audio.holeClose(proximity(c, mb.position) * 0.7f, panOf(c))
+            }
+            holePrevOpen[i] = o
+        }
+    }
+
+    private fun panOf(local: Vec3): Float = (orient.rotate(local).x / 1.2f).coerceIn(-1f, 1f)
+
+    /** Loudness of something at [local] as heard from the marble: near is loud, the far side of the piece is muffled. */
+    private fun proximity(local: Vec3, from: Vec3): Float {
+        val d = (local - from).length()
+        val back = if (orient.rotate(local).z < -0.1f) 0.5f else 1f
+        return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
     }
 
     private fun pickNext(): ShapeKind {

@@ -20,6 +20,8 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.maze3d.audio.Audio
+import com.maze3d.audio.SoundEngine
 import com.maze3d.core.Vec3
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
@@ -27,6 +29,9 @@ import javax.microedition.khronos.egl.EGLDisplay
 import com.maze3d.gl.MazeRenderer
 
 class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
+
+    private lateinit var engine: SoundEngine
+    override val audio: Audio get() = engine
 
     private lateinit var glView: GLSurfaceView
     private lateinit var renderer: MazeRenderer
@@ -45,6 +50,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        engine = SoundEngine(applicationContext)
         sensors = getSystemService(SENSOR_SERVICE) as SensorManager
         gravitySensor = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -95,6 +101,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         setOnClickListener {
             onClick(this)
             toggle?.let { t -> background = glass(t()) }
+            if (toggle != null) engine.uiToggle(toggle()) else engine.uiClick()
             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         }
     }
@@ -147,7 +154,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             val level = quality
             glView.queueEvent { renderer.setQualityLevel(level) }
         }
-        layer.addView(q, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
+        val sound = pill("Sound", { engine.sfxOn }) { engine.setSfx(!engine.sfxOn) }
+        val music = pill("Music", { engine.musicOn }) { engine.setMusic(!engine.musicOn) }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
+        for (v in listOf(q, sound, music)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
+        layer.addView(column, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
 
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val tilt = pill("Tilt", { renderer.tiltMode }) { setTilt(!renderer.tiltMode) }
@@ -237,14 +248,21 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        engine.onResume()
         glView.onResume()
         if (renderer.tiltMode) setTilt(true)
     }
 
     override fun onPause() {
         super.onPause()
+        engine.onPause()
         sensors.unregisterListener(this)
         glView.onPause()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        engine.release()
     }
 
     // ---- renderer callbacks (GL thread) -------------------------------------------------
