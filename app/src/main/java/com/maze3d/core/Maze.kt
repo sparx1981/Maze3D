@@ -94,8 +94,8 @@ class Maze(val mesh: CellMesh, seed: Long) {
         val lens = FloatArray(edgeCount) { e -> (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length() }
         val sortedLens = lens.sortedArray()
         val narrow = sortedLens[(edgeCount * 0.05f).toInt()]
-        val r0 = minOf(cellSize * 0.26f, narrow * 0.30f)
-        val wh = minOf(cellSize * 0.09f, narrow * 0.10f)
+        val r0 = minOf(cellSize * 0.235f, narrow * 0.27f)          // a slightly smaller ball and thinner walls leave ~30% more room to slide sideways
+        val wh = minOf(cellSize * 0.065f, narrow * 0.075f)
         wallHalfThickness = wh
         // a passage must be wide enough for the marble between two walls; narrower ones are opened only as a last resort
         val minPassage = 2f * r0 * 1.15f + 2f * wh

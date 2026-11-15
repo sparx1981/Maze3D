@@ -6,6 +6,7 @@ import android.opengl.Matrix
 import com.maze3d.audio.Audio
 import com.maze3d.audio.NoAudio
 import com.maze3d.core.Hazards
+import com.maze3d.core.Medium
 import com.maze3d.core.Marble
 import com.maze3d.core.Maze
 import com.maze3d.core.Quat
@@ -53,6 +54,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     @Volatile var menuMode = true
     private var pendingTerrain: Terrain? = null
     private var pendingTheme: Int? = null
+    private var pendingMedium: Medium? = null
+    /** Simulation detail for sand and mud: 0 basic stamped trails, 1 detailed height field, 2 ultra (height field + particles). */
+    @Volatile var simQuality = 1
+    private var medium = Medium.NONE
     private var pendingPlain = false
     @Volatile var followOn = false
     /** User settings (menu): 0.4 .. 2.5, 1 = default. */
@@ -359,14 +364,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun chaseYawBy(angle: Float) { pendingYaw += angle }
 
     // ---- game control (GL thread) ---------------------------------------------------------
-    fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false, forcedTheme: Int? = null) {
+    fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false, forcedTheme: Int? = null, forcedMedium: Medium? = null) {
         kind = k
         val seed = rnd.nextLong()
         val m = Maze(k.createMesh(), seed)
         maze = m
         marble = Marble(m)
         val tr = rnd.nextFloat()
-        terrain = forcedTerrain ?: (if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
+        val mr = rnd.nextFloat()
+        medium = forcedMedium ?: (if (plain) Medium.NONE else if (mr < 0.10f) Medium.WATER else if (mr < 0.18f) Medium.FOG else if (mr < 0.26f) Medium.GAS else Medium.NONE)
+        terrain = forcedTerrain ?: (if (medium != Medium.NONE) Terrain.NONE else if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
         pal = when {
             terrain != Terrain.NONE -> Palette.random(rnd, pal)                           // sand/mud floors keep a classic wall finish
             forcedTheme == null -> Palette.randomAny(rnd, pal)
@@ -426,7 +433,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fallTimer = 0f
         hintLeft = 0f; hintCool = 0f
         goalBursted = false
-        host.onFinish(pal.name + listOfNotNull(terrain.label.ifEmpty { null }, if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
+        host.onFinish(pal.name + listOfNotNull(terrain.label.ifEmpty { null }, medium.label.ifEmpty { null }, if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
         rollQ = Quat.IDENTITY
         initChase()
@@ -439,22 +446,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Request a fresh labyrinth; walls sink first. */
-    fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false, theme: Int? = null) {
+    fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false, theme: Int? = null, medium: Medium? = null) {
         nextKind = k ?: ShapeKind.values().filter { it != kind }.let { it[rnd.nextInt(it.size)] }
-        pendingTerrain = terrain; pendingPlain = plain; pendingTheme = theme
+        pendingTerrain = terrain; pendingPlain = plain; pendingTheme = theme; pendingMedium = medium
         if (phase != Phase.SINK) { phase = Phase.SINK; audio.levelSink() }
     }
 
     /** Begin a real game. null shape / terrain mean "random". */
-    fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
+    fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null, medium: Medium? = null) {
         menuMode = false; paused = false
-        requestNew(shape, terrain, plain, theme)
+        requestNew(shape, terrain, plain, theme, medium)
     }
 
     /** Menu backdrop: build the chosen level right away so the player can see what they picked. */
-    fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
+    fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null, medium: Medium? = null) {
         menuMode = true; paused = false
-        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain, theme)
+        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain, theme, medium)
     }
 
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase() }
@@ -621,7 +628,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             Phase.SINK -> {
                 growT -= dt / 0.8f
-                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext(), pendingTerrain, pendingPlain, pendingTheme); nextKind = null; pendingTerrain = null; pendingPlain = false; pendingTheme = null }
+                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext(), pendingTerrain, pendingPlain, pendingTheme, pendingMedium); nextKind = null; pendingTerrain = null; pendingPlain = false; pendingTheme = null; pendingMedium = null }
             }
         }
 

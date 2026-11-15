@@ -25,6 +25,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.maze3d.audio.Audio
 import com.maze3d.audio.SoundEngine
+import com.maze3d.core.Medium
 import com.maze3d.core.ShapeKind
 import com.maze3d.core.Terrain
 import com.maze3d.core.Vec3
@@ -42,6 +43,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var touchSens = 1f
     private var gyroSens = 1f
     private var qualityLevel = 2
+    private var simLevel = 1
     private lateinit var menuSettings: LinearLayout
     private var camPill: TextView? = null
     private var joyOriginX = 0f
@@ -86,6 +88,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         touchSens = ui.getFloat("touchSens", 1f)
         gyroSens = ui.getFloat("gyroSens", 1f)
         qualityLevel = ui.getInt("quality", 2)
+        simLevel = ui.getInt("sim", 1)
+        renderer.simQuality = simLevel
         renderer.setCameraMode(cameraMode)
         renderer.touchSens = touchSens
         renderer.gyroSens = gyroSens
@@ -436,14 +440,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private fun selectedShape(): ShapeKind? = if (selShape == 0) null else ShapeKind.values()[selShape - 1]
     private fun selectedTerrain(): Terrain? = when (selSurface) { 0 -> null; 2 -> Terrain.SAND; 3 -> Terrain.MUD; else -> Terrain.NONE }
+    private fun selectedMedium(): Medium? = when (selSurface) { 0 -> null; 4 -> Medium.WATER; 5 -> Medium.FOG; 6 -> Medium.GAS; else -> Medium.NONE }
     /** null = random, -1 = a classic finish, 0.. = surface theme. */
-    private fun selectedTheme(): Int? = when (selSurface) { 0 -> null; 1, 2, 3 -> -1; else -> selSurface - 4 }
+    private fun selectedTheme(): Int? = when (selSurface) { 0 -> null; in 1..6 -> -1; else -> selSurface - 7 }
 
     /** Show the chosen level behind the menu as soon as an option changes. */
     private fun previewSelection() {
-        val sh = selectedShape(); val tr = selectedTerrain(); val th = selectedTheme(); val plain = selHazards == 1
+        val sh = selectedShape(); val tr = selectedTerrain(); val th = selectedTheme(); val md = selectedMedium(); val plain = selHazards == 1
         gameStarted = false          // previewing replaces the level, so there is nothing to resume any more
-        glView.queueEvent { renderer.previewLevel(sh, tr, plain, th) }
+        glView.queueEvent { renderer.previewLevel(sh, tr, plain, th, md) }
     }
 
     private fun buildMenu(): View {
@@ -484,11 +489,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         panel.addView(sectionLabel("Shape"))
         panel.addView(chipGrid(listOf("Random") + ShapeKind.values().map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }, 4, { selShape }, { selShape = it }))
         panel.addView(sectionLabel("Surface"))
-        panel.addView(chipGrid(listOf("Random", "Classic", "Sand", "Mud", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle"), 4, { selSurface }, { selSurface = it }))
+        panel.addView(chipGrid(listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle"), 4, { selSurface }, { selSurface = it }))
         panel.addView(sectionLabel("Hazards"))
         panel.addView(chipRow(listOf("Random", "None"), { selHazards }) { selHazards = it })
         menuLevels.addView(panel, LinearLayout.LayoutParams(maxW, -2))
-        menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1, selectedTheme()) },
+        menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1, selectedTheme(), selectedMedium()) },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, dp(12f)) })
         menuLevels.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2))
 
@@ -509,6 +514,12 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             qualityLevel = it
             getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("quality", it).apply()
             glView.queueEvent { renderer.setQualityLevel(it) }
+        })
+        sp.addView(sectionLabel("Simulation detail (sand, mud, water, gas)"))
+        sp.addView(settingsChips(listOf("Basic", "Detailed", "Ultra"), { simLevel }) {
+            simLevel = it
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("sim", it).apply()
+            renderer.simQuality = it
         })
         menuSettings.addView(sp, LinearLayout.LayoutParams(maxW, -2))
         menuSettings.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, 0) })
@@ -554,10 +565,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         hudLayer.visibility = View.VISIBLE
     }
 
-    private fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
+    private fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null, medium: Medium? = null) {
         gameStarted = true
         hideMenu()
-        glView.queueEvent { renderer.startGame(shape, terrain, plain, theme) }
+        glView.queueEvent { renderer.startGame(shape, terrain, plain, theme, medium) }
     }
 
     @Deprecated("Deprecated in Java")
