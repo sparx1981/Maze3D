@@ -39,6 +39,29 @@ async function main(){
   const sphere=mk({v:sv,i:si},[3]);
 
   const W=canvas.width,H=canvas.height;
+  const POST=q.get('post')==='1';
+  const mkTex=(w,h,depth)=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);if(depth)gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,w,h,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    const f=depth?gl.NEAREST:gl.LINEAR;gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,f);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,f);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t};
+  const mkFbo=(c,d)=>{const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);if(c)gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,c,0);if(d)gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,d,0);return f};
+  let msaaFbo=null;
+  const hw=W>>1,hh=H>>1,qw=W>>2,qh=H>>2;
+  const PX={};
+  if(POST){
+    const rbC=gl.createRenderbuffer(),rbD=gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER,rbC);gl.renderbufferStorageMultisample(gl.RENDERBUFFER,4,gl.RGBA8,W,H);
+    gl.bindRenderbuffer(gl.RENDERBUFFER,rbD);gl.renderbufferStorageMultisample(gl.RENDERBUFFER,4,gl.DEPTH_COMPONENT24,W,H);
+    msaaFbo=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,msaaFbo);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.RENDERBUFFER,rbC);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,rbD);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE) throw new Error('msaa fbo incomplete');
+    const sets={res:[W,H],comp:[W,H],ao:[hw,hh],aoTmp:[hw,hh],down:[hw,hh],blurA:[hw,hh],blurB:[hw,hh],bloomA:[qw,qh],bloomB:[qw,qh],cloud:[W>>2,H>>2]};
+    PX.colorTex=mkTex(W,H);PX.depthTex=mkTex(W,H,true);PX.resFbo=mkFbo(PX.colorTex,PX.depthTex);
+    for(const k of Object.keys(sets)){if(k==='res')continue;PX[k+'Tex']=mkTex(...sets[k]);PX[k+'Fbo']=mkFbo(PX[k+'Tex'])}
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    PX.progs={};for(const [k,v] of Object.entries({down:'P_DOWN',blur:'P_BLUR',bright:'P_BRIGHT',ssao:'P_SSAO',cloud:'P_CLOUD',comp:'P_COMP',fxaa:'P_FXAA'}))PX.progs[k]=prog(sh.BG_VS,sh[v]);
+  }
+  const bindMain=()=>{if(POST){gl.bindFramebuffer(gl.FRAMEBUFFER,msaaFbo);gl.viewport(0,0,W,H)}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,W,H)}};
+  const tri=gl.createVertexArray();
+  const fsPass=(fbo,w,h,p,setup)=>{gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);gl.viewport(0,0,w,h);gl.useProgram(p);setup(p);gl.bindVertexArray(tri);gl.drawArrays(gl.TRIANGLES,0,3);gl.bindVertexArray(null)};
+  const bt=(u,t)=>{gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t)};
   const orient = (q.get('orient')||'1,0.3,0,0.5').split(',').map(Number); // axis x,y,z, angle
   const oq = axisQuat(orient.slice(0,3), orient[3]); const model = quatMat(...oq);
   const zoom = parseFloat(q.get('zoom')||'0.9'); const growT = parseFloat(q.get('grow')||'1.4'); const TIME=parseFloat(q.get('t')||'0.5');
@@ -66,8 +89,13 @@ async function main(){
     gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(2,4);
     gl.useProgram(shScene);gl.uniformMatrix4fv(U(shScene,'uVP'),false,lightVP);gl.uniformMatrix4fv(U(shScene,'uModel'),false,model);gl.uniform1f(U(shScene,'uGrowT'),growT);gl.uniform1f(U(shScene,'uTime'),TIME);gl.uniform1f(U(shScene,'uDoorMode'),0);draw(floor);draw(walls);gl.uniform1f(U(shScene,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(shScene,'uDoorMode'),0);
     marbleU(shMarble,lightVP);draw(sphere);
-    gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,W,H);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
   }
+  // clouds into the small texture
+  const CLOUDS=q.get('cloud')==='1';
+  if(POST&&CLOUDS){gl.disable(gl.DEPTH_TEST);const cp=PX.progs.cloud;fsPass(PX.cloudFbo,W>>2,H>>2,cp,p=>{gl.uniform1f(U(p,'uTime'),TIME);gl.uniform1f(U(p,'uAspect'),W/H);gl.uniform1f(U(p,'uAmount'),1);gl.uniform1f(U(p,'uDensity'),parseFloat(q.get('dens')||'0.8'));gl.uniform2f(U(p,'uWind'),0.05,0.02);
+    const bt0=pal.bgTop;gl.uniform3f(U(p,'uTint'),0.78+bt0[0]*0.35,0.82+bt0[1]*0.3,0.9+bt0[2]*0.2);gl.uniform3f(U(p,'uShade'),0.16+bt0[0]*0.7,0.2+bt0[1]*0.7,0.28+bt0[2]*0.7)})}
+  bindMain();gl.enable(gl.DEPTH_TEST);gl.depthMask(true);
   gl.clearColor(0,0,0,q.get('bg')==='0'?0:1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   const e=gl.createVertexArray();gl.disable(gl.DEPTH_TEST);if(q.get('bg')!=='0'){gl.useProgram(bgP);gl.uniform3fv(U(bgP,'uTop'),pal.bgTop);gl.uniform3fv(U(bgP,'uBottom'),pal.bgBottom);gl.uniform1f(U(bgP,'uAspect'),W/H);
   gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.bindVertexArray(null);}
@@ -86,7 +114,21 @@ async function main(){
   marbleU(marbleP,vp);gl.uniform3f(U(marbleP,'uCam'),0,0,camDist);gl.uniform3fv(U(marbleP,'uLightDir'),L);gl.uniform3fv(U(marbleP,'uAccent'),pal.accent);
   gl.uniformMatrix3fv(U(marbleP,'uBody'),false,[1,0,0,0,1,0,0,0,1]);gl.uniform1f(U(marbleP,'uGhost'),0);draw(sphere);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthFunc(gl.GREATER);gl.depthMask(false);gl.uniform1f(U(marbleP,'uGhost'),1);draw(sphere);gl.depthMask(true);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);
-  if(q.get('cloud')==='1'){gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.useProgram(cloudP);gl.uniform1f(U(cloudP,'uTime'),TIME);gl.uniform1f(U(cloudP,'uAspect'),W/H);gl.uniform1f(U(cloudP,'uAmount'),1);gl.uniform3f(U(cloudP,'uTint'),pal.bgTop[0]*1.6,pal.bgTop[1]*1.6,pal.bgTop[2]*1.6);gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.disable(gl.BLEND)}
+  if(POST){
+    gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,msaaFbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,PX.resFbo);gl.blitFramebuffer(0,0,W,H,0,0,W,H,gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT,gl.NEAREST);
+    const pr=PX.progs;const P0=proj[0],P1=proj[5];const SSAO=q.get('ssao')!=='0',DOF=q.get('dof')!=='0';
+    const blur=(src,dst,w,h,dx,dy)=>fsPass(dst,w,h,pr.blur,p=>{bt(0,src);gl.uniform1i(U(p,'uTex'),0);gl.uniform2f(U(p,'uDir'),dx,dy)});
+    if(SSAO){fsPass(PX.aoFbo,hw,hh,pr.ssao,p=>{bt(0,PX.depthTex);gl.uniform1i(U(p,'uDepth'),0);gl.uniform4f(U(p,'uProj'),0.1,40,P0,P1);gl.uniform2f(U(p,'uTexel'),1/W,1/H);gl.uniform1f(U(p,'uRadius'),0.075);gl.uniform1f(U(p,'uStrength'),1.6)});
+      blur(PX.aoTex,PX.aoTmpFbo,hw,hh,1/hw,0);blur(PX.aoTmpTex,PX.aoFbo,hw,hh,0,1/hh)}
+    fsPass(PX.downFbo,hw,hh,pr.down,p=>{bt(0,PX.colorTex);gl.uniform1i(U(p,'uTex'),0);gl.uniform2f(U(p,'uTexel'),1/W,1/H)});
+    if(DOF){blur(PX.downTex,PX.blurAFbo,hw,hh,1/hw,0);blur(PX.blurATex,PX.blurBFbo,hw,hh,0,1/hh)}
+    fsPass(PX.bloomAFbo,qw,qh,pr.bright,p=>{bt(0,PX.downTex);gl.uniform1i(U(p,'uTex'),0);gl.uniform2f(U(p,'uTexel'),1/hw,1/hh);gl.uniform1f(U(p,'uThreshold'),0.78)});
+    blur(PX.bloomATex,PX.bloomBFbo,qw,qh,1/qw,0);blur(PX.bloomBTex,PX.bloomAFbo,qw,qh,0,1/qh);blur(PX.bloomATex,PX.bloomBFbo,qw,qh,2/qw,0);blur(PX.bloomBTex,PX.bloomAFbo,qw,qh,0,2/qh);
+    fsPass(PX.compFbo,W,H,pr.comp,p=>{bt(0,PX.colorTex);gl.uniform1i(U(p,'uScene'),0);bt(1,PX.aoTex);gl.uniform1i(U(p,'uAO'),1);bt(2,PX.blurBTex);gl.uniform1i(U(p,'uBlur'),2);bt(3,PX.depthTex);gl.uniform1i(U(p,'uDepth'),3);bt(4,PX.bloomATex);gl.uniform1i(U(p,'uBloom'),4);bt(5,PX.cloudTex);gl.uniform1i(U(p,'uCloud'),5);
+      gl.uniform4f(U(p,'uProj'),0.1,40,P0,P1);gl.uniform1f(U(p,'uFocus'),camDist);gl.uniform1f(U(p,'uFocusRange'),D.outer*1.1);gl.uniform1f(U(p,'uAOAmt'),SSAO?0.85:0);gl.uniform1f(U(p,'uDofAmt'),DOF?0.85:0);gl.uniform1f(U(p,'uBloomAmt'),parseFloat(q.get('bloom')||'0.34'));gl.uniform1f(U(p,'uCloudOn'),CLOUDS?1:0);gl.uniform3f(U(p,'uGrade'),0.35,1.08,0.02);gl.uniform1f(U(p,'uVignette'),0.35)});
+    fsPass(null,W,H,pr.fxaa,p=>{bt(0,PX.compTex);gl.uniform1i(U(p,'uTex'),0);gl.uniform2f(U(p,'uTexel'),1/W,1/H);gl.uniform1f(U(p,'uTime'),TIME);gl.uniform1f(U(p,'uGrain'),0.035);gl.uniform1f(U(p,'uFxaa'),1)});
+  }
   gl.finish();document.title='ready';
 }
 main().catch(e=>{document.title='error';window.__err=String(e);console.error(e)});

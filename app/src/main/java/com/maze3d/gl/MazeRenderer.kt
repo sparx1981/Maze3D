@@ -120,6 +120,20 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var lastHud = -1
     private var lastImpactAt = 0f
     private var nextKind: ShapeKind? = null
+    private val post = PostFx()
+    private val pp = PostParams()
+    private var postOn = false
+    private var renderScale = 1f
+    private var rw = 1
+    private var rh = 1
+    private var slowFrames = 0f
+    private var fastFrames = 0f
+    @Volatile var refreshHz = 60f
+    private var p00 = 1f
+    private var p11 = 1f
+    private var cloudDensity = 0.8f
+    private var windX = 0.05f
+    private var windY = 0.02f
 
     // ---- surface callbacks ----------------------------------------------------------------
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -130,11 +144,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         shadowMarbleProg = Shaders.program(Shaders.MARBLE_VS, Shaders.SHADOW_FS)
         holeProg = Shaders.program(Shaders.SCENE_VS, Shaders.HOLE_FS)
         sparkProg = Shaders.program(Shaders.SPARK_VS, Shaders.SPARK_FS)
-        cloudProg = Shaders.program(Shaders.BG_VS, Shaders.CLOUD_FS)
+        post.init()
         sparks.init()
         doorMesh = GlMesh(GlMesh.SCENE)
         holeMesh = GlMesh(GlMesh.SCENE)
-        locs.clear(); shadow = null; appliedQuality = -1
+        locs.clear(); shadow = null; appliedQuality = -1; postOn = false
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
         sphere = GlMesh.unitSphere()
@@ -151,6 +165,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
         width = max(w, 1); height = max(h, 1)
         GLES30.glViewport(0, 0, width, height)
+        post.resizeClouds(width, height)
+        appliedQuality = -1
         updateCamera()
     }
 
@@ -164,6 +180,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         camDist = (r / tanMin + r) * zoom * zoomFollow
         Matrix.setLookAtM(view, 0, 0f, 0f, camDist, 0f, 0f, 0f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, proj, 0, view, 0)
+        p00 = proj[0]; p11 = proj[5]
     }
 
     // ---- game control (GL thread) ---------------------------------------------------------
@@ -193,6 +210,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
+        cloudDensity = 0.55f + 0.45f * rnd.nextFloat()
+        val wa = rnd.nextFloat() * 6.2831853f
+        windX = kotlin.math.cos(wa) * 0.07f; windY = kotlin.math.sin(wa) * 0.035f
         fallTimer = 0f
         hintLeft = 0f; hintCool = 0f
         goalBursted = false
@@ -250,9 +270,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     // ---- frame ---------------------------------------------------------------------------
     override fun onDrawFrame(gl: GL10?) {
         val now = System.nanoTime()
-        val dt = ((now - lastNanos) / 1e9f).coerceIn(0.001f, 0.05f)
+        val raw = (now - lastNanos) / 1e9f
+        val dt = raw.coerceIn(0.001f, 0.05f)
         lastNanos = now
         time += dt
+        adaptResolution(raw.coerceIn(0.001f, 0.2f))
         update(dt)
         draw()
     }
@@ -442,6 +464,30 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         shadow?.release()
         shadow = when (quality) { 2 -> ShadowMap(2048); 1 -> ShadowMap(1024); else -> null }
         if (shadow?.ok == false) { shadow?.release(); shadow = null }
+        if (quality >= 1) {
+            renderScale = 1f
+            postOn = post.resize(width, height, renderScale)
+        } else {
+            post.dropScene(); postOn = false
+        }
+        rw = if (postOn) post.sceneW else width
+        rh = if (postOn) post.sceneH else height
+    }
+
+    /** Keeps the frame rate at the display's refresh rate by trading render resolution when the GPU is struggling. */
+    private fun adaptResolution(dt: Float) {
+        if (!postOn || quality < 1) return
+        val target = 1f / refreshHz.coerceIn(30f, 144f)
+        if (dt > target * 1.3f) { slowFrames += dt; fastFrames = 0f } else { fastFrames += dt; slowFrames = max(0f, slowFrames - dt * 0.5f) }
+        var next = renderScale
+        if (slowFrames > 1.2f && renderScale > 0.61f) { next = max(0.6f, renderScale - 0.1f); slowFrames = 0f }
+        else if (fastFrames > 6f && renderScale < 0.99f && dt < target * 1.12f) { next = min(1f, renderScale + 0.1f); fastFrames = 0f }
+        if (next != renderScale) {
+            renderScale = next
+            postOn = post.resize(width, height, renderScale)
+            rw = if (postOn) post.sceneW else width
+            rh = if (postOn) post.sceneH else height
+        }
     }
 
     private fun drawScene(prog: Int, vp: FloatArray, shadowPass: Boolean) {
@@ -482,9 +528,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform1f(loc(shadowMarbleProg, "uRadius"), mb.radius)
             sphere?.draw()
             GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
-            sm.end(width, height)
         }
 
+        // clouds render into their own small texture first
+        val cloudsOn = cloudAmt > 0.01f
+        if (cloudsOn) {
+            val tint = floatArrayOf(0.78f + pal.bgTop.x * 0.35f, 0.82f + pal.bgTop.y * 0.3f, 0.9f + pal.bgTop.z * 0.2f)
+            val shade = floatArrayOf(0.16f + pal.bgTop.x * 0.7f, 0.2f + pal.bgTop.y * 0.7f, 0.28f + pal.bgTop.z * 0.7f)
+            post.renderClouds(time, width.toFloat() / height, cloudAmt, cloudDensity, windX, windY, tint, shade)
+        }
+        if (postOn) post.beginScene() else { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); GLES30.glViewport(0, 0, width, height) }
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        GLES30.glDepthMask(true)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
 
         // ---- backdrop ---------------------------------------------------------------------
@@ -573,27 +628,26 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(sparkProg)
         GLES30.glUniformMatrix4fv(loc(sparkProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(sparkProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniform1f(loc(sparkProg, "uScale"), height / (2f * tan(Math.toRadians(19.0)).toFloat()))
+        GLES30.glUniform1f(loc(sparkProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE)
         GLES30.glDepthMask(false)
         sparks.draw(sparkProg, 1f)
         GLES30.glDepthMask(true)
 
-        // drifting clouds over everything
-        if (cloudAmt > 0.01f) {
-            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
-            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-            GLES30.glUseProgram(cloudProg)
-            GLES30.glUniform1f(loc(cloudProg, "uTime"), time)
-            GLES30.glUniform1f(loc(cloudProg, "uAspect"), width.toFloat() / height)
-            GLES30.glUniform1f(loc(cloudProg, "uAmount"), cloudAmt)
-            GLES30.glUniform3f(loc(cloudProg, "uTint"), pal.bgTop.x * 1.6f, pal.bgTop.y * 1.6f, pal.bgTop.z * 1.6f)
-            GLES30.glBindVertexArray(emptyVao[0])
-            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
-            GLES30.glBindVertexArray(0)
-            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
-        }
         GLES30.glDisable(GLES30.GL_BLEND)
+        if (postOn) {
+            pp.near = 0.1f; pp.far = 40f; pp.p00 = p00; pp.p11 = p11
+            pp.focus = camDist; pp.focusRange = kind.outerRadius * 1.1f
+            pp.time = time
+            pp.cloudOn = cloudsOn
+            pp.ssao = quality >= 2; pp.dof = quality >= 2
+            pp.aoAmt = 0.85f; pp.dofAmt = 0.85f
+            pp.bloomAmt = if (quality >= 2) 0.34f else 0.26f
+            pp.fxaa = true
+            post.finish(pp)
+        } else if (cloudsOn) {
+            post.blitClouds()
+        }
     }
 
     private fun drawHoles() {
