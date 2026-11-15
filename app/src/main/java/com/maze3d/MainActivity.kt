@@ -38,7 +38,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var engine: SoundEngine
     private var loading: LoadingView? = null
     private lateinit var joystick: JoystickView
-    private var cameraMode = 0
+    private var cameraMode = 2
+    private var touchSens = 1f
+    private var gyroSens = 1f
+    private var qualityLevel = 2
+    private lateinit var menuSettings: LinearLayout
     private var camPill: TextView? = null
     private var joyOriginX = 0f
     private var joyOriginY = 0f
@@ -77,8 +81,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             ?: sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         renderer = MazeRenderer(this)
-        cameraMode = getSharedPreferences("maze3d_ui", MODE_PRIVATE).getInt("camera", 0)
+        val ui = getSharedPreferences("maze3d_ui", MODE_PRIVATE)
+        cameraMode = ui.getInt("camera2", 2)                     // chase is the default view
+        touchSens = ui.getFloat("touchSens", 1f)
+        gyroSens = ui.getFloat("gyroSens", 1f)
+        qualityLevel = ui.getInt("quality", 2)
         renderer.setCameraMode(cameraMode)
+        renderer.touchSens = touchSens
+        renderer.gyroSens = gyroSens
+        renderer.setQualityLevel(qualityLevel)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(MsaaChooser())
@@ -204,19 +215,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val slider = ZoomSlider(this) { v -> glView.queueEvent { renderer.setZoomLevel(v) } }
         layer.addView(slider, FrameLayout.LayoutParams(dp(48f), dp(260f), Gravity.END or Gravity.CENTER_VERTICAL).apply { setMargins(0, 0, dp(6f), 0) })
 
-        val qualityNames = arrayOf("Low", "Medium", "High")
-        var quality = 2
-        val q = pill("Quality " + qualityNames[quality]) { v ->
-            quality = (quality + 2) % 3
-            v.text = ("Quality " + qualityNames[quality]).uppercase()
-            val level = quality
-            glView.queueEvent { renderer.setQualityLevel(level) }
-        }
-        val sound = pill("Sound", { engine.sfxOn }) { engine.setSfx(!engine.sfxOn) }
-        val music = pill("Music", { engine.musicOn }) { engine.setMusic(!engine.musicOn) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
         val menuBtn = pill("Menu") { showMenu() }
-        for (v in listOf(menuBtn, q, sound, music)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
+        for (v in listOf(menuBtn)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
         layer.addView(column, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
 
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
@@ -227,7 +228,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val follow = pill(camNames[cameraMode], { cameraMode == 2 }) { v ->
             cameraMode = (cameraMode + 1) % 3
             v.text = camNames[cameraMode].uppercase()
-            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("camera", cameraMode).apply()
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("camera2", cameraMode).apply()
             val m = cameraMode
             glView.queueEvent { renderer.setCameraMode(m) }
             if (m != 2) joystick.hide()
@@ -303,7 +304,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                     twistAngle = a
                     glView.queueEvent { renderer.chaseYawBy(d) }
                 } else if (!multiTouch) {
-                    val r = joystick.radius
+                    val r = joystick.radius / touchSens
                     var ix = (e.x - joyOriginX) / r
                     var iy = -(e.y - joyOriginY) / r
                     val len = kotlin.math.sqrt(ix * ix + iy * iy)
@@ -349,7 +350,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val axis = Vec3(dev.x, dev.y, dev.z)
         // Amplify: a gentle phone tilt becomes a strong push on the marble.
         val boosted = if (axis.lengthSq() < 1e-10f) com.maze3d.core.Quat.IDENTITY
-            else com.maze3d.core.Quat.fromAxisAngle(axis, minOf(angle * TILT_GAIN, 2.0f))
+            else com.maze3d.core.Quat.fromAxisAngle(axis, minOf(angle * TILT_GAIN * gyroSens, 2.0f))
         renderer.deviceGravity = boosted.rotate(Vec3(0f, -1f, 0f))
     }
 
@@ -377,7 +378,37 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     /** A row of single-choice chips. */
+    private var noPreview = false
+    private fun settingsChips(o: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout { noPreview = true; return chipRow(o, get, set) }
+
+    /** Slider for a 0.4x .. 2.5x sensitivity with its current value shown beside it. */
+    private fun sensitivitySlider(get: () -> Float, set: (Float) -> Unit): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val value = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); minWidth = dp(44f); gravity = Gravity.END }
+        fun toP(v: Float) = (Math.log((v / 0.4f).toDouble()) / Math.log(2.5 / 0.4) * 100).toInt().coerceIn(0, 100)
+        fun fromP(p: Int) = (0.4 * Math.pow(2.5 / 0.4, p / 100.0)).toFloat()
+        val bar = android.widget.SeekBar(this).apply {
+            max = 100; progress = toP(get())
+            progressTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar?, p: Int, fromUser: Boolean) {
+                    val v = fromP(p); value.text = "%.1fx".format(v)
+                    if (fromUser) set(v)
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) { engine.uiClick() }
+            })
+        }
+        value.text = "%.1fx".format(get())
+        row.addView(bar, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(value, LinearLayout.LayoutParams(-2, -2))
+        return row
+    }
+
     private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout {
+        val usePreview = !noPreview
+        noPreview = false
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val chips = ArrayList<TextView>()
         fun refresh() { chips.forEachIndexed { i, c -> c.background = glass(get() == i) } }
@@ -388,7 +419,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 gravity = Gravity.CENTER
                 setPadding(dp(4f), dp(12f), dp(4f), dp(12f))
                 background = glass(get() == i)
-                setOnClickListener { set(i); refresh(); engine.uiClick(); previewSelection() }
+                setOnClickListener { set(i); refresh(); engine.uiClick(); if (usePreview) previewSelection() }
             }
             chips.add(c)
             row.addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(3f), 0, dp(3f), 0) })
@@ -434,11 +465,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuMain.addView(bigButton("Quick start", primary = true) { startGame(null, null, false) },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Select level") { showLevelSelect() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
-        menuMain.addView(bigButton("Exit") { finishAffinity() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(26f)) })
-        val foot = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        foot.addView(pill("Sound", { engine.sfxOn }) { engine.setSfx(!engine.sfxOn) }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4f), 0, dp(4f), 0) })
-        foot.addView(pill("Music", { engine.musicOn }) { engine.setMusic(!engine.musicOn) }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4f), 0, dp(4f), 0) })
-        menuMain.addView(foot)
+        menuMain.addView(bigButton("Settings") { showSettings() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Exit") { finishAffinity() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(6f)) })
 
         // ---- level select screen
         menuLevels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
@@ -455,9 +483,31 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, dp(12f)) })
         menuLevels.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2))
 
+        // ---- settings screen (the only place these options live)
+        menuSettings = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuSettings.addView(header("settings"))
+        val sp = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sp.addView(sectionLabel("Gyro sensitivity"))
+        sp.addView(sensitivitySlider({ gyroSens }) { gyroSens = it; renderer.gyroSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("gyroSens", it).apply() })
+        sp.addView(sectionLabel("Touch sensitivity"))
+        sp.addView(sensitivitySlider({ touchSens }) { touchSens = it; renderer.touchSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("touchSens", it).apply() })
+        sp.addView(sectionLabel("Music"))
+        sp.addView(settingsChips(listOf("On", "Off"), { if (engine.musicOn) 0 else 1 }) { engine.setMusic(it == 0) })
+        sp.addView(sectionLabel("Sound effects"))
+        sp.addView(settingsChips(listOf("On", "Off"), { if (engine.sfxOn) 0 else 1 }) { engine.setSfx(it == 0) })
+        sp.addView(sectionLabel("Quality"))
+        sp.addView(settingsChips(listOf("Low", "Medium", "High"), { qualityLevel }) {
+            qualityLevel = it
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("quality", it).apply()
+            glView.queueEvent { renderer.setQualityLevel(it) }
+        })
+        menuSettings.addView(sp, LinearLayout.LayoutParams(maxW, -2))
+        menuSettings.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, 0) })
+
         val holder = FrameLayout(this)
         holder.addView(menuMain, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuLevels, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        holder.addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         menuLayer.addView(holder, FrameLayout.LayoutParams(-1, -1))
         return menuLayer
     }
@@ -465,7 +515,13 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private fun showMainMenu() {
         resumeBtn?.visibility = if (gameStarted) View.VISIBLE else View.GONE
         menuLevels.visibility = View.GONE
+        menuSettings.visibility = View.GONE
         menuMain.visibility = View.VISIBLE
+    }
+
+    private fun showSettings() {
+        menuMain.visibility = View.GONE
+        menuSettings.visibility = View.VISIBLE
     }
 
     private fun showLevelSelect() {
@@ -498,7 +554,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
-            menuLayer.visibility == View.VISIBLE && menuLevels.visibility == View.VISIBLE -> showMainMenu()
+            menuLayer.visibility == View.VISIBLE && (menuLevels.visibility == View.VISIBLE || menuSettings.visibility == View.VISIBLE) -> showMainMenu()
             menuLayer.visibility == View.VISIBLE && gameStarted -> { hideMenu(); glView.queueEvent { renderer.paused = false } }
             menuLayer.visibility == View.VISIBLE -> finishAffinity()
             else -> showMenu()

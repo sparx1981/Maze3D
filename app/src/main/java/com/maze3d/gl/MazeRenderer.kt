@@ -54,6 +54,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var pendingTerrain: Terrain? = null
     private var pendingPlain = false
     @Volatile var followOn = false
+    /** User settings (menu): 0.4 .. 2.5, 1 = default. */
+    @Volatile var touchSens = 1f
+    @Volatile var gyroSens = 1f
     /** 0 = orbit (turn the piece by hand), 1 = orbit that follows the marble, 2 = third-person chase camera. */
     @Volatile var cameraMode = 0
         private set
@@ -457,7 +460,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun dragStart() { dragging = true; angVel = Vec3.ZERO; lastTouchAt = time }
 
     fun drag(dx: Float, dy: Float, dtSec: Float) {
-        val scale = 0.0075f * zoom
+        val scale = 0.0075f * zoom * touchSens
         val axis = Vec3(dy, dx, 0f)
         val angle = axis.length() * scale
         if (angle > 1e-6f) {
@@ -560,9 +563,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     if (terrain != Terrain.NONE) layTrail(mb, m, dt)
                     if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
                         lastSparkAt = time
-                        sparks.impact(mb.impactPos, mb.impactDir, min(mb.lastImpact / 3f, 1f), pal.wall * 1.2f)
                         audio.impact(min(mb.lastImpact / 3f, 1f), panOf(mb.impactPos))
-                        dust.puff(mb.impactPos, mb.impactDir, 3, 0.05f, Vec3(0.78f, 0.78f, 0.8f))
+                        if (mb.lastImpact > 0.9f) dust.puff(mb.impactPos, mb.impactDir, 3, 0.05f, Vec3(0.78f, 0.78f, 0.8f))
+                        // sparks only for a really hard knock
+                        if (mb.lastImpact > HARD_HIT) sparks.impact(mb.impactPos, mb.impactDir, ((mb.lastImpact - HARD_HIT) / 2.5f + 0.25f).coerceIn(0.25f, 1f), pal.wall * 1.2f)
                     }
                     if (mb.lastImpact > 0.9f && time - lastImpactAt > 0.12f) {
                         lastImpactAt = time
@@ -668,7 +672,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var ix = chaseIx; var iy = chaseIy
         if (!joyActive && tiltMode) {
             val d = deviceGravity - Vec3(0f, -1f, 0f)
-            ix = (d.x * 1.4f).coerceIn(-1f, 1f); iy = (d.y * 1.4f).coerceIn(-1f, 1f)
+            ix = (d.x * 1.4f * gyroSens).coerceIn(-1f, 1f); iy = (d.y * 1.4f * gyroSens).coerceIn(-1f, 1f)
         }
         val len = kotlin.math.sqrt(ix * ix + iy * iy)
         if (len > 1f) { ix /= len; iy /= len }
@@ -1159,5 +1163,5 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private fun loc(prog: Int, name: String): Int =
         locs.getOrPut("$prog:$name") { GLES30.glGetUniformLocation(prog, name) }
 
-    companion object { const val RAIN_DROPS = 900; const val GRAVITY = 3.2f; const val HINT_SECONDS = 6f; const val HINT_COOLDOWN = 20f }
+    companion object { const val HARD_HIT = 1.7f; const val RAIN_DROPS = 900; const val GRAVITY = 3.2f; const val HINT_SECONDS = 6f; const val HINT_COOLDOWN = 20f }
 }
