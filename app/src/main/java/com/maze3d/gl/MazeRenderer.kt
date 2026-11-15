@@ -52,6 +52,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** True before a game has started: the level just turns slowly behind the menu. */
     @Volatile var menuMode = true
     private var pendingTerrain: Terrain? = null
+    private var pendingTheme: Int? = null
     private var pendingPlain = false
     @Volatile var followOn = false
     /** User settings (menu): 0.4 .. 2.5, 1 = default. */
@@ -358,15 +359,20 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun chaseYawBy(angle: Float) { pendingYaw += angle }
 
     // ---- game control (GL thread) ---------------------------------------------------------
-    fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false) {
+    fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false, forcedTheme: Int? = null) {
         kind = k
         val seed = rnd.nextLong()
         val m = Maze(k.createMesh(), seed)
         maze = m
         marble = Marble(m)
-        pal = Palette.random(rnd, pal)
         val tr = rnd.nextFloat()
-        terrain = forcedTerrain ?: (if (tr < 0.18f) Terrain.SAND else if (tr < 0.34f) Terrain.MUD else Terrain.NONE)
+        terrain = forcedTerrain ?: (if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
+        pal = when {
+            terrain != Terrain.NONE -> Palette.random(rnd, pal)                           // sand/mud floors keep a classic wall finish
+            forcedTheme == null -> Palette.randomAny(rnd, pal)
+            forcedTheme < 0 -> Palette.random(rnd, pal)
+            else -> Palette.themes[forcedTheme.coerceIn(0, Palette.themes.size - 1)]
+        }
         pal = when (terrain) {
             Terrain.SAND -> pal.withFloor(Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
             Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
@@ -433,22 +439,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Request a fresh labyrinth; walls sink first. */
-    fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false) {
+    fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false, theme: Int? = null) {
         nextKind = k ?: ShapeKind.values().filter { it != kind }.let { it[rnd.nextInt(it.size)] }
-        pendingTerrain = terrain; pendingPlain = plain
+        pendingTerrain = terrain; pendingPlain = plain; pendingTheme = theme
         if (phase != Phase.SINK) { phase = Phase.SINK; audio.levelSink() }
     }
 
     /** Begin a real game. null shape / terrain mean "random". */
-    fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+    fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
         menuMode = false; paused = false
-        requestNew(shape, terrain, plain)
+        requestNew(shape, terrain, plain, theme)
     }
 
     /** Menu backdrop: build the chosen level right away so the player can see what they picked. */
-    fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+    fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
         menuMode = true; paused = false
-        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain)
+        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain, theme)
     }
 
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase() }
@@ -615,7 +621,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             Phase.SINK -> {
                 growT -= dt / 0.8f
-                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext(), pendingTerrain, pendingPlain); nextKind = null; pendingTerrain = null; pendingPlain = false }
+                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext(), pendingTerrain, pendingPlain, pendingTheme); nextKind = null; pendingTerrain = null; pendingPlain = false; pendingTheme = null }
             }
         }
 
@@ -897,6 +903,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
+        GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
         val mbL = marble
         if (mbL != null && phase != Phase.MENU) {
             val wp = orient.rotate(mbL.position)
@@ -916,7 +923,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (holeCount > 0) GLES30.glUniform4fv(loc(sceneProg, "uHoleC"), 16, holeUniform, 0)
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), 0)
-        scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
+        scene(pal.wallMat, pal.wallRough, pal.wallMetal, 0f); wallMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
         doorMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
@@ -1006,6 +1013,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform3f(loc(bgProg, "uTop"), pal.bgTop.x, pal.bgTop.y, pal.bgTop.z)
         GLES30.glUniform3f(loc(bgProg, "uBottom"), pal.bgBottom.x, pal.bgBottom.y, pal.bgBottom.z)
         GLES30.glUniform1f(loc(bgProg, "uAspect"), width.toFloat() / height)
+        GLES30.glUniform1f(loc(bgProg, "uTheme"), pal.backdrop.toFloat())
+        GLES30.glUniform1f(loc(bgProg, "uTime"), time)
         GLES30.glBindVertexArray(emptyVao[0])
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
         GLES30.glBindVertexArray(0)

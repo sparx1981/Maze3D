@@ -435,13 +435,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     private fun selectedShape(): ShapeKind? = if (selShape == 0) null else ShapeKind.values()[selShape - 1]
-    private fun selectedTerrain(): Terrain? = when (selSurface) { 2 -> Terrain.SAND; 3 -> Terrain.MUD; 1 -> Terrain.NONE; else -> null }
+    private fun selectedTerrain(): Terrain? = when (selSurface) { 0 -> null; 2 -> Terrain.SAND; 3 -> Terrain.MUD; else -> Terrain.NONE }
+    /** null = random, -1 = a classic finish, 0.. = surface theme. */
+    private fun selectedTheme(): Int? = when (selSurface) { 0 -> null; 1, 2, 3 -> -1; else -> selSurface - 4 }
 
     /** Show the chosen level behind the menu as soon as an option changes. */
     private fun previewSelection() {
-        val sh = selectedShape(); val tr = selectedTerrain(); val plain = selHazards == 1
+        val sh = selectedShape(); val tr = selectedTerrain(); val th = selectedTheme(); val plain = selHazards == 1
         gameStarted = false          // previewing replaces the level, so there is nothing to resume any more
-        glView.queueEvent { renderer.previewLevel(sh, tr, plain) }
+        glView.queueEvent { renderer.previewLevel(sh, tr, plain, th) }
     }
 
     private fun buildMenu(): View {
@@ -482,11 +484,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         panel.addView(sectionLabel("Shape"))
         panel.addView(chipGrid(listOf("Random") + ShapeKind.values().map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }, 4, { selShape }, { selShape = it }))
         panel.addView(sectionLabel("Surface"))
-        panel.addView(chipRow(listOf("Random", "Standard", "Sand", "Mud"), { selSurface }) { selSurface = it })
+        panel.addView(chipGrid(listOf("Random", "Classic", "Sand", "Mud", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle"), 4, { selSurface }, { selSurface = it }))
         panel.addView(sectionLabel("Hazards"))
         panel.addView(chipRow(listOf("Random", "None"), { selHazards }) { selHazards = it })
         menuLevels.addView(panel, LinearLayout.LayoutParams(maxW, -2))
-        menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1) },
+        menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1, selectedTheme()) },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, dp(12f)) })
         menuLevels.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2))
 
@@ -552,10 +554,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         hudLayer.visibility = View.VISIBLE
     }
 
-    private fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+    private fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null) {
         gameStarted = true
         hideMenu()
-        glView.queueEvent { renderer.startGame(shape, terrain, plain) }
+        glView.queueEvent { renderer.startGame(shape, terrain, plain, theme) }
     }
 
     @Deprecated("Deprecated in Java")

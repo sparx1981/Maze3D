@@ -50,11 +50,17 @@ class DumpSceneTest {
     fun dump() {
         val out0 = System.getenv("MAZE_DUMP") ?: return
         val kinds = (System.getenv("MAZE_SHAPE") ?: "SPHERE").split(",").map { ShapeKind.valueOf(it.trim()) }
-        for (k in kinds) dumpOne(k, if (kinds.size > 1) out0.replace(".json", "_${k.name}.json") else out0)
+        val pals = (System.getenv("MAZE_PAL") ?: "0").split(",").map { it.trim().toInt() }
+        for (k in kinds) for (pi in pals) {
+            var out = out0
+            if (kinds.size > 1) out = out.replace(".json", "_${k.name}.json")
+            if (pals.size > 1) out = out.replace(".json", "_p$pi.json")
+            dumpOne(k, pi, out)
+        }
     }
 
-    private fun dumpOne(kind: ShapeKind, out: String) {
-        var pal = Palette.all[(System.getenv("MAZE_PAL") ?: "0").toInt()]
+    private fun dumpOne(kind: ShapeKind, palIndex: Int, out: String) {
+        var pal = Palette.all[palIndex]
         val terrain = System.getenv("MAZE_TERRAIN") ?: ""
         if (terrain == "SAND") pal = pal.withFloor(com.maze3d.core.Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
         if (terrain == "MUD") pal = pal.withFloor(com.maze3d.core.Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
@@ -77,7 +83,7 @@ class DumpSceneTest {
         sb.append("\"floor\":${mesh(b.floor())},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")
         fun v(c: com.maze3d.core.Vec3) = arr(floatArrayOf(c.x, c.y, c.z))
-        sb.append("\"pal\":{\"floor\":${v(pal.floor)},\"floorMat\":${pal.floorMat},\"floorRough\":${pal.floorRough},\"wall\":${v(pal.wall)},\"wallMat\":${pal.wallMat},\"wallRough\":${pal.wallRough},\"bgTop\":${v(pal.bgTop)},\"bgBottom\":${v(pal.bgBottom)},\"accent\":${v(pal.accent)}},")
+        sb.append("\"pal\":{\"floor\":${v(pal.floor)},\"floor2\":${v(pal.floor2)},\"wallMetal\":${pal.wallMetal},\"backdrop\":${pal.backdrop},\"floorMat\":${pal.floorMat},\"floorRough\":${pal.floorRough},\"wall\":${v(pal.wall)},\"wallMat\":${pal.wallMat},\"wallRough\":${pal.wallRough},\"bgTop\":${v(pal.bgTop)},\"bgBottom\":${v(pal.bgBottom)},\"accent\":${v(pal.accent)}},")
         sb.append("\"sh\":{\"SCENE_VS\":${esc(Shaders.SCENE_VS)},\"SCENE_FS\":${esc(Shaders.SCENE_FS)},\"MARBLE_VS\":${esc(Shaders.MARBLE_VS)},\"MARBLE_FS\":${esc(Shaders.MARBLE_FS)},\"SHADOW_FS\":${esc(Shaders.SHADOW_FS)},\"BG_VS\":${esc(Shaders.BG_VS)},\"BG_FS\":${esc(Shaders.BG_FS)},\"HOLE_FS\":${esc(Shaders.PIT_FS)},\"LID_VS\":${esc(Shaders.LID_VS)},\"LID_FS\":${esc(Shaders.LID_FS)},\"CLOUD_FS\":${esc(Shaders.CLOUD_FS)},\"P_DOWN\":${esc(PostShaders.DOWN_FS)},\"P_BLUR\":${esc(PostShaders.BLUR_FS)},\"P_BRIGHT\":${esc(PostShaders.BRIGHT_FS)},\"P_SSAO\":${esc(PostShaders.SSAO_FS)},\"P_CLOUD\":${esc(PostShaders.CLOUD_FS)},\"P_COMP\":${esc(PostShaders.COMPOSITE_FS)},\"P_FXAA\":${esc(PostShaders.FXAA_FS)},\"PUDDLE_FS\":${esc(Shaders.PUDDLE_FS)},\"RAIN_VS\":${esc(Shaders.RAIN_VS)},\"RAIN_FS\":${esc(Shaders.RAIN_FS)},\"TRAIL_VS\":${esc(Shaders.TRAIL_VS)},\"TRAIL_FS\":${esc(Shaders.TRAIL_FS)},\"SPARK_VS\":${esc(Shaders.SPARK_VS)},\"SMOKE_FS\":${esc(PostShaders.SMOKE_FS)}}")
         sb.append("}")
         File(out).writeText(sb.toString())

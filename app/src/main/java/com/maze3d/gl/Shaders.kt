@@ -122,6 +122,7 @@ uniform float uRough;
 uniform float uMetal;
 uniform int uHoleN;
 uniform vec4 uHoleC[16];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
+uniform vec3 uFloor2;       // second floor colour for patterned themes (sRGB)
 uniform float uShadowOn;
 uniform vec3 uMarbleL;      // marble position (world) for its glow and contact shadow
 uniform float uMarbleR;     // marble radius; 0 disables
@@ -160,6 +161,76 @@ float shadowAt(vec3 wp, vec3 N) {
 // Triplanar blend weights from the local normal.
 vec3 triW(vec3 n) { vec3 w = pow(abs(n), vec3(6.0)); return w / (w.x + w.y + w.z + 1e-5); }
 
+
+float fade3(vec3 P) { return 1.0 - smoothstep(0.0012, 0.004, length(dFdx(P))); }
+float hash11(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+
+// candy sprinkles on one plane: returns premultiplied colour (rgb) and coverage (a)
+vec4 sprinkles(vec2 uv) {
+    vec2 g = uv * 48.0, id = floor(g), f = fract(g) - 0.5;
+    float h = hash21(id);
+    if (h > 0.16) return vec4(0.0);
+    vec2 d = rot2(f, h * 40.0);
+    float sdf = length(vec2(max(abs(d.x) - 0.2, 0.0), d.y)) - 0.075;
+    float m = 1.0 - smoothstep(0.0, 0.05, sdf);
+    vec3 col = h < 0.04 ? vec3(0.95, 0.2, 0.35) : h < 0.08 ? vec3(0.2, 0.75, 0.95) : h < 0.12 ? vec3(1.0, 0.85, 0.2) : vec3(0.5, 0.85, 0.4);
+    return vec4(pow(col, vec3(2.2)) * m, m);
+}
+
+// day-of-the-dead marigolds on one plane
+vec4 flowers(vec2 uv) {
+    vec2 g = uv * 7.0; g.x += 0.5 * mod(floor(g.y), 2.0);
+    vec2 id = floor(g), f = fract(g) - 0.5;
+    float r = length(f), a = atan(f.y, f.x);
+    float petal = 0.30 + 0.075 * cos(a * 8.0 + hash21(id) * 3.0);
+    float inF = 1.0 - smoothstep(petal - 0.03, petal, r);
+    float centre = 1.0 - smoothstep(0.08, 0.11, r);
+    vec3 orange = mix(vec3(1.0, 0.42, 0.04), vec3(1.0, 0.62, 0.08), 0.5 + 0.5 * cos(a * 8.0));
+    vec3 col = mix(orange, vec3(0.45, 0.12, 0.05), centre);
+    // papel picado dots between the flowers
+    float dots = 1.0 - smoothstep(0.045, 0.06, length(fract(g + 0.5) - 0.5 - vec2(0.5)));
+    vec3 dcol = vec3(0.95, 0.9, 0.85);
+    float m = max(inF, dots * 0.8);
+    vec3 outc = mix(dcol, col, inF);
+    return vec4(pow(outc, vec3(2.2)) * m, m);
+}
+
+// space hull panels: r = panel brightness, g = lit window mask
+vec4 panels(vec2 uv) {
+    vec2 g = uv * 5.5, id = floor(g), f = fract(g);
+    float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+    float seam = smoothstep(0.0, 0.04, edge);
+    float tone = 0.8 + 0.25 * hash21(id);
+    vec2 rv = abs(f - 0.5) - 0.42;
+    float rivet = 1.0 - smoothstep(0.0, 0.03, length(rv));
+    vec2 wf = fract(g * vec2(3.0, 5.0));
+    float win = step(0.94, hash21(id + 7.0)) * step(0.2, wf.x) * step(wf.x, 0.8) * step(0.3, wf.y) * step(wf.y, 0.7);
+    return vec4(seam * tone * (1.0 - 0.3 * rivet), win, 0.0, 0.0);
+}
+
+// laboratory tiles: r = tile brightness (grout darkens it)
+vec4 tiles(vec2 uv) {
+    vec2 g = uv * 6.5, f = fract(g);
+    float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+    float grout = smoothstep(0.0, 0.03, edge);
+    float v = 0.9 + 0.1 * hash21(floor(g));
+    return vec4(mix(0.35, v, grout), 0.0, 0.0, 0.0);
+}
+
+// carved glyph blocks: a = glyph mask
+vec4 glyphs(vec2 uv) {
+    vec2 g = uv * vec2(8.0, 1.0), id = floor(g), f = fract(g);
+    float h = hash21(id);
+    float on = step(0.45, h);
+    vec2 q = abs(f - 0.5);
+    float box = (1.0 - smoothstep(0.30, 0.34, q.x)) * (1.0 - smoothstep(0.16, 0.2, q.y));
+    float stem = (1.0 - smoothstep(0.03, 0.06, abs(f.x - 0.5 + (h - 0.5) * 0.3))) * (1.0 - smoothstep(0.16, 0.2, q.y));
+    float cross = (1.0 - smoothstep(0.03, 0.06, abs(f.y - 0.5))) * (1.0 - smoothstep(0.30, 0.34, q.x));
+    float m = on * clamp(box * 0.0 + stem + cross * step(0.7, h), 0.0, 1.0);
+    return vec4(0.0, 0.0, 0.0, m);
+}
+
 // 2/2 twill carbon weave on one plane. Returns (tone, direction) with distance-based fade.
 vec2 weave(vec2 uv) {
     vec2 g = uv / 0.011;
@@ -192,6 +263,7 @@ void main() {
     vec3 V = normalize(uCam - vWorld);
     vec3 albedo = pow(vCol, vec3(2.2));
     float hgt = 0.0;
+    vec3 emit = vec3(0.0);
     float rough = uRough;
     float metal = uMetal;
     float coat = 0.0;
@@ -239,6 +311,88 @@ void main() {
         hgt = (lump - 0.5) * 0.0014 + (fine - 0.5) * 0.0003;
         rough = 0.22 + 0.4 * (1.0 - lump);
         coat = 0.85;
+    } else if (uMat == 7) {     // candy: marbled pastel base with sprinkles
+        float n = vnoise(vec2(dot(P, vec3(5.0, 3.0, 4.0)), dot(P, vec3(-3.0, 5.0, 2.0))));
+        albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.35, 0.65, n));
+        vec4 sp = sprinkles(P.yz) * tw.x + sprinkles(P.xz) * tw.y + sprinkles(P.xy) * tw.z;
+        albedo = mix(albedo, sp.rgb / max(sp.a, 1e-3), clamp(sp.a, 0.0, 1.0));
+        rough = 0.22; coat = 1.0;
+    } else if (uMat == 8) {     // day of the dead: marigold flowers and papel-picado dots on purple
+        vec4 f1 = flowers(P.yz), f2 = flowers(P.xz), f3 = flowers(P.xy);
+        vec4 fl = f1 * tw.x + f2 * tw.y + f3 * tw.z;
+        albedo = mix(albedo, fl.rgb, clamp(fl.a, 0.0, 1.0));
+        rough = 0.42; coat = 0.6;
+    } else if (uMat == 9) {     // asphalt: aggregate grit and dark rubber smears
+        float grit = vnoise(vec2(dot(P, vec3(420.0, 260.0, 310.0)), dot(P, vec3(-250.0, 410.0, 190.0))));
+        float smear = vnoise(vec2(dot(P, vec3(9.0, 3.0, 6.0)), dot(P, vec3(-4.0, 8.0, 5.0))));
+        float spk = step(0.93, vnoise(vec2(dot(P, vec3(900.0, 120.0, 400.0)), dot(P, vec3(-300.0, 800.0, 250.0)))));
+        albedo *= (0.65 + 0.7 * grit) * (0.75 + 0.4 * smear);
+        albedo += vec3(0.25) * spk * fade3(P);
+        hgt = (grit - 0.5) * 0.0004;
+        rough = 0.82;
+    } else if (uMat == 10) {    // mown turf: alternating bands and fine blades
+        float band = step(0.5, fract(P.y * 4.2 + 0.15 * vnoise(vec2(P.x * 2.0, P.z * 2.0))));
+        albedo = mix(albedo, pow(uFloor2, vec3(2.2)), band);
+        float blade = vnoise(vec2(dot(P, vec3(900.0, 500.0, 700.0)), dot(P, vec3(-600.0, 800.0, 400.0))));
+        albedo *= 0.78 + 0.4 * blade * fade3(P) + 0.2 * (1.0 - fade3(P));
+        hgt = (blade - 0.5) * 0.0006 * fade3(P);
+        rough = 0.92;
+    } else if (uMat == 11) {    // space hull: panel seams, rivets and lit windows
+        vec4 s1 = panels(P.yz), s2 = panels(P.xz), s3 = panels(P.xy);
+        vec4 pn = s1 * tw.x + s2 * tw.y + s3 * tw.z;
+        albedo *= pn.r;
+        hgt = (pn.r - 0.7) * 0.0012;
+        emit = vec3(0.3, 0.9, 1.0) * pn.g * 1.6;
+        rough = 0.32; metal = 0.5;
+    } else if (uMat == 12) {    // diner tablecloth: red and white checks with woven fabric
+        float ck = mod(floor(P.x * 7.0) + floor(P.y * 7.0) + floor(P.z * 7.0), 2.0);
+        albedo = mix(albedo, pow(uFloor2, vec3(2.2)), ck);
+        float wv = sin(dot(P, vec3(900.0, 300.0, 500.0))) * sin(dot(P, vec3(-300.0, 900.0, 400.0)));
+        albedo *= 0.92 + 0.08 * wv * fade3(P);
+        hgt = wv * 0.00025 * fade3(P);
+        rough = 0.78;
+    } else if (uMat == 13) {    // laboratory tiles
+        vec4 t1 = tiles(P.yz), t2 = tiles(P.xz), t3 = tiles(P.xy);
+        vec4 tl = t1 * tw.x + t2 * tw.y + t3 * tw.z;
+        albedo *= tl.r;
+        hgt = (tl.r - 0.8) * 0.0006;
+        rough = 0.12 + 0.3 * (1.0 - tl.r); coat = 1.0;
+    } else if (uMat == 14) {    // ice: frosted surface with deep cracks
+        float cr = vnoise(vec2(dot(P, vec3(13.0, 7.0, 9.0)), dot(P, vec3(-6.0, 12.0, 8.0))));
+        float crack = 1.0 - smoothstep(0.0, 0.035, abs(cr - 0.5));
+        float frost = vnoise(vec2(dot(P, vec3(240.0, 130.0, 180.0)), dot(P, vec3(-120.0, 230.0, 150.0))));
+        albedo = mix(albedo * (0.8 + 0.3 * frost), vec3(0.45, 0.62, 0.8) * albedo, crack * 0.7);
+        hgt = -crack * 0.0008 + (frost - 0.5) * 0.0003;
+        rough = 0.09 + 0.12 * frost; coat = 1.0;
+        emit = vec3(0.35, 0.55, 0.8) * 0.12 * (1.0 - crack);
+    } else if (uMat == 15) {    // sandstone with carved bands and glyph blocks
+        float band = fract(P.y * 3.4);
+        float line = 1.0 - smoothstep(0.0, 0.03, abs(band - 0.5) - 0.44);
+        vec4 g1 = glyphs(P.xz * 1.0 + vec2(0.0, P.y * 3.4)), g2 = glyphs(P.zy * 1.0 + vec2(P.x * 3.4, 0.0));
+        float gl = max(g1.a * tw.y, g2.a * (tw.x + tw.z));
+        float grain = vnoise(vec2(dot(P, vec3(200.0, 100.0, 160.0)), dot(P, vec3(-90.0, 210.0, 130.0))));
+        albedo *= (0.82 + 0.3 * grain) * (1.0 - 0.45 * line) * (1.0 - 0.38 * gl);
+        hgt = -(line * 0.0006 + gl * 0.0008);
+        rough = 0.88;
+    } else if (uMat == 16) {    // neon arcade: black floor with a glowing grid
+        vec3 gp = fract(P * 6.0 + 0.5) - 0.5;
+        float l1 = 1.0 - smoothstep(0.0, 0.025, min(abs(gp.x), min(abs(gp.y), abs(gp.z))));
+        float pick = step(0.5, fract(floor(P.x * 6.0) * 0.37 + floor(P.y * 6.0) * 0.61 + floor(P.z * 6.0) * 0.43));
+        emit = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 0.9, 1.0), pick) * l1 * 1.8 * fade3(P);
+        rough = 0.18; coat = 1.0;
+    } else if (uMat == 17) {    // jungle moss: layered greens, damp sheen
+        float m1 = vnoise(vec2(dot(P, vec3(30.0, 14.0, 21.0)), dot(P, vec3(-12.0, 28.0, 17.0))));
+        float m2 = vnoise(vec2(dot(P, vec3(160.0, 80.0, 120.0)), dot(P, vec3(-70.0, 170.0, 100.0))));
+        albedo *= 0.5 + 0.9 * m1;
+        albedo = mix(albedo, albedo * vec3(1.3, 1.25, 0.6), smoothstep(0.55, 0.8, m2));
+        hgt = (m2 - 0.5) * 0.0010 + (m1 - 0.5) * 0.0006;
+        rough = 0.5 + 0.3 * m2; coat = 0.25;
+    } else if (uMat == 21) {    // carved stone: weathered blocks
+        float n1 = vnoise(vec2(dot(P, vec3(45.0, 22.0, 33.0)), dot(P, vec3(-20.0, 40.0, 26.0))));
+        float n2 = vnoise(vec2(dot(P, vec3(260.0, 150.0, 200.0)), dot(P, vec3(-140.0, 250.0, 170.0))));
+        albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
+        hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
+        rough = 0.86;
     } else if (uMat == 0) {     // lacquer / enamel
         coat = 1.0;
     }
@@ -292,6 +446,7 @@ void main() {
     col += irradiance(N) * diffC * 1.0 + spec * occ;
     // rim light
     col += pow(1.0 - NoV, 3.5) * vec3(0.10, 0.12, 0.16) * (0.4 + 0.6 * metal);
+    col += emit;
     if (uMarbleR > 0.0) {                                     // the glass marble lights its surroundings and sits in its own shadow
         vec3 Lm = uMarbleL - vWorld;
         float dm2 = dot(Lm, Lm);
@@ -830,18 +985,87 @@ precision highp float;
 uniform vec3 uTop;
 uniform vec3 uBottom;
 uniform float uAspect;
+uniform float uTheme;      // see Backdrop: 0 studio, 1 stars, 2 sky, 3 neon, 4 bokeh, 5 aurora, 6 light shafts
+uniform float uTime;
 in vec2 vUv;
 out vec4 outColor;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p) {
+    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y);
+}
 void main() {
     vec3 c = mix(uBottom, uTop * 0.55, smoothstep(0.0, 1.0, vUv.y));
     vec2 q = (vUv - vec2(0.5, 0.52)) * vec2(uAspect, 1.0);
     float v = length(q);
-    c += uTop * 0.22 * (1.0 - smoothstep(0.0, 0.6, v));      // soft studio glow behind the piece
-    // faint floor shadow under the floating piece
-    vec2 s = (vUv - vec2(0.5, 0.17)) * vec2(1.0, 3.4);
-    c *= 1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.34, length(s * vec2(uAspect * 0.65, 1.0)))) ;
-    c *= 1.0 - 0.7 * smoothstep(0.35, 1.05, v);                 // vignette
+    vec2 p = vec2(vUv.x * uAspect, vUv.y);
+    if (uTheme < 0.5) {
+        c += uTop * 0.22 * (1.0 - smoothstep(0.0, 0.6, v));      // soft studio glow behind the piece
+        vec2 s = (vUv - vec2(0.5, 0.17)) * vec2(1.0, 3.4);
+        c *= 1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.34, length(s * vec2(uAspect * 0.65, 1.0))));   // faint floor shadow
+    } else if (uTheme < 1.5) {                                  // stars and a nebula
+        float neb = vn(p * 3.0 + 4.0) * vn(p * 7.0 - 2.0);
+        c += mix(vec3(0.10, 0.03, 0.22), vec3(0.02, 0.12, 0.28), vUv.x) * neb * 2.2;
+        for (int i = 0; i < 3; i++) {
+            float sc = 38.0 + 46.0 * float(i);
+            vec2 g = p * sc, id = floor(g), f = fract(g) - 0.5;
+            float h = h21(id + float(i) * 11.0);
+            vec2 off = (vec2(h21(id + 3.0), h21(id + 9.0)) - 0.5) * 0.6;
+            float d = length(f - off);
+            float tw = 0.65 + 0.35 * sin(uTime * (1.5 + 3.0 * h) + h * 40.0);
+            c += step(0.972, h) * (1.0 - smoothstep(0.0, 0.07, d)) * tw * mix(vec3(0.8, 0.9, 1.0), vec3(1.0, 0.85, 0.7), h21(id));
+        }
+    } else if (uTheme < 2.5) {                                  // open sky with a sun and haze near the horizon
+        vec2 sp = vec2(0.72 * uAspect, 0.80);
+        float sd = length(p - sp);
+        c += vec3(1.0, 0.82, 0.55) * (0.55 * exp(-sd * 3.2) + 0.9 * exp(-sd * 14.0));
+        c = mix(c, c + vec3(0.25, 0.22, 0.2), exp(-abs(vUv.y - 0.38) * 9.0) * 0.5);
+        c += vec3(0.05) * vn(p * vec2(2.0, 6.0) + vec2(uTime * 0.02, 0.0));    // wisps
+    } else if (uTheme < 3.5) {                                  // retro sun over a neon grid
+        float hor = 0.40;
+        if (vUv.y < hor) {
+            float z = 1.0 / max(hor - vUv.y, 0.004);
+            vec2 gp = vec2((vUv.x - 0.5) * z * 0.55, z * 0.35 + uTime * 0.6);
+            vec2 gl = abs(fract(gp) - 0.5);
+            float line = (1.0 - smoothstep(0.0, 0.05 + 0.25 / z, min(gl.x, gl.y) * 2.0 - 0.9 + 0.9)) * 0.0;
+            float lx = 1.0 - smoothstep(0.0, 0.06, abs(fract(gp.x) - 0.5) - 0.44);
+            float ly = 1.0 - smoothstep(0.0, 0.06, abs(fract(gp.y) - 0.5) - 0.44);
+            c += vec3(1.0, 0.15, 0.8) * max(lx, ly) * clamp(1.5 / z + 0.15, 0.0, 1.0) * 0.9;
+        } else {
+            vec2 sp = vec2(0.5 * uAspect, 0.56);
+            float sd = length(p - sp);
+            float stripe = step(0.5, fract((vUv.y - 0.40) * 22.0 - sd * 0.0));
+            float disc = (1.0 - smoothstep(0.17, 0.175, sd)) * mix(1.0, stripe, smoothstep(0.52, 0.40, vUv.y + 0.0));
+            c += mix(vec3(1.0, 0.8, 0.1), vec3(1.0, 0.1, 0.6), clamp((vUv.y - 0.40) / 0.32, 0.0, 1.0)) * disc * 1.2;
+            c += vec3(1.0, 0.2, 0.7) * 0.25 * exp(-sd * 6.0);
+        }
+        c += vec3(0.6, 0.1, 0.8) * 0.25 * exp(-abs(vUv.y - hor) * 18.0);
+    } else if (uTheme < 4.5) {                                  // drifting bokeh lights
+        for (int i = 0; i < 14; i++) {
+            float fi = float(i);
+            vec2 pc = vec2(h21(vec2(fi, 1.3)) * uAspect, h21(vec2(fi, 7.7)));
+            pc += vec2(sin(uTime * 0.15 + fi) * 0.08, cos(uTime * 0.11 + fi * 1.7) * 0.06);
+            float rad = 0.05 + 0.08 * h21(vec2(fi, 3.1));
+            float d = length(p - pc);
+            float disc = (1.0 - smoothstep(rad * 0.85, rad, d)) * 0.5 + (1.0 - smoothstep(0.0, 0.01, abs(d - rad))) * 0.5;
+            c += mix(uTop * 1.4, vec3(1.0, 0.9, 0.7), h21(vec2(fi, 9.9))) * disc * 0.16;
+        }
+    } else if (uTheme < 5.5) {                                  // aurora curtains
+        float cur = sin(p.x * 3.0 + uTime * 0.25 + vn(p * 2.0) * 3.0) * 0.5 + 0.5;
+        float band = smoothstep(0.52, 0.8, vUv.y) * (1.0 - smoothstep(0.8, 1.0, vUv.y)) * (0.4 + 0.6 * cur);
+        c += mix(vec3(0.1, 1.0, 0.6), vec3(0.5, 0.3, 1.0), vUv.y) * band * 0.45;
+        c += step(0.985, h21(floor(p * 90.0))) * 0.6 * (1.0 - smoothstep(0.3, 0.9, vUv.y) * 0.0);
+    } else {                                                    // light shafts through foliage
+        float beam = 0.0;
+        for (int i = 0; i < 4; i++) {
+            float fi = float(i);
+            float ax = (p.x + p.y * (0.35 + 0.1 * fi)) * (3.0 + fi * 1.7) + fi * 2.0 + uTime * 0.03;
+            beam += pow(max(sin(ax), 0.0), 6.0) * (0.5 - 0.1 * fi);
+        }
+        c += vec3(0.75, 1.0, 0.5) * beam * 0.10 * smoothstep(0.2, 1.0, vUv.y);
+        c += uTop * 0.18 * (1.0 - smoothstep(0.0, 0.6, v));
+    }
+    c *= 1.0 - 0.6 * smoothstep(0.35, 1.05, v);                 // vignette
     c = pow(max(c, 0.0), vec3(1.0 / 2.2));
     outColor = vec4(c + (h21(gl_FragCoord.xy) - 0.5) / 255.0, 1.0);
 }

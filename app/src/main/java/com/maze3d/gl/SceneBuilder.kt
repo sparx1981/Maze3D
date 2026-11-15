@@ -41,40 +41,74 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
-    /** One half of the wall cross-section: (lateral fraction, height fraction, normal lateral, normal up). */
-    private fun halfProfile(): List<FloatArray> {
-        val t = wallHalfThickness
-        val rr = t * 0.62f
-        val list = ArrayList<FloatArray>()
-        list.add(floatArrayOf(1f, -0.08f, 1f, 0f))
-        list.add(floatArrayOf(1f, (wallHeight - rr) / wallHeight, 1f, 0f))
-        for (k in 1..5) {
-            val th = (PI / 2 * k / 6).toFloat()
-            val lat = (t - rr + rr * cos(th)) / t
-            val ht = (wallHeight - rr + rr * sin(th)) / wallHeight
-            list.add(floatArrayOf(lat, ht, cos(th), sin(th)))
+    /** A wall cross-section: points (lateral in wall half-widths, height in wall heights, normal x, normal y) around the whole loop. */
+    private class ProfileData(val pts: List<FloatArray>, val ws: Float, val hs: Float)
+
+    private val profiles = HashMap<Int, ProfileData>()
+
+    private fun profileData(kind: Int): ProfileData = profiles.getOrPut(kind) { buildProfile(kind) }
+
+    private fun buildProfile(kind: Int): ProfileData {
+        val half = ArrayList<FloatArray>()   // (lat, v) from the base up to the top centre
+        var ws = 1f; var hs = 1f
+        fun p(lat: Float, v: Float) { half.add(floatArrayOf(lat, v, 0f, 0f)) }
+        when (kind) {
+            Profile.SQUARE -> { ws = 1.15f; hs = 1f; p(1f, -0.08f); p(1f, 0.93f); p(0.95f, 0.985f); p(0.86f, 1f); p(0f, 1f) }
+            Profile.KERB -> { ws = 1.9f; hs = 0.5f; p(1f, -0.08f); p(1f, 0.22f); p(0.72f, 0.62f); p(0.4f, 0.9f); p(0.2f, 1f); p(0f, 1f) }
+            Profile.TAPER -> { ws = 1.05f; hs = 1.55f; p(1f, -0.08f); p(0.82f, 0.3f); p(0.6f, 0.62f); p(0.34f, 0.86f); p(0.1f, 1f); p(0f, 1f) }
+            Profile.TUBE -> {
+                ws = 1.15f; hs = 0.95f
+                p(1f, -0.08f); p(1f, 0.42f)
+                for (k in 1..6) { val th = (PI / 2 * k / 6).toFloat(); p(cos(th), 0.42f + 0.58f * sin(th)) }
+            }
+            Profile.BLOCK -> { ws = 1.35f; hs = 0.9f; p(1f, -0.08f); p(1f, 0.9f); p(0.96f, 0.975f); p(0.9f, 1f); p(0f, 1f) }
+            Profile.FLAT -> { ws = 2.1f; hs = 0.22f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
+            else -> {                                   // ROUND
+                val rr = 0.62f
+                p(1f, -0.08f); p(1f, 1f - rr * 0.4f)
+                for (k in 1..5) { val th = (PI / 2 * k / 6).toFloat(); p(1f - rr + rr * cos(th), 1f - rr * 0.4f + rr * 0.4f * sin(th)) }
+                p(1f - rr, 1f); p(0f, 1f)
+            }
         }
-        list.add(floatArrayOf((t - rr) / t, 1f, 0f, 1f))
-        return list
+        // full loop: left side up and over, then down the right side
+        val loop = ArrayList<FloatArray>()
+        for (q in half) loop.add(floatArrayOf(-q[0], q[1], 0f, 0f))
+        for (q in half.reversed()) loop.add(floatArrayOf(q[0], q[1], 0f, 0f))
+        // smooth normals from neighbouring segments, measured in world units so wide/low walls shade correctly
+        val t = wallHalfThickness * ws; val h = wallHeight * hs
+        for (i in loop.indices) {
+            fun segNormal(a: FloatArray, b: FloatArray): Vec3 {
+                val dx = (b[0] - a[0]) * t; val dy = (b[1] - a[1]) * h
+                val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1e-9f)
+                return Vec3(-dy / len, dx / len, 0f)            // outward normal of a left-up-over-right loop
+            }
+            var nrm = Vec3.ZERO
+            if (i > 0) nrm += segNormal(loop[i - 1], loop[i])
+            if (i < loop.size - 1) nrm += segNormal(loop[i], loop[i + 1])
+            nrm = nrm.normalized()
+            loop[i][2] = nrm.x; loop[i][3] = nrm.y
+        }
+        return ProfileData(loop, ws, hs)
     }
 
-    private fun fullProfile(): List<FloatArray> {
-        val half = halfProfile()
-        val prof = ArrayList<FloatArray>()
-        for (q in half) prof.add(floatArrayOf(-q[0], q[1], -q[2], q[3]))
-        for (q in half.reversed()) prof.add(q)
-        return prof
+    private fun wallColors(base: Vec3): Pair<Vec3, Vec3> {
+        val top = (pal.wallTop ?: base) * (1.05f * pal.glow)
+        val low = base * (0.35f * (if (pal.glow > 1.5f) 2.4f else 1f))
+        return low to top
     }
 
     fun walls(): MeshBuilder {
         val mb = MeshBuilder()
-        val prof = fullProfile()
-        val lowC = pal.wall * 0.35f
-        val topC = pal.wall * 1.05f
+        val prof = profileData(pal.profile)
+        val bulbs = HashSet<Int>()
         for (e in 0 until maze.edgeCount) {
             if (!maze.isWall(e)) continue
             val dl = (maze.depthFromStart[maze.edgeCellL[e]] + maze.depthFromStart[maze.edgeCellR[e]]) * 0.5f / maze.maxDepth
-            addWall(mb, e, dl * 0.75f + 0.05f * hash(e), prof, lowC, topC)
+            val delay = dl * 0.75f + 0.05f * hash(e)
+            val altEdge = hash(e + 9000) < 0.5f
+            val c1 = wallColors(pal.wall); val c2 = wallColors(pal.wall2)
+            addWall(mb, e, delay, prof, c1, c2, if (pal.stripes) 1 else if (altEdge && pal.wall2 !== pal.wall) 2 else 0)
+            if (pal.knobs) for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) if (bulbs.add(v)) bulb(mb, v, delay, if (hash(v + 77) < 0.5f) c1 else c2)
         }
         return mb
     }
@@ -82,43 +116,79 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     /** Sliding doors on open passages. Their "delay" attribute carries the animation phase (0..1). */
     fun doors(edges: IntArray, phases: FloatArray): MeshBuilder {
         val mb = MeshBuilder()
-        val prof = fullProfile()
+        val prof = profileData(Profile.ROUND)
         val tint = pal.door
-        for (i in edges.indices) addWall(mb, edges[i], phases[i].coerceIn(0f, 0.999f), prof, tint * 0.45f, tint * 1.1f)
+        val c = (tint * 0.45f) to (tint * 1.1f)
+        for (i in edges.indices) addWall(mb, edges[i], phases[i].coerceIn(0f, 0.999f), prof, c, c, 0)
         return mb
     }
 
-    private fun addWall(mb: MeshBuilder, e: Int, delay: Float, prof: List<FloatArray>, lowC: Vec3, topC: Vec3) {
-        val t = wallHalfThickness
+    /** mode: 0 = colour set 1, 2 = colour set 2, 1 = alternate the two along the wall (stripes). */
+    private fun addWall(mb: MeshBuilder, e: Int, delay: Float, pd: ProfileData, c1: Pair<Vec3, Vec3>, c2: Pair<Vec3, Vec3>, mode: Int) {
+        val prof = pd.pts
+        val t = wallHalfThickness * pd.ws
+        val hgt = wallHeight * pd.hs
         val a0 = maze.mesh.vertices[maze.edgeA[e]]
         val b0 = maze.mesh.vertices[maze.edgeB[e]]
         val dir = (b0 - a0).normalized()
-        val ends = arrayOf(a0 - dir * t, b0 + dir * t)
-        val rings = Array(2) { r ->
-            val base = ends[r]
-            val n = surface.normal(if (r == 0) a0 else b0)
-            val side = (dir cross n).normalized()
-            IntArray(prof.size) { k ->
-                val q = prof[k]
-                val pos = base + side * (q[0] * t)
-                val nrm = (side * q[2] + n * q[3]).normalized()
-                val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
-                // positions sit at the base plane; the lift vector raises them as the wall grows
-                mb.vertex(pos, nrm, col, n * (q[1] * wallHeight), delay)
-            }
+        val ea = a0 - dir * wallHalfThickness
+        val eb = b0 + dir * wallHalfThickness
+        val len = (eb - ea).length()
+        val segs = if (mode == 1) max(1, Math.round(len / (cs * 0.26f))) else 1
+        fun ringAt(f: Float): Triple<Vec3, Vec3, Vec3> {              // position, normal, side
+            val p = if (f <= 0f) ea else if (f >= 1f) eb else surface.project(ea + (eb - ea) * f)
+            val n = surface.normal(if (f <= 0f) a0 else if (f >= 1f) b0 else p)
+            return Triple(p, n, (dir cross n).normalized())
         }
-        for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
+        for (sgi in 0 until segs) {
+            val use2 = when (mode) { 2 -> true; 1 -> sgi % 2 == 1; else -> false }
+            val (lowC, topC) = if (use2) c2 else c1
+            val rings = Array(2) { r ->
+                val (base, n, side) = ringAt((sgi + r) / segs.toFloat())
+                IntArray(prof.size) { k ->
+                    val q = prof[k]
+                    val pos = base + side * (q[0] * t)
+                    val nrm = (side * q[2] + n * q[3]).normalized()
+                    val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
+                    mb.vertex(pos, nrm, col, n * (q[1] * hgt), delay)
+                }
+            }
+            for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
+        }
+        // end caps (flat)
         for (r in 0..1) {
-            val base = ends[r]
-            val n = surface.normal(if (r == 0) a0 else b0)
-            val side = (dir cross n).normalized()
+            val (base, n, side) = ringAt(r.toFloat())
             val cn = if (r == 0) -dir else dir
+            val (lowC, topC) = if (mode == 2 || (mode == 1 && r == 1 && segs % 2 == 0)) c2 else c1
             val idx = IntArray(prof.size) { k ->
                 val q = prof[k]
-                mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * wallHeight), delay)
+                mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * hgt), delay)
             }
             for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
         }
+    }
+
+    /** A rounded knuckle / bead on top of a wall joint (bone ends, glass beads). */
+    private fun bulb(mb: MeshBuilder, vertex: Int, delay: Float, cols: Pair<Vec3, Vec3>) {
+        val p = maze.mesh.vertices[vertex]
+        val n = surface.normal(p)
+        val a = if (kotlin.math.abs(n.y) < 0.9f) Vec3(0f, 1f, 0f) else Vec3(1f, 0f, 0f)
+        val t1 = (a cross n).normalized(); val t2 = n cross t1
+        val r = wallHalfThickness * 2.0f
+        val centerH = wallHeight * 0.55f
+        val st = 7; val sl = 10
+        val ids = Array(st + 1) { i ->
+            val phi = (PI * i / st).toFloat()                 // 0 = pole up
+            IntArray(sl + 1) { j ->
+                val th = (2 * PI * j / sl).toFloat()
+                val dx = sin(phi) * cos(th); val dy = sin(phi) * sin(th); val dz = cos(phi)
+                val nrm = (t1 * dx + t2 * dy + n * dz).normalized()
+                val pos = p + t1 * (dx * r) + t2 * (dy * r)
+                val col = Vec3.lerp(cols.first, cols.second, (0.5f + 0.5f * dz))
+                mb.vertex(pos, nrm, col, n * (centerH + dz * r), delay)
+            }
+        }
+        for (i in 0 until st) for (j in 0 until sl) mb.quad(ids[i][j], ids[i][j + 1], ids[i + 1][j + 1], ids[i + 1][j])
     }
 
     /** One quad per puddle; the shader draws the water from uv (aCol.xy) and the puddle id (aCol.z). */
