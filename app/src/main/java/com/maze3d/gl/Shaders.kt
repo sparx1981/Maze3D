@@ -468,7 +468,15 @@ uniform float uTime;
 uniform float uIntensity;
 uniform vec2 uViewport;     // render target size in pixels
 uniform float uWidthPx;
-uniform float uCamZ;
+uniform vec3 uCamPos;       // camera position and basis (world space)
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform vec3 uFwd;
+uniform float uDepth0;      // nearest / widest distance drops are spread over
+uniform float uSpan;
+uniform float uTravel;      // how far a drop falls before it respawns
+uniform float uLenScale;    // streak length scale
+uniform float uScaleW;      // overall world scale (1 in orbit view, small in chase view)
 uniform vec2 uTan;          // tan(half fov) in x and y
 layout(location=0) in vec4 aSeed;
 out float vA;
@@ -476,15 +484,15 @@ out vec2 vC;
 void main() {
     const vec2 CORNERS[6] = vec2[6](vec2(0.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(0.0, -1.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
     vec2 c = CORNERS[gl_VertexID];
-    vec3 D = normalize(vec3(0.0, -1.0, -0.3));             // mostly down, leaning slightly away from the camera (always downward on screen)
-    float depth = 0.9 + aSeed.w * (uCamZ + 1.1);          // distance from the camera
-    vec3 base = vec3((aSeed.x * 2.0 - 1.0) * depth * uTan.x * 1.15,
-                     (aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + 0.9,
-                     uCamZ - depth);
+    // fall direction: down the screen, leaning slightly away from the camera, relative to the camera's own up
+    vec3 D = normalize(-uUp + 0.3 * uFwd);
+    float depth = uDepth0 + aSeed.w * uSpan;
+    vec3 base = uCamPos + uFwd * depth
+              + uRight * ((aSeed.x * 2.0 - 1.0) * depth * uTan.x * 1.15)
+              + uUp * ((aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + uTravel * 0.47);
     float ph = fract(aSeed.z + uTime * (0.55 + 0.25 * aSeed.w));   // phase increases with time: drops travel along D (down)
-    float travel = ph * 1.9;
-    vec3 head = base + D * travel;
-    vec3 tail = head - D * (0.07 + 0.09 * (1.0 - aSeed.w));
+    vec3 head = base + D * (ph * uTravel);
+    vec3 tail = head - D * ((0.07 + 0.09 * (1.0 - aSeed.w)) * uLenScale);
     vec4 ch = uVP * vec4(head, 1.0);
     vec4 ct = uVP * vec4(tail, 1.0);
     vec2 sh = (ch.xy / ch.w) * uViewport * 0.5;
@@ -493,7 +501,7 @@ void main() {
     float len = length(dir);
     dir = len > 1e-4 ? dir / len : vec2(0.0, -1.0);
     vec2 perp = vec2(-dir.y, dir.x);
-    float wpx = uWidthPx * clamp(3.0 / depth, 0.45, 1.8);
+    float wpx = uWidthPx * clamp(3.0 / (depth / uScaleW), 0.45, 1.8);
     vec4 pos = mix(ct, ch, c.x);
     pos.xy += perp * c.y * wpx / uViewport * 2.0 * pos.w * 0.5;
     gl_Position = pos;

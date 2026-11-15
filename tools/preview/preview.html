@@ -70,7 +70,11 @@ async function main(){
   const shadowOn = (q.get('shadow')||'1')==='1'; const SS = parseInt(q.get('ss')||'2048');
   const fovY=38, asp=W/H; const tanY=Math.tan(fovY*Math.PI/360), tanMin=Math.min(tanY,tanY*asp);
   const r=D.outer*1.12; const camDist=(r/tanMin+r)*zoom;
-  const proj=persp(fovY,asp,0.1,40), view=look([0,0,camDist],[0,0,0],[0,1,0]); const vp=mul(proj,view);
+  let proj=persp(fovY,asp,0.1,40), view=look([0,0,camDist],[0,0,0],[0,1,0]); let vp=mul(proj,view);
+  let eyeP=[0,0,camDist];
+  if(q.get('chase')==='1'){const C=D.chase,cs=C.cs,mp=D.marble.pos,n=C.n,f=C.f,zf=parseFloat(q.get('zf')||'1'),sp=parseFloat(q.get('sp')||'0');
+    const back=cs*1.9*zf+cs*0.8*sp,h=cs*1.8*zf;const eye=[0,1,2].map(i=>mp[i]+n[i]*h-f[i]*back);const tg=[0,1,2].map(i=>mp[i]+f[i]*cs*1.15-n[i]*cs*0.05);
+    eyeP=eye;proj=persp(72+12*sp,asp,0.03,40);view=look(eye,tg,n);vp=mul(proj,view)}
   const L=(()=>{const v=[0.45,0.82,0.55];const l=Math.hypot(...v);return v.map(x=>x/l)})();
   const lview=look(L.map(x=>x*6),[0,0,0],[0,1,0]); const lightVP=mul(ortho(-1.75,1.75,-1.75,1.75,3,9),lview);
 
@@ -144,9 +148,9 @@ async function main(){
   gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.bindVertexArray(null);}
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
 
-  renderWorld(vp,[0,0,camDist]);
+  renderWorld(vp,eyeP);
 
-  marbleU(marbleP,vp);gl.uniform3f(U(marbleP,'uCam'),0,0,camDist);gl.uniform3fv(U(marbleP,'uLightDir'),L);gl.uniform3fv(U(marbleP,'uAccent'),pal.accent);
+  marbleU(marbleP,vp);gl.uniform3f(U(marbleP,'uCam'),eyeP[0],eyeP[1],eyeP[2]);gl.uniform3fv(U(marbleP,'uLightDir'),L);gl.uniform3fv(U(marbleP,'uAccent'),pal.accent);
   gl.uniformMatrix3fv(U(marbleP,'uBody'),false,[1,0,0,0,1,0,0,0,1]);gl.uniform1f(U(marbleP,'uGhost'),0);if(cubeTex){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_CUBE_MAP,cubeTex);gl.uniform1i(U(marbleP,'uCube'),1);gl.uniform1f(U(marbleP,'uCubeOn'),1)}else gl.uniform1f(U(marbleP,'uCubeOn'),0);gl.activeTexture(gl.TEXTURE0);draw(sphere);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthFunc(gl.GREATER);gl.depthMask(false);gl.uniform1f(U(marbleP,'uGhost'),1);draw(sphere);gl.depthMask(true);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);
   if(q.get('rain')==='1'){

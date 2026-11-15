@@ -37,6 +37,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private lateinit var engine: SoundEngine
     private var loading: LoadingView? = null
+    private lateinit var joystick: JoystickView
+    private var cameraMode = 0
+    private var camPill: TextView? = null
+    private var joyOriginX = 0f
+    private var joyOriginY = 0f
     private lateinit var hudLayer: View
     private lateinit var menuLayer: FrameLayout
     private lateinit var menuMain: LinearLayout
@@ -72,7 +77,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             ?: sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         renderer = MazeRenderer(this)
-        renderer.followOn = getSharedPreferences("maze3d_ui", MODE_PRIVATE).getBoolean("follow", false)
+        cameraMode = getSharedPreferences("maze3d_ui", MODE_PRIVATE).getInt("camera", 0)
+        renderer.setCameraMode(cameraMode)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(MsaaChooser())
@@ -85,6 +91,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         root.addView(glView)
         hudLayer = buildOverlay()
         root.addView(hudLayer)
+        joystick = JoystickView(this)
+        root.addView(joystick, FrameLayout.LayoutParams(-1, -1))
         root.addView(buildMenu())
         loading = LoadingView(this).also { root.addView(it, FrameLayout.LayoutParams(-1, -1)) }
         setContentView(root)
@@ -215,10 +223,17 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val tilt = pill("Tilt", { renderer.tiltMode }) { setTilt(!renderer.tiltMode) }
         val hint = pill("Hint", { renderer.hintActive }) { glView.queueEvent { renderer.requestHint() } }
         hintPill = hint
-        val follow = pill("Follow cam", { renderer.followOn }) {
-            renderer.followOn = !renderer.followOn
-            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putBoolean("follow", renderer.followOn).apply()
+        val camNames = arrayOf("Cam: Orbit", "Cam: Follow", "Cam: Chase")
+        val follow = pill(camNames[cameraMode], { cameraMode == 2 }) { v ->
+            cameraMode = (cameraMode + 1) % 3
+            v.text = camNames[cameraMode].uppercase()
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("camera", cameraMode).apply()
+            val m = cameraMode
+            glView.queueEvent { renderer.setCameraMode(m) }
+            if (m != 2) joystick.hide()
+            toastText(when (m) { 0 -> "Orbit camera: drag to turn the maze"; 1 -> "Follow camera: the view tracks the ball"; else -> "Chase camera: drag to steer, twist to look around" })
         }
+        camPill = follow
         val ball = pill("Ball") { glView.queueEvent { renderer.resetMarble() } }
         val next = pill("New") { glView.queueEvent { renderer.requestNew() } }
         for (b in listOf(tilt, hint, follow, ball, next)) {
@@ -230,6 +245,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     // ---- touch: drag to rotate, pinch to zoom -------------------------------------------
     private fun onTouch(e: MotionEvent): Boolean {
+        if (cameraMode == 2) return onChaseTouch(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = e.x; lastY = e.y; lastT = e.eventTime; multiTouch = false
@@ -259,6 +275,47 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 if (e.pointerCount == 3) twistAngle = pointerAngle(e)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> glView.queueEvent { renderer.dragEnd() }
+        }
+        return true
+    }
+
+    /** Chase camera: one finger is a steering stick (up = forward), two fingers twist the camera round the ball. */
+    private fun onChaseTouch(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                multiTouch = false
+                joyOriginX = e.x; joyOriginY = e.y
+                joystick.show(e.x, e.y)
+                glView.queueEvent { renderer.setChaseInput(0f, 0f, true) }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                multiTouch = true
+                joystick.hide()
+                glView.queueEvent { renderer.setChaseInput(0f, 0f, false) }
+                if (e.pointerCount == 2) twistAngle = pointerAngle(e)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (e.pointerCount >= 2) {
+                    val a = pointerAngle(e)
+                    var d = a - twistAngle
+                    if (d > Math.PI) d -= (2 * Math.PI).toFloat()
+                    if (d < -Math.PI) d += (2 * Math.PI).toFloat()
+                    twistAngle = a
+                    glView.queueEvent { renderer.chaseYawBy(d) }
+                } else if (!multiTouch) {
+                    val r = joystick.radius
+                    var ix = (e.x - joyOriginX) / r
+                    var iy = -(e.y - joyOriginY) / r
+                    val len = kotlin.math.sqrt(ix * ix + iy * iy)
+                    if (len > 1f) { ix /= len; iy /= len }
+                    joystick.move(e.x, e.y)
+                    glView.queueEvent { renderer.setChaseInput(ix, iy, true) }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                joystick.hide()
+                glView.queueEvent { renderer.setChaseInput(0f, 0f, false) }
+            }
         }
         return true
     }
@@ -498,6 +555,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             } else renderer.refreshHz = d.refreshRate
         } catch (e: Exception) { /* keep the default */ }
     }
+
+    private fun toastText(message: String) = onToast(message)
 
     override fun onToast(message: String) {
         runOnUiThread {

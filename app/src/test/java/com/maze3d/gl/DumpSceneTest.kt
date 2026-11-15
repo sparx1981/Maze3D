@@ -57,6 +57,12 @@ class DumpSceneTest {
         for (i in rn.level.indices) rn.level[i] = 0.35f + 0.65f * ((i * 37) % 10) / 10f
         val hz = com.maze3d.core.Hazards(maze, java.util.Random(5), true, true)
         val sb = StringBuilder("{")
+        run {
+            val n0 = maze.mesh.surface.normal(marble.position)
+            val to = maze.centers[maze.solution[1]] - maze.centers[maze.solution[0]]
+            val f0 = (to - n0 * (to dot n0)).normalized()
+            sb.append("\"chase\":{\"cs\":${maze.cellSize},\"n\":${arr(floatArrayOf(n0.x, n0.y, n0.z))},\"f\":${arr(floatArrayOf(f0.x, f0.y, f0.z))}},")
+        }
         sb.append("\"outer\":${kind.outerRadius},")
         sb.append("\"floor\":${mesh(b.floor())},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.holes(hz.holeCells, hz.holePhase, hz.holeRadius))},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")

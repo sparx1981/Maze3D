@@ -54,6 +54,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var pendingTerrain: Terrain? = null
     private var pendingPlain = false
     @Volatile var followOn = false
+    /** 0 = orbit (turn the piece by hand), 1 = orbit that follows the marble, 2 = third-person chase camera. */
+    @Volatile var cameraMode = 0
+        private set
+    @Volatile private var chaseIx = 0f
+    @Volatile private var chaseIy = 0f
+    @Volatile private var joyActive = false
+    @Volatile private var pendingYaw = 0f
     @Volatile var deviceGravity = Vec3(0f, -1f, 0f)
 
     // ---- GL resources ---------------------------------------------------------------------
@@ -153,6 +160,21 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val vp = FloatArray(16)
     private val model = FloatArray(16)
     private var camDist = 3.2f
+    // chase camera state (all in the piece's local space until the final transform)
+    private var chaseBlend = 0f
+    private var chaseF = Vec3(0f, 0f, 1f)
+    private var chaseInit = false
+    private var eyeS = Vec3.ZERO
+    private var tgtS = Vec3.ZERO
+    private var upS = Vec3(0f, 1f, 0f)
+    private var chaseSpeed = 0f
+    private var eye = Vec3(0f, 0f, 3f)
+    private var camRight = Vec3(1f, 0f, 0f)
+    private var camUp = Vec3(0f, 1f, 0f)
+    private var camFwd = Vec3(0f, 0f, -1f)
+    private var fovNow = 38f
+    private var nearNow = 0.1f
+    private var tanHalf = tan(Math.toRadians(19.0)).toFloat()
     private var lastNanos = 0L
     private var time = 0f
     private var lastHud = -1
@@ -226,18 +248,105 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         updateCamera()
     }
 
+    /** Orbit distance that frames the whole piece; the per-frame camera pose is built in [computeCamera]. */
     private fun updateCamera() {
-        val fovY = 38f
         val aspect = width.toFloat() / height
-        Matrix.perspectiveM(proj, 0, fovY, aspect, 0.1f, 40f)
-        val tanY = tan(Math.toRadians(fovY / 2.0)).toFloat()
+        val tanY = tan(Math.toRadians(19.0)).toFloat()
         val tanMin = min(tanY, tanY * aspect)
         val r = kind.outerRadius * 1.12f
         camDist = (r / tanMin + r) * zoom * zoomFollow
-        Matrix.setLookAtM(view, 0, 0f, 0f, camDist, 0f, 0f, 0f, 0f, 1f, 0f)
+        computeCamera(0f)
+    }
+
+    private fun ease01(x: Float): Float { val c = x.coerceIn(0f, 1f); return c * c * (3f - 2f * c) }
+
+    /** Points the chase camera down the first stretch of the solution. */
+    private fun initChase() {
+        val m = maze ?: return
+        val mb = marble ?: return
+        val path = m.solution
+        val n = mb.surface.normal(mb.position)
+        val to = if (path.size > 1) m.centers[path[1]] - m.centers[path[0]] else Vec3(0f, 0f, 1f)
+        var f = to - n * (to dot n)
+        if (f.lengthSq() < 1e-8f) f = Vec3(1f, 0f, 0f) - n * n.x
+        chaseF = f.normalized()
+        chaseInit = false
+    }
+
+    /**
+     * Builds the camera for this frame. Orbit mode looks at the piece from a distance; chase mode sits behind and
+     * above the marble and looks down the track ahead. Switching blends smoothly between the two poses.
+     */
+    private fun computeCamera(dt: Float) {
+        val aspect = width.toFloat() / height
+        val wantChase = cameraMode == 2 && phase != Phase.MENU
+        chaseBlend += ((if (wantChase) 1f else 0f) - chaseBlend) * min(1f, dt * 5f)
+        if (!wantChase && chaseBlend < 0.003f) chaseBlend = 0f
+        var eyeV = Vec3(0f, 0f, camDist)
+        var tgt = Vec3.ZERO
+        var up = Vec3(0f, 1f, 0f)
+        var fov = 38f
+        var near = 0.1f
+        val mb = marble
+        val m = maze
+        if (chaseBlend > 0.002f && mb != null && m != null) {
+            val cs = m.cellSize
+            val n = mb.surface.normal(mb.position)
+            var f = chaseF - n * (chaseF dot n)
+            f = if (f.lengthSq() < 1e-8f) (Vec3(1f, 0f, 0f) - n * n.x).normalized() else f.normalized()
+            val yaw = pendingYaw
+            if (yaw != 0f) { pendingYaw = 0f; f = Quat.fromAxisAngle(n, yaw).rotate(f) }
+            val v = mb.velocity
+            val vt = v - n * (v dot n)
+            val sp = vt.length()
+            if (sp > cs * 0.25f && dt > 0f) {                      // swing round behind the direction of travel
+                val a = 1f - exp(-3.2f * dt * min(1f, sp / (cs * 1.5f)))
+                f = (f * (1f - a) + (vt / sp) * a).normalized()
+            }
+            chaseF = f
+            chaseSpeed = (sp / (cs * 4f)).coerceIn(0f, 1f)
+            val zf = (zoom / 0.9f).coerceIn(0.6f, 1.7f)
+            val back = cs * 1.9f * zf + cs * 0.8f * chaseSpeed
+            val h = cs * 1.8f * zf
+            val eyeL = mb.position + n * h - f * back
+            val tgtL = mb.position + f * (cs * 1.15f) - n * (cs * 0.05f)
+            if (!chaseInit) { eyeS = eyeL; tgtS = tgtL; upS = n; chaseInit = true }
+            else if (dt > 0f) {
+                val a = 1f - exp(-9f * dt)
+                eyeS += (eyeL - eyeS) * a
+                tgtS += (tgtL - tgtS) * a
+                upS = (upS + (n - upS) * (1f - exp(-6f * dt))).normalized()
+            }
+            val k = ease01(chaseBlend)
+            eyeV = Vec3.lerp(eyeV, orient.rotate(eyeS), k)
+            tgt = Vec3.lerp(tgt, orient.rotate(tgtS), k)
+            up = Vec3.lerp(up, orient.rotate(upS), k).normalized()
+            fov = 38f + (72f + 12f * chaseSpeed - 38f) * k
+            near = 0.1f + (0.03f - 0.1f) * k
+        } else chaseInit = false
+        eye = eyeV; fovNow = fov; nearNow = near
+        tanHalf = tan(Math.toRadians(fov / 2.0)).toFloat()
+        camFwd = (tgt - eyeV).normalized()
+        camRight = (camFwd cross up).normalized()
+        camUp = camRight cross camFwd
+        Matrix.perspectiveM(proj, 0, fov, aspect, near, 40f)
+        Matrix.setLookAtM(view, 0, eyeV.x, eyeV.y, eyeV.z, tgt.x, tgt.y, tgt.z, camUp.x, camUp.y, camUp.z)
         Matrix.multiplyMM(vp, 0, proj, 0, view, 0)
         p00 = proj[0]; p11 = proj[5]
     }
+
+    // ---- camera / chase controls (any thread) ---------------------------------------------
+    fun setCameraMode(mode: Int) {
+        cameraMode = mode.coerceIn(0, 2)
+        followOn = cameraMode == 1
+        if (cameraMode == 2) chaseInit = false
+    }
+
+    /** Chase-mode steering: [ix] right, [iy] forward, each -1..1, relative to where the camera is looking. */
+    fun setChaseInput(ix: Float, iy: Float, active: Boolean) { chaseIx = ix; chaseIy = iy; joyActive = active }
+
+    /** Two-finger twist in chase mode swings the camera round the marble. */
+    fun chaseYawBy(angle: Float) { pendingYaw += angle }
 
     // ---- game control (GL thread) ---------------------------------------------------------
     fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false) {
@@ -298,6 +407,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         host.onFinish(pal.name + listOfNotNull(terrain.label.ifEmpty { null }, if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
         rollQ = Quat.IDENTITY
+        initChase()
         growT = 0f
         phase = Phase.GROW
         audio.levelGrow()
@@ -325,7 +435,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain)
     }
 
-    fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1 }
+    fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase() }
 
     /** Timed hint: shows the golden thread for [HINT_SECONDS], then it fades; usable again after [HINT_COOLDOWN]. */
     fun requestHint() {
@@ -368,6 +478,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         time += dt
         adaptResolution(raw.coerceIn(0.001f, 0.2f))
         update(dt)
+        computeCamera(dt)
         draw()
         if (++framesDrawn == 4) host.onReady()
     }
@@ -385,7 +496,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
         }
 
-        // chase camera: smoothly turn the piece so the marble stays centred and facing us
+        if (cameraMode == 2 && phase != Phase.MENU) {                  // chase view works in the piece's own frame
+            val a = 1f - exp(-6f * dt)
+            val q = orient
+            val dotq = q.w
+            val tx = if (dotq < 0f) -1f else 1f
+            orient = Quat(q.x * (1f - a), q.y * (1f - a), q.z * (1f - a), q.w * (1f - a) + tx * a).normalized()
+            angVel = Vec3.ZERO
+        }
+        // orbit follow: smoothly turn the piece so the marble stays centred and facing us
         val followTarget = if (followOn) 0.8f else 1f
         if (kotlin.math.abs(zoomFollow - followTarget) > 0.002f) {
             zoomFollow += (followTarget - zoomFollow) * min(1f, dt * 2.5f)
@@ -416,12 +535,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             Phase.PLAY -> if (paused) { audio.roll(0f, 0) } else {
                 playSeconds += dt
                 val worldG = if (tiltMode) deviceGravity else Vec3(0f, -1f, 0f)
-                val gLocal = orient.inverseRotate(worldG.normalized()) * GRAVITY
+                val gLocal = if (cameraMode == 2) chaseGravity(mb) else orient.inverseRotate(worldG.normalized()) * GRAVITY
                 if (fallTimer > 0f) {
                     // marble is dropping into a hole; physics paused
                     fallTimer -= dt
                     if (fallTimer <= 0f) {
-                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1
+                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase()
                         val sc = m.centers[m.start]
                         sparks.burst(sc, mb.surface.normal(sc), 28, 0.9f, Vec3(0.4f, 0.8f, 1f))
                         audio.respawn(panOf(sc))
@@ -544,12 +663,33 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
-    private fun panOf(local: Vec3): Float = (orient.rotate(local).x / 1.2f).coerceIn(-1f, 1f)
+    /** Steering force for chase mode: joystick (or tilt) in the camera's frame, laid along the surface. */
+    private fun chaseGravity(mb: Marble): Vec3 {
+        var ix = chaseIx; var iy = chaseIy
+        if (!joyActive && tiltMode) {
+            val d = deviceGravity - Vec3(0f, -1f, 0f)
+            ix = (d.x * 1.4f).coerceIn(-1f, 1f); iy = (d.y * 1.4f).coerceIn(-1f, 1f)
+        }
+        val len = kotlin.math.sqrt(ix * ix + iy * iy)
+        if (len > 1f) { ix /= len; iy /= len }
+        val n = mb.surface.normal(mb.position)
+        var f = chaseF - n * (chaseF dot n)
+        f = if (f.lengthSq() < 1e-8f) Vec3(1f, 0f, 0f) - n * n.x else f
+        f = f.normalized()
+        val r = f cross n
+        return (r * ix + f * iy) * GRAVITY
+    }
+
+    private fun panOf(local: Vec3): Float {
+        val rel = orient.rotate(local) - eye
+        val scale = 1.2f + (0.45f - 1.2f) * ease01(chaseBlend)
+        return ((rel dot camRight) / scale).coerceIn(-1f, 1f)
+    }
 
     /** Loudness of something at [local] as heard from the marble: near is loud, the far side of the piece is muffled. */
     private fun proximity(local: Vec3, from: Vec3): Float {
         val d = (local - from).length()
-        val back = if (orient.rotate(local).z < -0.1f) 0.5f else 1f
+        val back = if (chaseBlend < 0.5f && orient.rotate(local).z < -0.1f) 0.5f else 1f
         return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
     }
 
@@ -618,9 +758,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             while (splashAcc >= 1f && guard++ < 12) {
                 splashAcc -= 1f
                 val lp = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
-                val q = mb.surface.project(lp.normalized() * 1.2f)
+                val chase = chaseBlend > 0.5f
+                val q = if (chase) mb.surface.project(mb.position + lp * (m.cellSize * 5f)) else mb.surface.project(lp.normalized() * 1.2f)
                 val nl = mb.surface.normal(q)
-                if (orient.rotate(nl).z > 0.15f) {
+                if (chase || orient.rotate(nl).z > 0.15f) {
                     sparks.emit(q + nl * 0.003f, nl * (0.12f + 0.1f * rnd.nextFloat()) + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.1f,
                         0.16f, Vec3(0.65f, 0.78f, 0.95f), 0.0055f)
                 }
@@ -824,13 +965,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
 
-        renderWorld(vp, Vec3(0f, 0f, camDist), sm)
+        renderWorld(vp, eye, sm)
 
         // ---- marble -----------------------------------------------------------------------
         GLES30.glUseProgram(marbleProg)
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniform3f(loc(marbleProg, "uCam"), 0f, 0f, camDist)
+        GLES30.glUniform3f(loc(marbleProg, "uCam"), eye.x, eye.y, eye.z)
         GLES30.glUniform3f(loc(marbleProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
         var drawPos = mb.position
         var drawR = mb.radius
@@ -871,7 +1012,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(sparkProg)
         GLES30.glUniformMatrix4fv(loc(sparkProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(sparkProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniform1f(loc(sparkProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
+        GLES30.glUniform1f(loc(sparkProg, "uScale"), rh / (2f * tanHalf))
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE)
         GLES30.glDepthMask(false)
         sparks.draw(sparkProg, 1f)
@@ -881,22 +1022,30 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(smokeProg)
         GLES30.glUniformMatrix4fv(loc(smokeProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(smokeProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniform1f(loc(smokeProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
+        GLES30.glUniform1f(loc(smokeProg, "uScale"), rh / (2f * tanHalf))
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         GLES30.glDepthMask(false)
         dust.draw(smokeProg, 1f)
         val rnI = rain?.intensity ?: 0f
         if (rnI > 0.02f) {
             val aspect = width.toFloat() / height
-            val tanY = tan(Math.toRadians(19.0)).toFloat()
+            val k = ease01(chaseBlend)
             GLES30.glUseProgram(rainProg)
             GLES30.glUniformMatrix4fv(loc(rainProg, "uVP"), 1, false, vp, 0)
             GLES30.glUniform1f(loc(rainProg, "uTime"), time)
             GLES30.glUniform1f(loc(rainProg, "uIntensity"), rnI)
             GLES30.glUniform2f(loc(rainProg, "uViewport"), rw.toFloat(), rh.toFloat())
             GLES30.glUniform1f(loc(rainProg, "uWidthPx"), 2.2f * rh / 1000f * 2f)
-            GLES30.glUniform1f(loc(rainProg, "uCamZ"), camDist)
-            GLES30.glUniform2f(loc(rainProg, "uTan"), tanY * aspect, tanY)
+            GLES30.glUniform3f(loc(rainProg, "uCamPos"), eye.x, eye.y, eye.z)
+            GLES30.glUniform3f(loc(rainProg, "uRight"), camRight.x, camRight.y, camRight.z)
+            GLES30.glUniform3f(loc(rainProg, "uUp"), camUp.x, camUp.y, camUp.z)
+            GLES30.glUniform3f(loc(rainProg, "uFwd"), camFwd.x, camFwd.y, camFwd.z)
+            GLES30.glUniform1f(loc(rainProg, "uDepth0"), 0.9f + (0.10f - 0.9f) * k)
+            GLES30.glUniform1f(loc(rainProg, "uSpan"), (camDist + 1.1f) + (0.9f - (camDist + 1.1f)) * k)
+            GLES30.glUniform1f(loc(rainProg, "uTravel"), 1.9f + (0.32f - 1.9f) * k)
+            GLES30.glUniform1f(loc(rainProg, "uLenScale"), 1f + (0.16f - 1f) * k)
+            GLES30.glUniform1f(loc(rainProg, "uScaleW"), 1f + (0.1f - 1f) * k)
+            GLES30.glUniform2f(loc(rainProg, "uTan"), tanHalf * aspect, tanHalf)
             GLES30.glBindVertexArray(rainVao[0])
             GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, RAIN_DROPS)
             GLES30.glBindVertexArray(0)
@@ -905,8 +1054,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
         GLES30.glDisable(GLES30.GL_BLEND)
         if (postOn) {
-            pp.near = 0.1f; pp.far = 40f; pp.p00 = p00; pp.p11 = p11
-            pp.focus = camDist; pp.focusRange = kind.outerRadius * 1.1f
+            pp.near = nearNow; pp.far = 40f; pp.p00 = p00; pp.p11 = p11
+            val kk = ease01(chaseBlend)
+            val mbw = marble?.let { orient.rotate(it.position) }
+            val chaseFocus = if (mbw != null) (eye - mbw).length() else camDist
+            pp.focus = camDist + (chaseFocus - camDist) * kk
+            pp.focusRange = kind.outerRadius * 1.1f + (0.9f - kind.outerRadius * 1.1f) * kk
             pp.time = time
             pp.cloudOn = cloudsOn
             pp.ssao = quality >= 2; pp.dof = quality >= 2
