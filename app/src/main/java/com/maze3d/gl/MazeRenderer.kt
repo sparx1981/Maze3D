@@ -1085,6 +1085,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform3f(loc(marbleProg, "uCenter"), drawPos.x, drawPos.y, drawPos.z)
         GLES30.glUniform1f(loc(marbleProg, "uRadius"), drawR)
         GLES30.glUniform3f(loc(marbleProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
+        GLES30.glUniform1i(loc(marbleProg, "uSkin"), ballSkin())
+        GLES30.glUniform1f(loc(marbleProg, "uTime"), time)
         val bm = FloatArray(16)
         rollQ.conjugate().toMatrix(bm)
         val body = floatArrayOf(bm[0], bm[1], bm[2], bm[4], bm[5], bm[6], bm[8], bm[9], bm[10])
@@ -1190,6 +1192,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glUseProgram(sceneProg)
+    }
+
+    /** Ball skin for the current level: themed surfaces get a matching ball, sand and water levels a beach ball. */
+    private fun ballSkin(): Int = when {
+        pal.themeId in 0..10 -> pal.themeId + 1
+        terrain == Terrain.SAND || medium == Medium.WATER -> 12
+        else -> 0
     }
 
     /** Advances the flood / gas / fog and applies its effect on the ball. */

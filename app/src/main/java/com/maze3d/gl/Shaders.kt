@@ -494,6 +494,8 @@ uniform samplerCube uCube;
 uniform float uCubeOn;
 uniform float uDirt;
 uniform vec3 uDirtCol;
+uniform int uSkin;
+uniform float uTime;
 in vec3 vWorld;
 in vec3 vNrmW;
 in vec3 vNrmL;
@@ -509,6 +511,140 @@ vec3 surroundings(vec3 d, float rough) {
     return st;
 }
 
+float n3(vec3 p, float k) { return (vnoise(p.xy * k) + vnoise(p.yz * k + 3.1) + vnoise(p.zx * k + 7.7)) * 0.3333; }
+float fb3(vec3 p, float k) { return 0.55 * n3(p, k) + 0.3 * n3(p, k * 2.1) + 0.15 * n3(p, k * 4.3); }
+
+// Opaque, themed ball: pattern lives in body space so it rolls with the ball.
+vec3 shadeBall(vec3 alb, float rough, float metal, vec3 emit, float coat, vec3 N, vec3 V) {
+    float NoV = max(dot(N, V), 1e-3);
+    vec3 F0 = mix(vec3(0.04), alb, metal);
+    vec3 diff = alb * (1.0 - metal);
+    float NoL = max(dot(N, uLightDir), 0.0);
+    vec3 col = diff * vec3(1.0, 0.94, 0.86) * 3.4 * NoL * 0.5 + diff * irradiance(N) * 1.1;
+    vec3 R = reflect(-V, N);
+    col += surroundings(R, rough) * envBRDF(F0, rough, NoV);
+    if (coat > 0.0) col += surroundings(R, 0.04) * (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coat;
+    vec3 H = normalize(uLightDir + V);
+    col += pow(max(dot(N, H), 0.0), mix(60.0, 700.0, 1.0 - rough)) * vec3(2.5) * (0.3 + 0.7 * (1.0 - rough));
+    col += pow(1.0 - NoV, 3.5) * vec3(0.10, 0.12, 0.16) * 0.5;
+    return col + emit;
+}
+
+vec3 skinColor(vec3 p, vec3 N, vec3 V) {
+    float lat = p.z, lon = atan(p.y, p.x);
+    if (uSkin == 1) {            // gobstopper: layered candy shells
+        float t = p.z * 3.2 + sin(lon * 3.0 + p.z * 4.0) * 0.5;
+        float band = floor(fract(t * 0.5) * 6.0);
+        vec3 c = band < 1.0 ? vec3(1.0, 0.2, 0.45) : band < 2.0 ? vec3(1.0, 0.95, 0.9) : band < 3.0 ? vec3(0.2, 0.75, 1.0) : band < 4.0 ? vec3(1.0, 0.85, 0.2) : band < 5.0 ? vec3(0.55, 0.9, 0.35) : vec3(0.75, 0.4, 1.0);
+        return shadeBall(pow(c, vec3(2.2)), 0.18, 0.0, vec3(0.0), 1.0, N, V);
+    }
+    if (uSkin == 2) {            // sugar skull: white ceramic, marigold rosette, painted dots
+        float a = atan(p.y, p.x), r = acos(clamp(p.z, -1.0, 1.0));
+        float pet = 0.5 + 0.5 * cos(a * 8.0);
+        float flower = 1.0 - smoothstep(0.0, 0.85 + 0.25 * pet, r);
+        vec3 c = mix(vec3(0.96, 0.94, 0.88), mix(vec3(1.0, 0.45, 0.05), vec3(1.0, 0.72, 0.12), pet), flower);
+        float dots = smoothstep(0.9, 0.96, fract(r * 9.0)) * smoothstep(0.2, 0.0, abs(fract(a * 3.0) - 0.5) - 0.3);
+        c = mix(c, vec3(0.9, 0.2, 0.5), dots * 0.9 * (1.0 - flower));
+        float ring = smoothstep(0.03, 0.0, abs(r - 1.55));
+        c = mix(c, vec3(0.15, 0.85, 0.8), ring);
+        c = mix(c, vec3(0.1, 0.05, 0.15), smoothstep(0.1, 0.0, r - 0.12) * 0.0);
+        return shadeBall(pow(c, vec3(2.2)), 0.3, 0.0, vec3(0.0), 0.8, N, V);
+    }
+    if (uSkin == 3) {            // tyre: black rubber, zig-zag tread around the equator, sidewall lettering ring
+        float lt = abs(lat);
+        float tread = smoothstep(0.75, 0.7, lt);
+        float zig = abs(fract((lon / 6.2831853) * 18.0 + lat * 3.0 * sign(lat) + 0.5) - 0.5) * 2.0;
+        float groove = smoothstep(0.55, 0.45, zig) * tread;
+        float rib = smoothstep(0.04, 0.0, abs(lat)) * tread;
+        vec3 c = mix(vec3(0.045), vec3(0.012), groove);
+        float wall = smoothstep(0.72, 0.8, lt);
+        float letters = step(0.5, fract(lon * 9.0 / 6.2831853 * 3.0)) * smoothstep(0.03, 0.0, abs(lt - 0.86)) * step(0.5, fract(lon * 40.0 / 6.2831853));
+        c += vec3(0.8) * letters * wall;
+        c += vec3(0.02) * rib;
+        c = mix(c, vec3(0.5, 0.5, 0.55), smoothstep(0.96, 0.985, lt));          // wheel-rim hub
+        return shadeBall(c, mix(0.75, 0.55, 1.0 - tread), mix(0.0, 0.9, smoothstep(0.96, 0.985, lt)), vec3(0.0), 0.0, N, V);
+    }
+    if (uSkin == 4) {            // football: truncated icosahedron pattern
+        const float PHI = 1.6180340;
+        vec3 d[12];
+        d[0] = normalize(vec3(0.0, 1.0, PHI)); d[1] = normalize(vec3(0.0, -1.0, PHI)); d[2] = normalize(vec3(0.0, 1.0, -PHI)); d[3] = normalize(vec3(0.0, -1.0, -PHI));
+        d[4] = normalize(vec3(1.0, PHI, 0.0)); d[5] = normalize(vec3(-1.0, PHI, 0.0)); d[6] = normalize(vec3(1.0, -PHI, 0.0)); d[7] = normalize(vec3(-1.0, -PHI, 0.0));
+        d[8] = normalize(vec3(PHI, 0.0, 1.0)); d[9] = normalize(vec3(-PHI, 0.0, 1.0)); d[10] = normalize(vec3(PHI, 0.0, -1.0)); d[11] = normalize(vec3(-PHI, 0.0, -1.0));
+        float m1 = -1.0, m2 = -1.0;
+        for (int i = 0; i < 12; i++) { float x = dot(p, d[i]); if (x > m1) { m2 = m1; m1 = x; } else if (x > m2) m2 = x; }
+        float pent = smoothstep(0.925, 0.94, m1);
+        float seam = smoothstep(0.05, 0.0, m1 - m2) * (1.0 - pent);
+        vec3 c = mix(vec3(0.93), vec3(0.03), pent);
+        c = mix(c, vec3(0.25), seam * 0.9);
+        return shadeBall(pow(c, vec3(2.2)) * 1.1, 0.42, 0.0, vec3(0.0), 0.9, N, V);
+    }
+    if (uSkin == 5) {            // plasma ball: dark glass globe with live lightning filaments
+        vec3 q = p * 2.2 + vec3(0.0, 0.0, uTime * 0.25);
+        float f = abs(fb3(q, 1.4) - 0.5);
+        float arc = pow(smoothstep(0.045, 0.0, f), 1.5);
+        float f2 = abs(fb3(q * 1.7 + 11.0, 1.2 + 0.2 * sin(uTime)) - 0.5);
+        arc += 0.6 * pow(smoothstep(0.05, 0.0, f2), 1.5);
+        float core = smoothstep(0.55, 0.0, length(p.xy * 0.0 + (N.xy * 0.0)) + 0.0) * 0.0;
+        float NoV = max(dot(N, V), 0.0);
+        vec3 glow = mix(vec3(0.5, 0.1, 1.0), vec3(0.2, 0.7, 1.0), fb3(p * 1.6 + uTime * 0.1, 1.0));
+        vec3 emit = glow * (0.15 + 0.5 * pow(1.0 - NoV, 2.0)) * 0.6 + vec3(0.9, 0.8, 1.0) * arc * 3.2 + glow * arc * 2.0;
+        return shadeBall(vec3(0.01, 0.005, 0.03), 0.08, 0.0, emit, 1.0, N, V);
+    }
+    if (uSkin == 6) {            // bun: toasted dome with sesame seeds
+        float t = fb3(p, 3.0);
+        vec3 c = mix(vec3(0.82, 0.48, 0.16), vec3(0.62, 0.3, 0.08), t);
+        vec2 g = vec2(lon * 6.0, lat * 11.0);
+        vec2 ip = floor(g), fp = fract(g) - 0.5;
+        vec2 off = vec2(hash21(ip) - 0.5, hash21(ip + 9.0) - 0.5) * 0.45;
+        float seed = hash21(ip + 3.0) > 0.45 ? smoothstep(0.30, 0.14, length((fp - off) * vec2(1.0, 1.9))) : 0.0;
+        c = mix(c, vec3(0.97, 0.9, 0.7), seed * smoothstep(0.9, 0.5, abs(lat)));
+        return shadeBall(pow(c, vec3(2.2)), 0.55, 0.0, vec3(0.0), 0.35, N, V);
+    }
+    if (uSkin == 7) {            // science: glowing core inside orbital rings
+        float r1 = smoothstep(0.045, 0.0, abs(p.x)), r2 = smoothstep(0.045, 0.0, abs(p.y)), r3 = smoothstep(0.045, 0.0, abs(p.z));
+        float rings = max(r1, max(r2, r3));
+        float NoV = max(dot(N, V), 0.0);
+        vec3 body = mix(vec3(0.02, 0.2, 0.28), vec3(0.1, 0.8, 0.9), pow(1.0 - NoV, 1.5));
+        vec3 emit = vec3(0.3, 1.0, 0.95) * rings * 2.6 + body * (0.8 + 0.4 * sin(uTime * 2.0 + p.x * 6.0)) * 0.7;
+        return shadeBall(vec3(0.05, 0.18, 0.22), 0.1, 0.0, emit, 1.0, N, V);
+    }
+    if (uSkin == 8) {            // snowball: packed frost with glints
+        float t = fb3(p, 6.0);
+        vec3 c = mix(vec3(0.82, 0.9, 0.98), vec3(1.0), t);
+        float glint = step(0.985, hash21(floor(p.xy * 90.0) + floor(p.z * 90.0))) * (0.5 + 0.5 * sin(uTime * 4.0 + p.x * 40.0));
+        return shadeBall(pow(c, vec3(2.2)), 0.7, 0.0, vec3(0.5, 0.7, 1.0) * glint * 1.5 + vec3(0.02, 0.05, 0.1), 0.2, N, V);
+    }
+    if (uSkin == 9) {            // golden scarab-ball: polished gold with lapis bands and carved glyph ticks
+        float band = smoothstep(0.1, 0.07, abs(abs(lat) - 0.55)) + smoothstep(0.08, 0.05, abs(lat));
+        float tick = step(0.55, fract(lon * 12.0 / 6.2831853)) * smoothstep(0.35, 0.3, abs(abs(lat) - 0.3));
+        vec3 gold = vec3(1.0, 0.76, 0.28);
+        vec3 c = mix(gold, vec3(0.05, 0.25, 0.7), band);
+        c *= 1.0 - 0.45 * tick * (1.0 - band);
+        float metal = 1.0 - band * 0.8;
+        return shadeBall(pow(c, vec3(2.2)), 0.2, metal, vec3(0.0), band * 0.8, N, V);
+    }
+    if (uSkin == 10) {           // neon wireframe globe
+        float la = abs(fract(acos(clamp(lat, -1.0, 1.0)) * 6.0 / PI) - 0.5);
+        float lo = abs(fract(lon * 8.0 / 6.2831853) - 0.5);
+        float line = max(smoothstep(0.06, 0.0, la), smoothstep(0.06, 0.0, lo) * smoothstep(0.98, 0.9, abs(lat)));
+        vec3 neon = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 1.0, 0.9), 0.5 + 0.5 * sin(lat * 3.0 + uTime));
+        return shadeBall(vec3(0.01, 0.005, 0.02), 0.15, 0.0, neon * line * 3.4 + neon * 0.05, 0.8, N, V);
+    }
+    if (uSkin == 11) {           // mossy stone
+        float rock = fb3(p, 4.0), moss = smoothstep(0.45, 0.65, fb3(p + 5.0, 3.0));
+        vec3 c = mix(vec3(0.34, 0.34, 0.31) * (0.6 + 0.8 * rock), vec3(0.18, 0.4, 0.1) * (0.6 + 0.7 * rock), moss);
+        return shadeBall(pow(c, vec3(2.2)), 0.85, 0.0, vec3(0.0), 0.0, N, V);
+    }
+    // 12: beach ball: six panels, white pole caps
+    float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
+    vec3 c = seg < 1.0 ? vec3(0.95, 0.15, 0.15) : seg < 2.0 ? vec3(1.0) : seg < 3.0 ? vec3(1.0, 0.85, 0.1) : seg < 4.0 ? vec3(1.0) : seg < 5.0 ? vec3(0.1, 0.45, 0.95) : vec3(1.0);
+    float seamL = smoothstep(0.02, 0.0, abs(fract((lon / 6.2831853 + 0.5) * 6.0) - 0.5) - 0.48);
+    c = mix(c, vec3(0.97), smoothstep(0.86, 0.9, abs(lat)));
+    c = mix(c, c * 0.6, seamL);
+    c = mix(c, vec3(0.9), smoothstep(0.985, 0.995, abs(lat)));
+    return shadeBall(pow(c, vec3(2.2)), 0.35, 0.0, vec3(0.0), 0.9, N, V);
+}
+
 void main() {
     vec3 N = normalize(vNrmW);
     vec3 V = normalize(uCam - vWorld);
@@ -517,6 +653,12 @@ void main() {
         // see-through silhouette when the labyrinth hides the marble
         float rim = pow(1.0 - NoV, 1.5);
         outColor = vec4(uAccent * (0.5 + 0.8 * rim), 0.28 + 0.4 * rim);
+        return;
+    }
+    if (uSkin > 0) {
+        vec3 sc = skinColor(normalize(uBody * vNrmL), N, V);
+        sc = mix(sc, uDirtCol * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0) * 0.8 + 0.15), uDirt * 0.62);
+        outColor = vec4(finish(sc, gl_FragCoord.xy), 1.0);
         return;
     }
     // glass sphere: reflection + refraction of the maze behind it, with ribbons floating inside
