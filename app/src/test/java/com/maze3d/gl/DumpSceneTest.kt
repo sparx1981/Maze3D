@@ -79,6 +79,9 @@ class DumpSceneTest {
             val f0 = (to - n0 * (to dot n0)).normalized()
             sb.append("\"chase\":{\"cs\":${maze.cellSize},\"n\":${arr(floatArrayOf(n0.x, n0.y, n0.z))},\"f\":${arr(floatArrayOf(f0.x, f0.y, f0.z))}},")
         }
+        b.planProps(kind.outerRadius)
+        val gal = System.getenv("MAZE_GALLERY") != null
+        sb.append("\"props\":${mesh(if (gal) b.gallery() else b.props())},")
         sb.append("\"outer\":${kind.outerRadius},")
         sb.append("\"floor\":${mesh(b.floor())},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")

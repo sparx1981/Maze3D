@@ -34,7 +34,7 @@ async function main(){
   const doorsM=mk(D.doors,[3,3,3,3,1]), holesM=mk(D.holes,[3,3,3,3,1]), lidsM=mk(D.lids,[3,3,3,3,1]); const holeP=prog(sh.SCENE_VS, sh.HOLE_FS), lidP=prog(sh.LID_VS, sh.LID_FS), cloudP=prog(sh.BG_VS, sh.CLOUD_FS);
   const trailP=prog(sh.TRAIL_VS, sh.TRAIL_FS);
   const puddleP=prog(sh.SCENE_VS, q.get('dbg')==='1'?sh.PUDDLE_FS.replace('outColor = vec4(finish(col, gl_FragCoord.xy), alpha);','outColor = vec4(1.0,0.0,1.0,1.0);'):sh.PUDDLE_FS), rainP=prog(sh.RAIN_VS, sh.RAIN_FS); const puddlesM=mk(D.puddles,[3,3,3,3,1]);
-  const floor=mk(D.floor,[3,3,3,3,1]), walls=mk(D.walls,[3,3,3,3,1]), markers=mk(D.markers,[3,3,3,3,1]), thread=mk(D.thread,[3,3,3,3,1]);
+  const floor=mk(D.floor,[3,3,3,3,1]), walls=mk(D.walls,[3,3,3,3,1]), propsM=D.props&&D.props.i.length?mk(D.props,[3,3,3,3,1]):null, markers=mk(D.markers,[3,3,3,3,1]), thread=mk(D.thread,[3,3,3,3,1]);
   // unit sphere
   const rings=40,segs=72,sv=[],si=[];for(let i=0;i<=rings;i++){const th=Math.PI*i/rings;for(let j=0;j<=segs;j++){const ph=2*Math.PI*j/segs;sv.push(Math.sin(th)*Math.cos(ph),Math.cos(th),Math.sin(th)*Math.sin(ph))}}
   for(let i=0;i<rings;i++)for(let j=0;j<segs;j++){const a=i*(segs+1)+j,b=a+segs+1;si.push(a,b,a+1,a+1,b,b+1)}
@@ -93,7 +93,7 @@ async function main(){
   if(shadowOn){
     gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);gl.viewport(0,0,SS,SS);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(2,4);
-    gl.useProgram(shScene);gl.uniformMatrix4fv(U(shScene,'uVP'),false,lightVP);gl.uniformMatrix4fv(U(shScene,'uModel'),false,model);gl.uniform1f(U(shScene,'uGrowT'),growT);gl.uniform1f(U(shScene,'uTime'),TIME);gl.uniform1f(U(shScene,'uDoorMode'),0);draw(floor);draw(walls);gl.uniform1f(U(shScene,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(shScene,'uDoorMode'),0);
+    gl.useProgram(shScene);gl.uniformMatrix4fv(U(shScene,'uVP'),false,lightVP);gl.uniformMatrix4fv(U(shScene,'uModel'),false,model);gl.uniform1f(U(shScene,'uGrowT'),growT);gl.uniform1f(U(shScene,'uTime'),TIME);gl.uniform1f(U(shScene,'uDoorMode'),0);draw(floor);draw(walls);if(propsM)draw(propsM);gl.uniform1f(U(shScene,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(shScene,'uDoorMode'),0);
     marbleU(shMarble,lightVP);draw(sphere);
     gl.disable(gl.POLYGON_OFFSET_FILL);
   }
@@ -108,7 +108,7 @@ async function main(){
   gl.uniform3f(U(sp,'uCam'),cam[0],cam[1],cam[2]);gl.uniform3fv(U(sp,'uLightDir'),L);gl.uniform1f(U(sp,'uTime'),TIME);gl.uniform1f(U(sp,'uGrowT'),growT);gl.uniform1f(U(sp,'uDoorMode'),0);gl.uniform1f(U(sp,'uWet'),parseFloat(q.get('wet')||'0'));gl.uniform1f(U(sp,'uAlpha'),1);
   gl.uniform3fv(U(sp,'uFloor2'),pal.floor2||pal.floor);gl.uniform1f(U(sp,'uShadowOn'),shadowOn?1:0);{const mp=M.pos;gl.uniform3f(U(sp,'uMarbleL'),model[0]*mp[0]+model[4]*mp[1]+model[8]*mp[2],model[1]*mp[0]+model[5]*mp[1]+model[9]*mp[2],model[2]*mp[0]+model[6]*mp[1]+model[10]*mp[2]);gl.uniform1f(U(sp,'uMarbleR'),q.get('light')==='0'?0:M.r);gl.uniform3f(U(sp,'uMarbleC'),0.6,0.75,0.9);gl.uniform1f(U(sp,'uFog'),parseFloat(q.get('fog')||'0'));gl.uniform3f(U(sp,'uFogCol'),pal.bgTop[0]*0.5,pal.bgTop[1]*0.5,pal.bgTop[2]*0.55)}gl.uniform1f(U(sp,'uTexel'),1/SS);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(U(sp,'uShadow'),0);
   const sc=(m,r,me,em)=>{gl.uniform1i(U(sp,'uMat'),m);gl.uniform1f(U(sp,'uRough'),r);gl.uniform1f(U(sp,'uMetal'),me);gl.uniform1f(U(sp,'uEmissive'),em)};
-  const hc=new Float32Array(64);(D.holeC||[]).forEach((v,i)=>hc[i]=v);gl.uniform1i(U(sp,'uHoleN'),(D.holeC||[]).length/4);gl.uniform4fv(U(sp,'uHoleC'),hc);sc(pal.floorMat,pal.floorRough,0,0);draw(floor);gl.uniform1i(U(sp,'uHoleN'),0);sc(pal.wallMat,pal.wallRough,pal.wallMetal===undefined?1:pal.wallMetal,0);draw(walls);gl.uniform1f(U(sp,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(sp,'uDoorMode'),0);
+  const hc=new Float32Array(64);(D.holeC||[]).forEach((v,i)=>hc[i]=v);gl.uniform1i(U(sp,'uHoleN'),(D.holeC||[]).length/4);gl.uniform4fv(U(sp,'uHoleC'),hc);sc(pal.floorMat,pal.floorRough,0,0);if(q.get('gal')!=='1')draw(floor);gl.uniform1i(U(sp,'uHoleN'),0);sc(pal.wallMat,pal.wallRough,pal.wallMetal===undefined?1:pal.wallMetal,0);if(q.get('gal')!=='1')draw(walls);if(propsM){sc(22,0.42,0,0);draw(propsM)}gl.uniform1f(U(sp,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(sp,'uDoorMode'),0);
   if(q.get('trail')){const tp=trailP;gl.useProgram(tp);gl.uniformMatrix4fv(U(tp,'uVP'),false,vpm);gl.uniformMatrix4fv(U(tp,'uModel'),false,model);gl.uniform1f(U(tp,'uTime'),parseFloat(q.get('tnow')||'20'));gl.uniform1f(U(tp,'uKind'),q.get('trail')==='mud'?1:0);gl.uniform3f(U(tp,'uCam'),cam[0],cam[1],cam[2]);gl.uniform3fv(U(tp,'uLightDir'),L);
     const tv=gl.createVertexArray();gl.bindVertexArray(tv);const tb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,tb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(D.trail),gl.STATIC_DRAW);for(let i=0;i<2;i++){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,4,gl.FLOAT,false,32,i*16);gl.vertexAttribDivisor(i,1)}
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1.2,-1.2);gl.depthMask(false);

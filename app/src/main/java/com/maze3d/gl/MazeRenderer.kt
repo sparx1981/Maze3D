@@ -144,6 +144,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var sphere: GlMesh? = null
     private var floorMesh: GlMesh? = null
     private var wallMesh: GlMesh? = null
+    private var propMesh: GlMesh? = null
     private var markerMesh: GlMesh? = null
     private var threadMesh: GlMesh? = null
 
@@ -247,6 +248,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         sphere = GlMesh.unitSphere()
         floorMesh = GlMesh(GlMesh.SCENE)
         wallMesh = GlMesh(GlMesh.SCENE)
+        propMesh = GlMesh(GlMesh.SCENE)
         markerMesh = GlMesh(GlMesh.SCENE)
         threadMesh = GlMesh(GlMesh.SCENE)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
@@ -391,6 +393,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         builder = b
         floorMesh!!.let { val mb = b.floor(); it.upload(mb.vertices(), mb.indices()) }
         wallMesh!!.let { val mb = b.walls(); it.upload(mb.vertices(), mb.indices()) }
+        b.planProps(kind.outerRadius)
+        propMesh!!.let { val mb = b.props(); if (mb.vertexCount > 0) it.upload(mb.vertices(), mb.indices()) else it.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0)) }
+        marble?.setObstacles(b.obstacles.map { Triple(it.cell, it.pos, it.radius) })
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = rnd.nextFloat() < 0.45f
@@ -890,7 +895,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(prog, "uTime"), time)
         if (shadowPass) {
             GLES30.glUniform1f(loc(prog, "uDoorMode"), 0f)
-            floorMesh?.draw(); wallMesh?.draw()
+            floorMesh?.draw(); wallMesh?.draw(); propMesh?.draw()
             GLES30.glUniform1f(loc(prog, "uDoorMode"), 1f)
             doorMesh?.draw()
             GLES30.glUniform1f(loc(prog, "uDoorMode"), 0f)
@@ -931,6 +936,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), 0)
         scene(pal.wallMat, pal.wallRough, pal.wallMetal, 0f); wallMesh?.draw()
+        if (pal.themeId >= 0) { scene(Mat.PROP, 0.42f, 0f, 0f); propMesh?.draw() }
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
         doorMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)

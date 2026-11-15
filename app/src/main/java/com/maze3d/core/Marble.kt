@@ -122,6 +122,10 @@ class Marble(private val maze: Maze) {
         updateCell()
     }
 
+    private var obstacleAt: Map<Int, Triple<Int, Vec3, Float>> = emptyMap()
+    /** Solid props standing in dead ends: (cell, position, radius). */
+    fun setObstacles(list: List<Triple<Int, Vec3, Float>>) { obstacleAt = list.associateBy { it.first } }
+
     private fun collide() {
         val minDist = wallHalfThickness + radius
         repeat(2) {
@@ -129,6 +133,18 @@ class Marble(private val maze: Maze) {
             val h = hazards
             if (h != null && doorsNear.isNotEmpty()) {
                 for (i in doorsNear[cell]) if (h.doorClosed(i, clock)) hit(h.doorEdges[i], minDist)
+            }
+            obstacleAt[cell]?.let { ob ->
+                val nrm = surface.normal(position)
+                var d = position - ob.second
+                d -= nrm * (d dot nrm)
+                val dist = d.length(); val minO = ob.third + radius
+                if (dist < minO) {
+                    val dir = if (dist > 1e-6f) d / dist else (nrm cross velocity).normalized()
+                    position += dir * (minO - dist)
+                    val vn = velocity dot dir
+                    if (vn < 0f) velocity -= dir * (vn * 1.3f)
+                }
             }
             position = surface.project(position) + surface.normal(position) * radius
         }

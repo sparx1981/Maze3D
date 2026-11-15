@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21
+    const val STONE = 21; const val PROP = 22
 }
 
 /** Wall cross-sections. */

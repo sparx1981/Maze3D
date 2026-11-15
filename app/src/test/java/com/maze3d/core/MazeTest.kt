@@ -39,6 +39,10 @@ class MazeTest {
             for (seed in 1L..3L) {
                 val maze = Maze(kind.createMesh(), seed)
                 val marble = Marble(maze)
+                // theme props stand in dead ends; the ball must still get round them
+                val sb = com.maze3d.gl.SceneBuilder(maze, com.maze3d.gl.Palette.themes[(seed.toInt() * 3) % 11])
+                sb.planProps(kind.outerRadius)
+                marble.setObstacles(sb.obstacles.map { Triple(it.cell, it.pos, it.radius) })
                 var path = maze.pathFrom(marble.cell)
                 var planned = marble.cell
                 var t = 0f

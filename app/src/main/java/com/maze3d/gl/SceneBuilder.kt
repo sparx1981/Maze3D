@@ -399,6 +399,112 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
+
+    // ------------------------------------------------------------------ theme props
+    class Obstacle(val cell: Int, val pos: Vec3, val radius: Float)
+    private class Placed(val mesh: PropMesh, val pos: Vec3, val n: Vec3, val t2: Vec3, val size: Float, val delay: Float)
+
+    private val placed = ArrayList<Placed>()
+    /** Dead-end props the marble can bump into. */
+    val obstacles = ArrayList<Obstacle>()
+
+    /** Decides where theme props go. Called once per level; does nothing for classic finishes. */
+    fun planProps(outerRadius: Float) {
+        placed.clear(); obstacles.clear()
+        val lib = PropLibrary.forTheme(pal.themeId) ?: return
+        val prof = profileData(pal.profile)
+        val topH = wallHeight * prof.hs
+        fun tangent(n: Vec3, seed: Float): Vec3 {
+            val a = if (kotlin.math.abs(n.y) < 0.9f) Vec3(0f, 1f, 0f) else Vec3(1f, 0f, 0f)
+            val t = (a cross n).normalized(); val u = n cross t
+            val ang = seed * 6.2831853f
+            return (t * cos(ang) + u * sin(ang)).normalized()
+        }
+        // 1. wall junctions: a small topper on a share of the joints, always on the corners of start and goal
+        val seen = HashSet<Int>()
+        val special = HashSet<Int>()
+        for (c in intArrayOf(maze.start, maze.goal)) for (k in 0..3) special.add(maze.mesh.cellVertex(c, k))
+        val sizeJ = wallHalfThickness * 6.2f
+        var junctions = 0
+        for (e in 0 until maze.edgeCount) {
+            if (!maze.isWall(e)) continue
+            for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) {
+                if (!seen.add(v)) continue
+                if (!(v in special) && hash(v + 311) > 0.13f) continue
+                if (junctions > 70) continue
+                val p = maze.mesh.vertices[v]
+                val n = surface.normal(p)
+                val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
+                placed.add(Placed(lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
+                junctions++
+            }
+        }
+        // 2. dead ends: an object standing at the closed end of the passage
+        var deads = 0
+        for (c in 0 until maze.cellCount) {
+            if (maze.links[c].size != 1 || c == maze.start || c == maze.goal) continue
+            if (hash(c + 977) > 0.55f || deads >= 26) continue
+            val centre = maze.centers[c]
+            val toward = (maze.centers[maze.links[c][0]] - centre).normalized()
+            val n = surface.normal(centre)
+            val dir = (toward - n * (toward dot n)).normalized()
+            val p = surface.project(centre - dir * (cs * 0.14f))
+            val size = cs * 0.52f
+            val mesh = if (hash(c + 13) < 0.5f) lib.deadA else lib.deadB
+            placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+            obstacles.add(Obstacle(c, p, size * 0.22f))
+            deads++
+        }
+        // 3. landmarks floating around the shape
+        val count = 7
+        for (i in 0 until count) {
+            // fibonacci-ish directions so they spread over all sides
+            val y = 1f - 2f * (i + 0.5f) / count
+            val r = kotlin.math.sqrt(1f - y * y); val phi = i * 2.399963f
+            val d = Vec3(cos(phi) * r, y, sin(phi) * r).normalized()
+            val size = outerRadius * 0.30f
+            placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, tangent(d, hash(i + 4000)), size, 0.9f))
+        }
+    }
+
+    /** Debug: the four props of this theme side by side, upright, at their natural size. */
+    fun gallery(): MeshBuilder {
+        val mb = MeshBuilder()
+        val lib = PropLibrary.forTheme(pal.themeId) ?: return mb
+        val list = listOf(lib.junction, lib.deadA, lib.deadB, lib.landmark)
+        for ((k, m) in list.withIndex()) {
+            val base = mb.vertexCount
+            val ox = (k - 1.5f) * 1.15f
+            for (i in 0 until m.vertexCount)
+                mb.vertex(Vec3(m.pos[i * 3] + ox, m.pos[i * 3 + 1], m.pos[i * 3 + 2]), Vec3(m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]), Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]))
+            var q = 0
+            while (q < m.idx.size) { mb.tri(base + m.idx[q], base + m.idx[q + 1], base + m.idx[q + 2]); q += 3 }
+        }
+        return mb
+    }
+
+    fun props(): MeshBuilder {
+        val mb = MeshBuilder()
+        for (pl in placed) {
+            val t2 = (pl.t2 - pl.n * (pl.t2 dot pl.n)).normalized()
+            val t1 = t2 cross pl.n
+            val m = pl.mesh
+            val sink = pl.size * 1.25f
+            val base = mb.vertexCount
+            for (i in 0 until m.vertexCount) {
+                val x = m.pos[i * 3]; val y = m.pos[i * 3 + 1]; val z = m.pos[i * 3 + 2]
+                val nx = m.nrm[i * 3]; val ny = m.nrm[i * 3 + 1]; val nz = m.nrm[i * 3 + 2]
+                val p = pl.pos + t1 * (x * pl.size) + t2 * (y * pl.size) + pl.n * (z * pl.size)
+                val nn = (t1 * nx + t2 * ny + pl.n * nz).normalized()
+                mb.vertex(p - pl.n * sink, nn, Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]), pl.n * sink, pl.delay)
+            }
+            val ix = m.idx
+            var k = 0
+            while (k < ix.size) { mb.tri(base + ix[k], base + ix[k + 1], base + ix[k + 2]); k += 3 }
+        }
+        return mb
+    }
+
     private fun hash(i: Int): Float {
         var h = i * 374761393 + 668265263
         h = (h xor (h ushr 13)) * 1274126177

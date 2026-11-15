@@ -393,6 +393,10 @@ void main() {
         albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
         hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
         rough = 0.86;
+    } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
+        albedo = pow(min(vCol, vec3(1.0)) * 0.8, vec3(2.2));
+        emit = max(vCol - vec3(1.0), vec3(0.0)) * 1.4;
+        rough = 0.5; coat = 0.45;
     } else if (uMat == 0) {     // lacquer / enamel
         coat = 1.0;
     }
