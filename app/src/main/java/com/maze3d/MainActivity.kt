@@ -56,6 +56,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             ?: sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         renderer = MazeRenderer(this)
+        renderer.followOn = getSharedPreferences("maze3d_ui", MODE_PRIVATE).getBoolean("follow", false)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(MsaaChooser())
@@ -95,7 +96,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         letterSpacing = 0.12f
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         gravity = Gravity.CENTER
-        setPadding(dp(14f), dp(10f), dp(14f), dp(10f))
+        setPadding(dp(11f), dp(10f), dp(11f), dp(10f))
         background = glass(toggle?.invoke() ?: false)
         if (toggle != null) toggles.add(this to toggle)
         setOnClickListener {
@@ -108,6 +109,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private fun refreshToggles() { for ((v, t) in toggles) v.background = glass(t()) }
 
+    private lateinit var toast: TextView
     private lateinit var title: TextView
     private lateinit var clock: TextView
     private lateinit var finishName: TextView
@@ -143,6 +145,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         }
         layer.addView(banner, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
+        toast = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 14f; letterSpacing = 0.04f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(18f), dp(10f), dp(18f), dp(10f))
+            background = GradientDrawable().apply { cornerRadius = dp(20f).toFloat(); setColor(Color.argb(190, 120, 30, 30)) }
+            alpha = 0f
+        }
+        layer.addView(toast, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { setMargins(0, 0, 0, dp(100f)) })
+
         val slider = ZoomSlider(this) { v -> glView.queueEvent { renderer.setZoomLevel(v) } }
         layer.addView(slider, FrameLayout.LayoutParams(dp(48f), dp(260f), Gravity.END or Gravity.CENTER_VERTICAL).apply { setMargins(0, 0, dp(6f), 0) })
 
@@ -166,7 +177,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             renderer.hintOn = !renderer.hintOn
             glView.queueEvent { renderer.resetHint() }
         }
-        val follow = pill("Follow", { renderer.followOn }) { renderer.followOn = !renderer.followOn }
+        val follow = pill("Follow cam", { renderer.followOn }) {
+            renderer.followOn = !renderer.followOn
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putBoolean("follow", renderer.followOn).apply()
+        }
         val ball = pill("Ball") { glView.queueEvent { renderer.resetMarble() } }
         val next = pill("New") { glView.queueEvent { renderer.requestNew() } }
         for (b in listOf(tilt, hint, follow, ball, next)) {
@@ -271,6 +285,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             title.text = shape.uppercase()
             clock.text = "%d:%02d".format(seconds / 60, seconds % 60)
             banner.animate().alpha(if (solved) 1f else 0f).setDuration(350).start()
+        }
+    }
+
+    override fun onToast(message: String) {
+        runOnUiThread {
+            toast.text = message
+            toast.animate().cancel()
+            toast.alpha = 1f
+            toast.animate().alpha(0f).setStartDelay(1400).setDuration(500).start()
         }
     }
 

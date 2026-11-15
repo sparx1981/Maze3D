@@ -313,7 +313,8 @@ out vec4 outColor;
 void main() {
     vec2 uv = vCol.xy;
     float r = length(uv);
-    float s = sin(0.9 * uTime + vCol.z * 6.2831853);
+    float ph = 0.9 * uTime + vCol.z * 6.2831853;
+    float s = sin(ph);
     float a = smoothstep(0.0, 0.6, s) * uAppear;
     float R = a;                        // opening radius in uv units (1.0 = full hole)
     float fw = fwidth(r) * 1.5;
@@ -324,6 +325,15 @@ void main() {
     vec3 col = mix(vec3(0.004, 0.004, 0.008), acc * 1.4, rimGlow * 0.55);
     float alpha = max(inside, lip * 0.9 * step(0.02, a));
     col = mix(col, acc * 2.2, lip * (1.0 - inside) * 0.9);
+
+    // A shut hole is never invisible: a faint ring marks the spot and pulses just before it opens.
+    float ring = 1.0 - smoothstep(0.0, 0.06 + fw, abs(r - 1.0));
+    float soon = step(0.0, cos(ph)) * smoothstep(-0.6, -0.05, min(s, 0.0)) * step(s, 0.0);
+    float warn = (0.30 + 0.70 * soon * (0.65 + 0.35 * sin(uTime * 16.0))) * (1.0 - smoothstep(0.0, 0.25, a)) * uAppear;
+    float ringA = ring * warn;
+    col = mix(col, acc * 2.4, ringA * step(alpha, ringA));
+    alpha = max(alpha, ringA);
+
     if (alpha < 0.01) discard;
     outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
 }

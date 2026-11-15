@@ -31,6 +31,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fun onHud(shape: String, seconds: Int, solved: Boolean)
         fun onImpact(strength: Float)
         fun onFinish(name: String, accent: Vec3)
+        fun onToast(message: String)
         val audio: Audio
     }
 
@@ -63,6 +64,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var goalBursted = false
     private var lastSparkAt = 0f
     private var impactSparkSeed = 0
+    private var lastTouchAt = -10f
+    private var zoomFollow = 1f
     private val audio: Audio get() = host.audio
     private var doorPrevG = FloatArray(0)
     private var holePrevOpen = FloatArray(0)
@@ -153,7 +156,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val tanY = tan(Math.toRadians(fovY / 2.0)).toFloat()
         val tanMin = min(tanY, tanY * aspect)
         val r = kind.outerRadius * 1.12f
-        camDist = (r / tanMin + r) * zoom
+        camDist = (r / tanMin + r) * zoom * zoomFollow
         Matrix.setLookAtM(view, 0, 0f, 0f, camDist, 0f, 0f, 0f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, proj, 0, view, 0)
     }
@@ -214,22 +217,23 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun setZoomLevel(v: Float) { zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
 
     /** Rotate about the view axis (two-finger twist). */
-    fun twist(angle: Float) { orient = (Quat.fromAxisAngle(Vec3(0f, 0f, 1f), angle) * orient).normalized() }
+    fun twist(angle: Float) { lastTouchAt = time; orient = (Quat.fromAxisAngle(Vec3(0f, 0f, 1f), angle) * orient).normalized() }
 
     // ---- touch ---------------------------------------------------------------------------
-    fun dragStart() { dragging = true; angVel = Vec3.ZERO }
+    fun dragStart() { dragging = true; angVel = Vec3.ZERO; lastTouchAt = time }
 
     fun drag(dx: Float, dy: Float, dtSec: Float) {
         val scale = 0.0075f * zoom
         val axis = Vec3(dy, dx, 0f)
         val angle = axis.length() * scale
         if (angle > 1e-6f) {
+            lastTouchAt = time
             orient = (Quat.fromAxisAngle(axis, angle) * orient).normalized()
             if (dtSec > 1e-4f) angVel = axis.normalized() * min(angle / dtSec, 9f)
         }
     }
 
-    fun dragEnd() { dragging = false }
+    fun dragEnd() { dragging = false; lastTouchAt = time }
 
     // ---- frame ---------------------------------------------------------------------------
     override fun onDrawFrame(gl: GL10?) {
@@ -254,15 +258,23 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
         }
 
-        // optionally keep the marble on the visible hemisphere
-        if (followOn && !dragging && phase == Phase.PLAY) {
-            val w = orient.rotate(mb.position.normalized())
-            if (w.z < 0.35f) {
-                val q = Quat.fromTo(w, Vec3(0f, 0f, 1f))
-                val ang = 2f * kotlin.math.acos(q.w.coerceIn(-1f, 1f))
-                val step = min(ang, 0.9f * dt)
-                val axis = Vec3(q.x, q.y, q.z)
-                if (axis.lengthSq() > 1e-8f) orient = (Quat.fromAxisAngle(axis, step) * orient).normalized()
+        // chase camera: smoothly turn the piece so the marble stays centred and facing us
+        val followTarget = if (followOn) 0.8f else 1f
+        if (kotlin.math.abs(zoomFollow - followTarget) > 0.002f) {
+            zoomFollow += (followTarget - zoomFollow) * min(1f, dt * 2.5f)
+            updateCamera()
+        }
+        if (followOn && !dragging && phase != Phase.SINK && time - lastTouchAt > 1.0f) {
+            val n = mb.surface.normal(mb.position)
+            val local = (mb.position.normalized() * 0.5f + n * 0.5f).normalized()
+            val w = orient.rotate(local)
+            val dotz = w.z.coerceIn(-1f, 1f)
+            val ang = kotlin.math.acos(dotz)
+            if (ang > 0.01f) {
+                val axis = w cross Vec3(0f, 0f, 1f)
+                val step = min(ang * (1f - exp(-3.2f * dt)), 2.4f * dt)
+                if (axis.lengthSq() > 1e-10f) orient = (Quat.fromAxisAngle(axis, step) * orient).normalized()
+                angVel = Vec3.ZERO
             }
         }
 
@@ -305,6 +317,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         if (h >= 0) {
                             fallTimer = 0.55f
                             audio.fall(panOf(m.centers[hz.holeCells[h]]))
+                            host.onToast("Fell into a hole - back to the start")
                             fallFrom = mb.position
                             fallTo = m.centers[hz.holeCells[h]] - mb.surface.normal(m.centers[hz.holeCells[h]]) * (mb.radius * 2.5f)
                             sparks.burst(m.centers[hz.holeCells[h]], mb.surface.normal(m.centers[hz.holeCells[h]]), 10, 0.5f, pal.accent)
