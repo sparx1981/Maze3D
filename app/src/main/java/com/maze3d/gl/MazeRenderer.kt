@@ -40,13 +40,19 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val audio: Audio
     }
 
-    private enum class Phase { GROW, PLAY, SOLVED, SINK }
+    private enum class Phase { GROW, PLAY, SOLVED, SINK, MENU }
 
     private class Door(val mid: Vec3, val normal: Vec3, var closed: Boolean)
 
     // ---- inputs (written from the UI thread) --------------------------------------------
     @Volatile var tiltMode = false
     @Volatile var hintActive = false
+    /** True while the menu is open mid-game: physics, timers and hazards stand still. */
+    @Volatile var paused = false
+    /** True before a game has started: the level just turns slowly behind the menu. */
+    @Volatile var menuMode = true
+    private var pendingTerrain: Terrain? = null
+    private var pendingPlain = false
     @Volatile var followOn = false
     @Volatile var deviceGravity = Vec3(0f, -1f, 0f)
 
@@ -234,7 +240,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     // ---- game control (GL thread) ---------------------------------------------------------
-    fun newLabyrinth(k: ShapeKind) {
+    fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false) {
         kind = k
         val seed = rnd.nextLong()
         val m = Maze(k.createMesh(), seed)
@@ -242,7 +248,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         marble = Marble(m)
         pal = Palette.random(rnd, pal)
         val tr = rnd.nextFloat()
-        terrain = if (tr < 0.18f) Terrain.SAND else if (tr < 0.34f) Terrain.MUD else Terrain.NONE
+        terrain = forcedTerrain ?: (if (tr < 0.18f) Terrain.SAND else if (tr < 0.34f) Terrain.MUD else Terrain.NONE)
         pal = when (terrain) {
             Terrain.SAND -> pal.withFloor(Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
             Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
@@ -257,10 +263,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = rnd.nextFloat() < 0.45f
-        val wantRain = rnd.nextFloat() < 0.35f
+        val wantRain = !plain && rnd.nextFloat() < 0.35f
+        if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
+        cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
-        if (!wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
-        val rainNow = wantRain || (!wantDoors && !wantHoles && !useClouds && terrain == Terrain.NONE)
+        if (!plain && !wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
+        val rainNow = wantRain || (!plain && !wantDoors && !wantHoles && !useClouds && terrain == Terrain.NONE)
         val hz = Hazards(m, rnd, wantDoors, wantHoles)
         rain = if (rainNow) Rain(m, rnd) else null
         marble!!.rain = rain
@@ -281,7 +289,6 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
-        cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         val wa = rnd.nextFloat() * 6.2831853f
         val ws = 0.14f + 0.16f * rnd.nextFloat()
         windX = kotlin.math.cos(wa) * ws; windY = kotlin.math.sin(wa) * ws * 0.5f
@@ -300,9 +307,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Request a fresh labyrinth; walls sink first. */
-    fun requestNew(k: ShapeKind? = null) {
+    fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false) {
         nextKind = k ?: ShapeKind.values().filter { it != kind }.let { it[rnd.nextInt(it.size)] }
+        pendingTerrain = terrain; pendingPlain = plain
         if (phase != Phase.SINK) { phase = Phase.SINK; audio.levelSink() }
+    }
+
+    /** Begin a real game. null shape / terrain mean "random". */
+    fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+        menuMode = false; paused = false
+        requestNew(shape, terrain, plain)
+    }
+
+    /** Menu backdrop: build the chosen level right away so the player can see what they picked. */
+    fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+        menuMode = true; paused = false
+        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain)
     }
 
     fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1 }
@@ -371,7 +391,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             zoomFollow += (followTarget - zoomFollow) * min(1f, dt * 2.5f)
             updateCamera()
         }
-        if (followOn && !dragging && phase != Phase.SINK && time - lastTouchAt > 1.0f) {
+        if (followOn && !dragging && phase == Phase.PLAY && !paused && time - lastTouchAt > 1.0f) {
             val n = mb.surface.normal(mb.position)
             val local = (mb.position.normalized() * 0.5f + n * 0.5f).normalized()
             val w = orient.rotate(local)
@@ -388,9 +408,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         when (phase) {
             Phase.GROW -> {
                 growT += dt / 1.1f
-                if (growT >= 1.35f) { growT = 1.35f; phase = Phase.PLAY }
+                if (growT >= 1.35f) { growT = 1.35f; phase = if (menuMode) Phase.MENU else Phase.PLAY }
             }
-            Phase.PLAY -> {
+            Phase.MENU -> {
+                if (!dragging) orient = (Quat.fromAxisAngle(Vec3(0f, 1f, 0.35f), 0.22f * dt) * orient).normalized()
+            }
+            Phase.PLAY -> if (paused) { audio.roll(0f, 0) } else {
                 playSeconds += dt
                 val worldG = if (tiltMode) deviceGravity else Vec3(0f, -1f, 0f)
                 val gLocal = orient.inverseRotate(worldG.normalized()) * GRAVITY
@@ -456,7 +479,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             Phase.SINK -> {
                 growT -= dt / 0.8f
-                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext()); nextKind = null }
+                if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext(), pendingTerrain, pendingPlain); nextKind = null; pendingTerrain = null; pendingPlain = false }
             }
         }
 

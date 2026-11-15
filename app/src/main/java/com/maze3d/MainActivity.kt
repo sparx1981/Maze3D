@@ -25,6 +25,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.maze3d.audio.Audio
 import com.maze3d.audio.SoundEngine
+import com.maze3d.core.ShapeKind
+import com.maze3d.core.Terrain
 import com.maze3d.core.Vec3
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
@@ -35,6 +37,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private lateinit var engine: SoundEngine
     private var loading: LoadingView? = null
+    private lateinit var hudLayer: View
+    private lateinit var menuLayer: FrameLayout
+    private lateinit var menuMain: LinearLayout
+    private lateinit var menuLevels: LinearLayout
+    private var resumeBtn: TextView? = null
+    private var gameStarted = false
+    private var selShape = 0      // 0 random, 1 sphere, 2 torus, 3 cube
+    private var selSurface = 0    // 0 random, 1 standard, 2 sand, 3 mud
+    private var selHazards = 0    // 0 random, 1 none
     @Volatile private var rendererReady = false
     override val audio: Audio get() = engine
 
@@ -72,7 +83,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         val root = FrameLayout(this)
         root.addView(glView)
-        root.addView(buildOverlay())
+        hudLayer = buildOverlay()
+        root.addView(hudLayer)
+        root.addView(buildMenu())
         loading = LoadingView(this).also { root.addView(it, FrameLayout.LayoutParams(-1, -1)) }
         setContentView(root)
         requestHighRefresh()
@@ -84,7 +97,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 if (rendererReady && lv.seconds >= fadeStart) {
                     val k = ((lv.seconds - fadeStart) / 0.5f).coerceIn(0f, 1f)
                     lv.alpha = 1f - k
-                    if (k >= 1f) { (lv.parent as? android.view.ViewGroup)?.removeView(lv); loading = null; return }
+                    if (k >= 1f) { (lv.parent as? android.view.ViewGroup)?.removeView(lv); loading = null; showMenu(); return }
                 }
                 h.postDelayed(this, 16)
             }
@@ -194,7 +207,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val sound = pill("Sound", { engine.sfxOn }) { engine.setSfx(!engine.sfxOn) }
         val music = pill("Music", { engine.musicOn }) { engine.setMusic(!engine.musicOn) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
-        for (v in listOf(q, sound, music)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
+        val menuBtn = pill("Menu") { showMenu() }
+        for (v in listOf(menuBtn, q, sound, music)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
         layer.addView(column, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
 
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
@@ -283,6 +297,156 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    // ---- menu ----------------------------------------------------------------------------------
+    private fun bigButton(text: String, primary: Boolean = false, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text.uppercase()
+        setTextColor(Color.WHITE)
+        textSize = 15f
+        letterSpacing = 0.2f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        gravity = Gravity.CENTER
+        setPadding(dp(20f), dp(15f), dp(20f), dp(15f))
+        background = glass(primary)
+        setOnClickListener { engine.uiClick(); onClick() }
+    }
+
+    private fun sectionLabel(text: String) = TextView(this).apply {
+        this.text = text.uppercase()
+        setTextColor(Color.argb(170, 255, 255, 255))
+        textSize = 11f; letterSpacing = 0.25f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        setPadding(dp(4f), dp(18f), 0, dp(8f))
+    }
+
+    /** A row of single-choice chips. */
+    private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chips = ArrayList<TextView>()
+        fun refresh() { chips.forEachIndexed { i, c -> c.background = glass(get() == i) } }
+        options.forEachIndexed { i, label ->
+            val c = TextView(this).apply {
+                text = label.uppercase(); setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.1f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                setPadding(dp(4f), dp(12f), dp(4f), dp(12f))
+                background = glass(get() == i)
+                setOnClickListener { set(i); refresh(); engine.uiClick(); previewSelection() }
+            }
+            chips.add(c)
+            row.addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(3f), 0, dp(3f), 0) })
+        }
+        return row
+    }
+
+    private fun selectedShape(): ShapeKind? = if (selShape == 0) null else ShapeKind.values()[selShape - 1]
+    private fun selectedTerrain(): Terrain? = when (selSurface) { 2 -> Terrain.SAND; 3 -> Terrain.MUD; 1 -> Terrain.NONE; else -> null }
+
+    /** Show the chosen level behind the menu as soon as an option changes. */
+    private fun previewSelection() {
+        val sh = selectedShape(); val tr = selectedTerrain(); val plain = selHazards == 1
+        gameStarted = false          // previewing replaces the level, so there is nothing to resume any more
+        glView.queueEvent { renderer.previewLevel(sh, tr, plain) }
+    }
+
+    private fun buildMenu(): View {
+        menuLayer = FrameLayout(this).apply {
+            setBackgroundColor(Color.argb(150, 4, 6, 12)); isClickable = true; visibility = View.GONE
+        }
+        val sans = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        fun header(sub: String): LinearLayout {
+            val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+            box.addView(TextView(this).apply {
+                text = "ROLLABYRINTH"; setTextColor(Color.WHITE); textSize = 30f; letterSpacing = 0.22f
+                typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                setShadowLayer(16f, 0f, 3f, Color.argb(180, 0, 0, 0))
+            })
+            box.addView(TextView(this).apply {
+                text = sub.uppercase(); setTextColor(Color.argb(170, 255, 255, 255)); textSize = 11f; letterSpacing = 0.35f
+                typeface = sans; setPadding(0, dp(6f), 0, dp(26f))
+            })
+            return box
+        }
+        val maxW = dp(340f)
+
+        // ---- main screen
+        menuMain = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        menuMain.addView(header("3D marble maze"))
+        resumeBtn = bigButton("Resume", primary = true) { hideMenu(); glView.queueEvent { renderer.paused = false } }
+        menuMain.addView(resumeBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Quick start", primary = true) { startGame(null, null, false) },
+            LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Select level") { showLevelSelect() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Exit") { finishAffinity() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(26f)) })
+        val foot = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        foot.addView(pill("Sound", { engine.sfxOn }) { engine.setSfx(!engine.sfxOn) }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4f), 0, dp(4f), 0) })
+        foot.addView(pill("Music", { engine.musicOn }) { engine.setMusic(!engine.musicOn) }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4f), 0, dp(4f), 0) })
+        menuMain.addView(foot)
+
+        // ---- level select screen
+        menuLevels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuLevels.addView(header("select level"))
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        panel.addView(sectionLabel("Shape"))
+        panel.addView(chipRow(listOf("Random", "Sphere", "Torus", "Cube"), { selShape }) { selShape = it })
+        panel.addView(sectionLabel("Surface"))
+        panel.addView(chipRow(listOf("Random", "Standard", "Sand", "Mud"), { selSurface }) { selSurface = it })
+        panel.addView(sectionLabel("Hazards"))
+        panel.addView(chipRow(listOf("Random", "None"), { selHazards }) { selHazards = it })
+        menuLevels.addView(panel, LinearLayout.LayoutParams(maxW, -2))
+        menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1) },
+            LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, dp(12f)) })
+        menuLevels.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2))
+
+        val holder = FrameLayout(this)
+        holder.addView(menuMain, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        holder.addView(menuLevels, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        menuLayer.addView(holder, FrameLayout.LayoutParams(-1, -1))
+        return menuLayer
+    }
+
+    private fun showMainMenu() {
+        resumeBtn?.visibility = if (gameStarted) View.VISIBLE else View.GONE
+        menuLevels.visibility = View.GONE
+        menuMain.visibility = View.VISIBLE
+    }
+
+    private fun showLevelSelect() {
+        menuMain.visibility = View.GONE
+        menuLevels.visibility = View.VISIBLE
+        previewSelection()
+    }
+
+    private fun showMenu() {
+        if (menuLayer.visibility == View.VISIBLE) return
+        if (gameStarted) glView.queueEvent { renderer.paused = true }
+        hudLayer.visibility = View.INVISIBLE
+        showMainMenu()
+        menuLayer.alpha = 0f
+        menuLayer.visibility = View.VISIBLE
+        menuLayer.animate().alpha(1f).setDuration(220).start()
+    }
+
+    private fun hideMenu() {
+        menuLayer.animate().alpha(0f).setDuration(180).withEndAction { menuLayer.visibility = View.GONE }.start()
+        hudLayer.visibility = View.VISIBLE
+    }
+
+    private fun startGame(shape: ShapeKind?, terrain: Terrain?, plain: Boolean) {
+        gameStarted = true
+        hideMenu()
+        glView.queueEvent { renderer.startGame(shape, terrain, plain) }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        when {
+            menuLayer.visibility == View.VISIBLE && menuLevels.visibility == View.VISIBLE -> showMainMenu()
+            menuLayer.visibility == View.VISIBLE && gameStarted -> { hideMenu(); glView.queueEvent { renderer.paused = false } }
+            menuLayer.visibility == View.VISIBLE -> finishAffinity()
+            else -> showMenu()
+        }
+    }
 
     override fun onResume() {
         super.onResume()

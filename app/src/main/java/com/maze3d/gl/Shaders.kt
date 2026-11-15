@@ -481,7 +481,7 @@ void main() {
     vec3 base = vec3((aSeed.x * 2.0 - 1.0) * depth * uTan.x * 1.15,
                      (aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + 0.9,
                      uCamZ - depth);
-    float ph = fract(aSeed.z - uTime * (0.55 + 0.25 * aSeed.w));
+    float ph = fract(aSeed.z + uTime * (0.55 + 0.25 * aSeed.w));   // phase increases with time: drops travel along D (down)
     float travel = ph * 1.9;
     vec3 head = base + D * travel;
     vec3 tail = head - D * (0.07 + 0.09 * (1.0 - aSeed.w));
