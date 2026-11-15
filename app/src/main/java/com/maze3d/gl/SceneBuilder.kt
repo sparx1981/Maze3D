@@ -424,13 +424,13 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val seen = HashSet<Int>()
         val special = HashSet<Int>()
         for (c in intArrayOf(maze.start, maze.goal)) for (k in 0..3) special.add(maze.mesh.cellVertex(c, k))
-        val sizeJ = wallHalfThickness * 6.2f
+        val sizeJ = wallHalfThickness * 9f
         var junctions = 0
         for (e in 0 until maze.edgeCount) {
             if (!maze.isWall(e)) continue
             for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) {
                 if (!seen.add(v)) continue
-                if (!(v in special) && hash(v + 311) > 0.13f) continue
+                if (!(v in special) && hash(v + 311) > 0.2f) continue
                 if (junctions > 70) continue
                 val p = maze.mesh.vertices[v]
                 val n = surface.normal(p)
@@ -443,16 +443,16 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         var deads = 0
         for (c in 0 until maze.cellCount) {
             if (maze.links[c].size != 1 || c == maze.start || c == maze.goal) continue
-            if (hash(c + 977) > 0.55f || deads >= 26) continue
+            if (hash(c + 977) > 0.7f || deads >= 26) continue
             val centre = maze.centers[c]
             val toward = (maze.centers[maze.links[c][0]] - centre).normalized()
             val n = surface.normal(centre)
             val dir = (toward - n * (toward dot n)).normalized()
             val p = surface.project(centre - dir * (cs * 0.14f))
-            val size = cs * 0.52f
+            val size = cs * 0.78f
             val mesh = if (hash(c + 13) < 0.5f) lib.deadA else lib.deadB
             placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
-            obstacles.add(Obstacle(c, p, size * 0.22f))
+            obstacles.add(Obstacle(c, p, size * 0.4f))
             deads++
         }
         // 3. landmarks floating around the shape
@@ -462,7 +462,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val y = 1f - 2f * (i + 0.5f) / count
             val r = kotlin.math.sqrt(1f - y * y); val phi = i * 2.399963f
             val d = Vec3(cos(phi) * r, y, sin(phi) * r).normalized()
-            val size = outerRadius * 0.30f
+            val size = outerRadius * 0.4f
             placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, tangent(d, hash(i + 4000)), size, 0.9f))
         }
     }
