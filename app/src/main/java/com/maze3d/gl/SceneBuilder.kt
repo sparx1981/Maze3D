@@ -14,7 +14,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     private val surface = maze.mesh.surface
     private val cs = maze.cellSize
     val wallHeight = cs * 0.36f
-    val wallHalfThickness = cs * 0.09f
+    val wallHalfThickness = maze.wallHalfThickness
 
     fun floor(): MeshBuilder {
         val mb = MeshBuilder()

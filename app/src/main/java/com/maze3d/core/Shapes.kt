@@ -5,7 +5,7 @@ enum class ShapeKind(val label: String) {
 
     fun createMesh(): CellMesh = when (this) {
         SPHERE -> CellMesh.cubeBased(SphereSurface(1f), 11, 1f)
-        TORUS -> CellMesh.torus(TorusSurface(1f, 0.4f), 44, 15)
+        TORUS -> CellMesh.torus(TorusSurface(1f, 0.33f), 40, 12)
         CUBE -> RoundedCubeSurface(0.78f, 0.34f).let { CellMesh.cubeBased(it, 10, it.half) }
     }
 
@@ -13,7 +13,7 @@ enum class ShapeKind(val label: String) {
     val outerRadius: Float
         get() = when (this) {
             SPHERE -> 1f
-            TORUS -> 1.4f
+            TORUS -> 1.35f
             CUBE -> 1.1f
         }
 }

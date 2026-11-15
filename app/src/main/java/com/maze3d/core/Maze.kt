@@ -24,6 +24,9 @@ class Maze(val mesh: CellMesh, seed: Long) {
 
     val centers: Array<Vec3>
     val cellSize: Float
+    /** Marble and wall sizes, limited by the narrowest cell so it can never jam. */
+    val marbleRadius: Float
+    val wallHalfThickness: Float
 
     // --- solution ----------------------------------------------------------------------
     val start: Int
@@ -71,6 +74,10 @@ class Maze(val mesh: CellMesh, seed: Long) {
         var total = 0f
         for (e in 0 until edgeCount) total += (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length()
         cellSize = total / edgeCount
+        var minEdge = Float.MAX_VALUE
+        for (e in 0 until edgeCount) minEdge = minOf(minEdge, (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length())
+        marbleRadius = minOf(cellSize * 0.26f, minEdge * 0.30f)
+        wallHalfThickness = minOf(cellSize * 0.09f, minEdge * 0.10f)
 
         // Randomised depth-first search carve (iterative).
         val visited = BooleanArray(n)

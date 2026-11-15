@@ -10,8 +10,8 @@ import kotlin.math.min
  */
 class Marble(private val maze: Maze) {
     val surface = maze.mesh.surface
-    val radius = maze.cellSize * 0.26f
-    val wallHalfThickness = maze.cellSize * 0.09f
+    val radius = maze.marbleRadius
+    val wallHalfThickness = maze.wallHalfThickness
 
     var position: Vec3 = Vec3.ZERO   // marble centre, local space
         private set
