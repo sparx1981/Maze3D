@@ -59,6 +59,17 @@ class Sparks {
         }
     }
 
+    /** A single free particle (trail glow, dust puff, droplet). */
+    fun emit(pos: Vec3, vel: Vec3, life: Float, col: Vec3, size: Float) { add(P(pos, vel, life, 0f, col, size)) }
+
+    /** Soft dust cloud: a few slow, large particles around [pos]. */
+    fun puff(pos: Vec3, dir: Vec3, count: Int, size: Float, col: Vec3) {
+        repeat(count) {
+            val v = spread(dir, 1.4f) * (0.03f + rnd.nextFloat() * 0.09f)
+            add(P(pos, v, 0.5f + rnd.nextFloat() * 0.6f, 0f, col, size * (0.7f + rnd.nextFloat() * 0.8f)))
+        }
+    }
+
     private fun add(p: P) {
         p.maxLife = p.life
         if (ps.size >= MAX) ps.removeAt(0)

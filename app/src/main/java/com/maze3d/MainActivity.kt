@@ -10,6 +10,9 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -31,6 +34,8 @@ import com.maze3d.gl.MazeRenderer
 class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private lateinit var engine: SoundEngine
+    private var loading: LoadingView? = null
+    @Volatile private var rendererReady = false
     override val audio: Audio get() = engine
 
     private lateinit var glView: GLSurfaceView
@@ -68,7 +73,18 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val root = FrameLayout(this)
         root.addView(glView)
         root.addView(buildOverlay())
+        loading = LoadingView(this).also { root.addView(it, FrameLayout.LayoutParams(-1, -1)) }
         setContentView(root)
+        requestHighRefresh()
+        val h = Handler(Looper.getMainLooper())
+        h.post(object : Runnable {
+            override fun run() {
+                val lv = loading ?: return
+                if (rendererReady && lv.seconds >= 2.9f) {
+                    lv.animate().alpha(0f).setDuration(450).withEndAction { (lv.parent as? android.view.ViewGroup)?.removeView(lv); loading = null }.start()
+                } else h.postDelayed(this, 80)
+            }
+        })
         root.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
     }
@@ -293,6 +309,21 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             hintPill?.alpha = if (cooldown > 0 && !active) 0.6f else 1f
             refreshToggles()
         }
+    }
+
+    override fun onReady() { rendererReady = true }
+
+    /** Ask for the display's fastest refresh rate at the current resolution (90/120 Hz phones). */
+    private fun requestHighRefresh() {
+        try {
+            @Suppress("DEPRECATION") val d = windowManager.defaultDisplay
+            val cur = d.mode
+            val best = d.supportedModes.filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }.maxByOrNull { it.refreshRate }
+            if (best != null) {
+                window.attributes = window.attributes.apply { preferredDisplayModeId = best.modeId }
+                renderer.refreshHz = best.refreshRate
+            } else renderer.refreshHz = d.refreshRate
+        } catch (e: Exception) { /* keep the default */ }
     }
 
     override fun onToast(message: String) {

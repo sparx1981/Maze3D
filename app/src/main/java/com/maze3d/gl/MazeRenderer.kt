@@ -9,6 +9,7 @@ import com.maze3d.core.Hazards
 import com.maze3d.core.Marble
 import com.maze3d.core.Maze
 import com.maze3d.core.Quat
+import com.maze3d.core.Rain
 import com.maze3d.core.ShapeKind
 import com.maze3d.core.Vec3
 import java.util.Random
@@ -32,6 +33,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fun onImpact(strength: Float)
         fun onFinish(name: String, accent: Vec3)
         fun onToast(message: String)
+        fun onReady()
         /** [cooldown] seconds until the next hint (0 = ready); [active] while the thread is showing. */
         fun onHint(cooldown: Int, active: Boolean)
         val audio: Audio
@@ -51,6 +53,27 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var sceneProg = 0
     private var shadowSceneProg = 0
     private var holeProg = 0
+    private var smokeProg = 0
+    private var cube: ReflectionCube? = null
+    private var cubeFace = 0
+    private var cubeFresh = 6
+    private val dust = Sparks()
+    private var trailAt = 0f
+    private var puddleProg = 0
+    private var rainProg = 0
+    private var puddleMesh: GlMesh? = null
+    private var rainVbo = IntArray(1)
+    private var rainVao = IntArray(1)
+    private var rain: Rain? = null
+    private var rainWet = 0f
+    private var dropAcc = 0f
+    private var lastWakeAt = 0f
+    private val rippleLocal = Array(32) { Vec3.ZERO }
+    private val rippleStart = FloatArray(32) { -100f }
+    private val rippleAmp = FloatArray(32)
+    private var rippleNext = 0
+    private val ripUniform = FloatArray(32 * 4)
+    private val levelUniform = FloatArray(24)
     private var sparkProg = 0
     private var cloudProg = 0
     private var doorMesh: GlMesh? = null
@@ -70,6 +93,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var hintLeft = 0f
     private var hintCool = 0f
     private var lastHintCode = -1
+    private var framesDrawn = 0
     private var zoomFollow = 1f
     private val audio: Audio get() = host.audio
     private var doorPrevG = FloatArray(0)
@@ -146,6 +170,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         sparkProg = Shaders.program(Shaders.SPARK_VS, Shaders.SPARK_FS)
         post.init()
         sparks.init()
+        dust.init()
+        smokeProg = Shaders.program(Shaders.SPARK_VS, PostShaders.SMOKE_FS)
+        puddleProg = Shaders.program(Shaders.SCENE_VS, Shaders.PUDDLE_FS)
+        rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
+        puddleMesh = GlMesh(GlMesh.SCENE)
+        run {
+            val r = java.util.Random(99)
+            val seeds = FloatArray(RAIN_DROPS * 4) { r.nextFloat() }
+            GLES30.glGenVertexArrays(1, rainVao, 0); GLES30.glGenBuffers(1, rainVbo, 0)
+            GLES30.glBindVertexArray(rainVao[0]); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, rainVbo[0])
+            val bb = java.nio.ByteBuffer.allocateDirect(seeds.size * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+            bb.put(seeds).position(0)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, seeds.size * 4, bb, GLES30.GL_STATIC_DRAW)
+            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 16, 0)
+            GLES30.glBindVertexArray(0)
+        }
         doorMesh = GlMesh(GlMesh.SCENE)
         holeMesh = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1; postOn = false
@@ -198,8 +238,19 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = rnd.nextFloat() < 0.45f
-        if (!wantDoors && !wantHoles && !useClouds) when (rnd.nextInt(3)) { 0 -> wantDoors = true; 1 -> wantHoles = true; else -> useClouds = true }
+        val wantRain = rnd.nextFloat() < 0.35f
+        if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
+        if (!wantDoors && !wantHoles && !useClouds && !wantRain) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
+        val rainNow = wantRain || (!wantDoors && !wantHoles && !useClouds)
         val hz = Hazards(m, rnd, wantDoors, wantHoles)
+        rain = if (rainNow) Rain(m, rnd) else null
+        marble!!.rain = rain
+        rippleStart.fill(-100f); rainWet = 0f
+        rain?.let { rn ->
+            val mbp = b.puddles(rn.cells, rn.maxRadius * 0.9f)
+            puddleMesh!!.upload(mbp.vertices(), mbp.indices())
+            if (useClouds) cloudDensity = max(cloudDensity, 0.75f)
+        }
         hazards = hz
         marble!!.hazards = hz
         doors = hz.doorEdges.map { e ->
@@ -210,13 +261,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
-        cloudDensity = 0.55f + 0.45f * rnd.nextFloat()
+        cloudDensity = 0.5f + 0.3f * rnd.nextFloat()
         val wa = rnd.nextFloat() * 6.2831853f
         windX = kotlin.math.cos(wa) * 0.07f; windY = kotlin.math.sin(wa) * 0.035f
         fallTimer = 0f
         hintLeft = 0f; hintCool = 0f
         goalBursted = false
-        host.onFinish(pal.name + listOfNotNull(if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null).joinToString("") { " · $it" }, pal.accent)
+        host.onFinish(pal.name + listOfNotNull(if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
         rollQ = Quat.IDENTITY
         growT = 0f
@@ -277,6 +328,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         adaptResolution(raw.coerceIn(0.001f, 0.2f))
         update(dt)
         draw()
+        if (++framesDrawn == 4) host.onReady()
     }
 
     private fun update(dt: Float) {
@@ -334,11 +386,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     mb.clock = time
                     mb.step(gLocal, dt)
                     rollMarble(mb, dt)
+                    val spd = mb.velocity.length() / (m.cellSize * 4f)
+                    if (spd > 0.3f && time - trailAt > 0.025f) {
+                        trailAt = time
+                        val under = mb.position - mb.surface.normal(mb.position) * (mb.radius * 0.8f)
+                        sparks.emit(under, Vec3.ZERO, 0.38f, pal.accent, 0.012f + 0.01f * spd)
+                    }
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f), pal.floorMat == Mat.WOOD)
                     if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
                         lastSparkAt = time
                         sparks.impact(mb.impactPos, mb.impactDir, min(mb.lastImpact / 3f, 1f), pal.wall * 1.2f)
                         audio.impact(min(mb.lastImpact / 3f, 1f), panOf(mb.impactPos))
+                        dust.puff(mb.impactPos, mb.impactDir, 3, 0.05f, Vec3(0.78f, 0.78f, 0.8f))
                     }
                     if (mb.lastImpact > 0.9f && time - lastImpactAt > 0.12f) {
                         lastImpactAt = time
@@ -378,10 +437,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
         }
 
+        updateRain(dt)
         if (phase != Phase.PLAY || fallTimer > 0f) audio.roll(0f, false)
         audio.wind(cloudAmt)
         val gl = orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY
         sparks.update(dt, gl)
+        dust.update(dt, gl * -0.5f)
         val cloudTarget = if (useClouds && phase != Phase.SINK) 1f else 0f
         cloudAmt += (cloudTarget - cloudAmt) * min(1f, dt * 0.8f)
 
@@ -446,6 +507,62 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
     }
 
+    private fun addRipple(local: Vec3, amp: Float) {
+        rippleLocal[rippleNext] = local; rippleStart[rippleNext] = time; rippleAmp[rippleNext] = amp
+        rippleNext = (rippleNext + 1) % rippleLocal.size
+    }
+
+    /** Rain intensity, puddles, drop ripples and the marble's wake. */
+    private fun updateRain(dt: Float) {
+        val rn = rain
+        val m = maze ?: return
+        val mb = marble ?: return
+        if (rn == null) { rainWet = max(0f, rainWet - dt * 0.2f); audio.rain(0f); return }
+        val target = if (phase == Phase.SINK) 0f else 1f
+        rn.intensity += (target - rn.intensity) * min(1f, dt * 0.45f)
+        rn.update(dt, rn.intensity > 0.05f)
+        rainWet += (rn.intensity - rainWet) * min(1f, dt * 0.5f)
+        audio.rain(rn.intensity)
+
+        // raindrops landing in puddles
+        val wet = rn.cells.indices.filter { rn.level[it] > 0.12f }
+        if (wet.isNotEmpty() && rn.intensity > 0.2f) {
+            dropAcc += dt * (5f + 9f * rn.intensity) * (0.4f + 0.6f * wet.size.coerceAtMost(8) / 8f)
+            while (dropAcc >= 1f) {
+                dropAcc -= 1f
+                val i = wet[rnd.nextInt(wet.size)]
+                val c = m.centers[rn.cells[i]]
+                val n = mb.surface.normal(c)
+                var t = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+                t = (t - n * (t dot n)).normalized()
+                val p = mb.surface.project(c + t * (rn.radius(i) * 0.8f * kotlin.math.sqrt(rnd.nextFloat())))
+                addRipple(p + mb.surface.normal(p) * 0.002f, 0.55f + 0.5f * rnd.nextFloat())
+                if (rnd.nextFloat() < 0.5f) repeat(2) {
+                    val v = (n + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 1.1f).normalized() * (0.12f + 0.12f * rnd.nextFloat())
+                    sparks.emit(p, v, 0.22f, Vec3(0.55f, 0.7f, 0.9f), 0.006f)
+                }
+            }
+        }
+
+        // the marble's wake while it rolls through water
+        if (phase == Phase.PLAY && fallTimer <= 0f && mb.wet > 0.12f) {
+            val spd = mb.velocity.length() / (m.cellSize * 4f)
+            if (spd > 0.06f && time - lastWakeAt > 0.07f) {
+                lastWakeAt = time
+                val under = mb.position - mb.surface.normal(mb.position) * mb.radius
+                addRipple(under + mb.surface.normal(under) * 0.002f, 0.7f + 1.4f * spd.coerceAtMost(1f))
+                if (spd > 0.3f) {
+                    val n = mb.surface.normal(under)
+                    repeat(2) {
+                        val v = (n + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)).normalized() * (0.2f + 0.3f * spd)
+                        sparks.emit(under, v, 0.28f, Vec3(0.6f, 0.78f, 1f), 0.007f)
+                    }
+                    audio.splash(0.25f + 0.6f * spd, panOf(under))
+                }
+            }
+        }
+    }
+
     private fun pickNext(): ShapeKind {
         val options = ShapeKind.values().filter { it != kind }
         return options[rnd.nextInt(options.size)]
@@ -464,6 +581,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         shadow?.release()
         shadow = when (quality) { 2 -> ShadowMap(2048); 1 -> ShadowMap(1024); else -> null }
         if (shadow?.ok == false) { shadow?.release(); shadow = null }
+        cube?.release()
+        cube = when (quality) { 2 -> ReflectionCube(128); 1 -> ReflectionCube(64); else -> null }
+        if (cube?.ok == false) { cube?.release(); cube = null }
+        cubeFresh = 6
         if (quality >= 1) {
             renderScale = 1f
             postOn = post.resize(width, height, renderScale)
@@ -505,6 +626,69 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
+    /** Draws the labyrinth itself (floor, walls, doors, holes, markers, hint thread) with the given camera. */
+    private fun renderWorld(vpm: FloatArray, cam: Vec3, sm: ShadowMap?) {
+        GLES30.glUseProgram(sceneProg)
+        GLES30.glUniformMatrix4fv(loc(sceneProg, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(sceneProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniformMatrix4fv(loc(sceneProg, "uLightVP"), 1, false, lightVP, 0)
+        GLES30.glUniform3f(loc(sceneProg, "uCam"), cam.x, cam.y, cam.z)
+        GLES30.glUniform3f(loc(sceneProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glUniform1f(loc(sceneProg, "uTime"), time)
+        GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
+        GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
+        GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
+        if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
+        else { GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
+
+        scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
+        scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
+        doorMesh?.draw()
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
+        drawHoles(vpm)
+        drawPuddles(vpm, cam)
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glPolygonOffset(-2f, -2f)
+        scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
+        if (hintLeft > 0f) {
+            val alpha = min(min((HINT_SECONDS - hintLeft) / 0.35f, hintLeft / 1.3f), 1f).coerceIn(0f, 1f)
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), alpha)
+            scene(Mat.FLAT, 0.5f, 0f, 0.55f); threadMesh?.draw()
+            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        }
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+    }
+
+    private val cubeP = FloatArray(16)
+    private val cubeV = FloatArray(16)
+    private val cubeVP = FloatArray(16)
+
+    /** Refreshes the marble's reflection map: all six faces right after a level starts, then a face per frame. */
+    private fun updateCube(mb: Marble, sm: ShadowMap?) {
+        val c = cube ?: return
+        val center = orient.rotate(mb.position)
+        Matrix.perspectiveM(cubeP, 0, 90f, 1f, 0.02f, 12f)
+        val n = if (cubeFresh > 0) cubeFresh else 1
+        repeat(n) {
+            val f = cubeFace
+            cubeFace = (cubeFace + 1) % 6
+            val d = ReflectionCube.DIRS[f]; val u = ReflectionCube.UPS[f]
+            Matrix.setLookAtM(cubeV, 0, center.x, center.y, center.z, center.x + d.x, center.y + d.y, center.z + d.z, u.x, u.y, u.z)
+            Matrix.multiplyMM(cubeVP, 0, cubeP, 0, cubeV, 0)
+            c.begin(f)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST); GLES30.glDepthMask(true); GLES30.glDepthFunc(GLES30.GL_LEQUAL)
+            renderWorld(cubeVP, center, sm)
+        }
+        cubeFresh = 0
+    }
+
     private fun draw() {
         applyQuality()
         GLES30.glClearColor(0f, 0f, 0f, 1f)
@@ -533,10 +717,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         // clouds render into their own small texture first
         val cloudsOn = cloudAmt > 0.01f
         if (cloudsOn) {
-            val tint = floatArrayOf(0.78f + pal.bgTop.x * 0.35f, 0.82f + pal.bgTop.y * 0.3f, 0.9f + pal.bgTop.z * 0.2f)
-            val shade = floatArrayOf(0.16f + pal.bgTop.x * 0.7f, 0.2f + pal.bgTop.y * 0.7f, 0.28f + pal.bgTop.z * 0.7f)
+            val storm = rain != null
+            val tint = if (storm) floatArrayOf(0.50f, 0.55f, 0.64f) else floatArrayOf(0.78f + pal.bgTop.x * 0.35f, 0.82f + pal.bgTop.y * 0.3f, 0.9f + pal.bgTop.z * 0.2f)
+            val shade = if (storm) floatArrayOf(0.10f, 0.12f, 0.16f) else floatArrayOf(0.16f + pal.bgTop.x * 0.7f, 0.2f + pal.bgTop.y * 0.7f, 0.28f + pal.bgTop.z * 0.7f)
             post.renderClouds(time, width.toFloat() / height, cloudAmt, cloudDensity, windX, windY, tint, shade)
         }
+        updateCube(mb, sm)
         if (postOn) post.beginScene() else { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); GLES30.glViewport(0, 0, width, height) }
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthMask(true)
@@ -554,41 +740,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
 
-        // ---- main scene -------------------------------------------------------------------
-        GLES30.glUseProgram(sceneProg)
-        GLES30.glUniformMatrix4fv(loc(sceneProg, "uVP"), 1, false, vp, 0)
-        GLES30.glUniformMatrix4fv(loc(sceneProg, "uModel"), 1, false, model, 0)
-        GLES30.glUniformMatrix4fv(loc(sceneProg, "uLightVP"), 1, false, lightVP, 0)
-        GLES30.glUniform3f(loc(sceneProg, "uCam"), 0f, 0f, camDist)
-        GLES30.glUniform3f(loc(sceneProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
-        GLES30.glUniform1f(loc(sceneProg, "uTime"), time)
-        GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
-        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
-        GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
-        GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
-        GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
-        if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
-        else { GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
-
-        scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
-        scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
-        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
-        doorMesh?.draw()
-        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
-        drawHoles()
-        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
-        GLES30.glPolygonOffset(-2f, -2f)
-        scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
-        if (hintLeft > 0f) {
-            val alpha = min(min((HINT_SECONDS - hintLeft) / 0.35f, hintLeft / 1.3f), 1f).coerceIn(0f, 1f)
-            GLES30.glEnable(GLES30.GL_BLEND)
-            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), alpha)
-            scene(Mat.FLAT, 0.5f, 0f, 0.55f); threadMesh?.draw()
-            GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
-            GLES30.glDisable(GLES30.GL_BLEND)
-        }
-        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        renderWorld(vp, Vec3(0f, 0f, camDist), sm)
 
         // ---- marble -----------------------------------------------------------------------
         GLES30.glUseProgram(marbleProg)
@@ -612,6 +764,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val body = floatArrayOf(bm[0], bm[1], bm[2], bm[4], bm[5], bm[6], bm[8], bm[9], bm[10])
         GLES30.glUniformMatrix3fv(loc(marbleProg, "uBody"), 1, false, body, 0)
         GLES30.glUniform1f(loc(marbleProg, "uGhost"), 0f)
+        val cb = cube
+        if (cb != null) { cb.bind(1); GLES30.glUniform1i(loc(marbleProg, "uCube"), 1); GLES30.glUniform1f(loc(marbleProg, "uCubeOn"), 1f) }
+        else GLES30.glUniform1f(loc(marbleProg, "uCubeOn"), 0f)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         sphere?.draw()
 
         // ghost where the labyrinth hides the marble
@@ -634,6 +790,27 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         sparks.draw(sparkProg, 1f)
         GLES30.glDepthMask(true)
 
+        // soft dust and puffs blend normally
+        GLES30.glUseProgram(smokeProg)
+        GLES30.glUniformMatrix4fv(loc(smokeProg, "uVP"), 1, false, vp, 0)
+        GLES30.glUniformMatrix4fv(loc(smokeProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(smokeProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        dust.draw(smokeProg, 1f)
+        val rnI = rain?.intensity ?: 0f
+        if (rnI > 0.02f) {
+            GLES30.glUseProgram(rainProg)
+            GLES30.glUniformMatrix4fv(loc(rainProg, "uVP"), 1, false, vp, 0)
+            GLES30.glUniform1f(loc(rainProg, "uTime"), time)
+            GLES30.glUniform1f(loc(rainProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
+            GLES30.glUniform1f(loc(rainProg, "uIntensity"), rnI)
+            GLES30.glBindVertexArray(rainVao[0])
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, RAIN_DROPS)
+            GLES30.glBindVertexArray(0)
+        }
+        GLES30.glDepthMask(true)
+
         GLES30.glDisable(GLES30.GL_BLEND)
         if (postOn) {
             pp.near = 0.1f; pp.far = 40f; pp.p00 = p00; pp.p11 = p11
@@ -650,11 +827,43 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
-    private fun drawHoles() {
+    private fun drawPuddles(vpm: FloatArray, cam: Vec3) {
+        val rn = rain ?: return
+        if (rn.cells.isEmpty() || rn.level.maxOrNull()?.let { it < 0.01f } != false) return
+        GLES30.glUseProgram(puddleProg)
+        GLES30.glUniformMatrix4fv(loc(puddleProg, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(puddleProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(puddleProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(puddleProg, "uTime"), time)
+        GLES30.glUniform1f(loc(puddleProg, "uDoorMode"), 0f)
+        GLES30.glUniform3f(loc(puddleProg, "uCam"), cam.x, cam.y, cam.z)
+        GLES30.glUniform3f(loc(puddleProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        levelUniform.fill(0f)
+        for (i in rn.level.indices) if (i < levelUniform.size) levelUniform[i] = rn.level[i]
+        GLES30.glUniform1fv(loc(puddleProg, "uLevel"), 24, levelUniform, 0)
+        for (i in rippleLocal.indices) {
+            val age = time - rippleStart[i]
+            val w = orient.rotate(rippleLocal[i])
+            ripUniform[i * 4] = w.x; ripUniform[i * 4 + 1] = w.y; ripUniform[i * 4 + 2] = w.z
+            ripUniform[i * 4 + 3] = if (age in 0f..2.4f) age else -1f
+        }
+        GLES30.glUniform4fv(loc(puddleProg, "uRip"), 32, ripUniform, 0)
+        GLES30.glUniform1fv(loc(puddleProg, "uRipA"), 32, rippleAmp, 0)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glPolygonOffset(-1.5f, -1.5f)
+        puddleMesh?.draw()
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(sceneProg)
+    }
+
+    private fun drawHoles(vpm: FloatArray) {
         val hz = hazards ?: return
         if (!hz.hasHoles) return
         GLES30.glUseProgram(holeProg)
-        GLES30.glUniformMatrix4fv(loc(holeProg, "uVP"), 1, false, vp, 0)
+        GLES30.glUniformMatrix4fv(loc(holeProg, "uVP"), 1, false, vpm, 0)
         GLES30.glUniformMatrix4fv(loc(holeProg, "uModel"), 1, false, model, 0)
         GLES30.glUniform1f(loc(holeProg, "uGrowT"), growT)
         GLES30.glUniform1f(loc(holeProg, "uTime"), time)
@@ -683,5 +892,5 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private fun loc(prog: Int, name: String): Int =
         locs.getOrPut("$prog:$name") { GLES30.glGetUniformLocation(prog, name) }
 
-    companion object { const val GRAVITY = 3.2f; const val HINT_SECONDS = 6f; const val HINT_COOLDOWN = 20f }
+    companion object { const val RAIN_DROPS = 900; const val GRAVITY = 3.2f; const val HINT_SECONDS = 6f; const val HINT_COOLDOWN = 20f }
 }

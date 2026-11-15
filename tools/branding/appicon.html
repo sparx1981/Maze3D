@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000">
+<script>
+// Rollabyrinth app icon: a maze-carved sphere with a golden thread and a glass marble (same art as loading sheet A).
+function rng(seed){let s=seed;return()=> (s=(s*1664525+1013904223)>>>0)/4294967296}
+function proj(la,lo,rot,tilt){const a=la*Math.PI/180,b=(lo+rot)*Math.PI/180;let x=Math.cos(a)*Math.sin(b),y=-Math.sin(a),z=Math.cos(a)*Math.cos(b);
+  const ct=Math.cos(tilt),st=Math.sin(tilt);return[x,y*ct-z*st,y*st+z*ct]}
+const R1=rng(7),segs=[];for(let i=0;i<14;i++)for(let j=0;j<28;j++){const la0=-80+160*i/14,la1=-80+160*(i+1)/14,lo0=360*j/28,lo1=360*(j+1)/28;if(R1()<.6)segs.push([la0,lo0,la0,lo1]);if(R1()<.55)segs.push([la0,lo0,la1,lo0])}
+/** mode: 'fg' transparent adaptive foreground (art inside the 66dp safe zone), 'full' with background, 'mono' white silhouette */
+window.render=(mode,S)=>{
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const cx=S/2,cy=S/2;
+  const scale=mode==='full'?0.36:0.285;           // sphere radius as a fraction of the canvas
+  const R=S*scale,rot=40,tilt=.42;
+  if(mode==='full'){
+    const bg=g.createRadialGradient(S*.42,S*.36,S*.05,S*.5,S*.5,S*.78);bg.addColorStop(0,'#223760');bg.addColorStop(1,'#05070d');
+    g.fillStyle=bg;g.fillRect(0,0,S,S);
+  }
+  if(mode!=='mono'){
+    const halo=g.createRadialGradient(cx,cy,R*.85,cx,cy,R*1.7);halo.addColorStop(0,'rgba(90,170,255,.30)');halo.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=halo;g.fillRect(0,0,S,S);
+    g.save();g.translate(cx,cy);
+    g.shadowColor='rgba(0,0,0,.5)';g.shadowBlur=S*.03;g.shadowOffsetY=S*.015;
+    const sg=g.createRadialGradient(-R*.35,-R*.4,R*.08,0,0,R);sg.addColorStop(0,'#4a7da0');sg.addColorStop(.55,'#17304a');sg.addColorStop(1,'#060c16');
+    g.fillStyle=sg;g.beginPath();g.arc(0,0,R,0,7);g.fill();g.shadowColor='transparent';
+    g.lineCap='round';g.lineWidth=Math.max(1,S*.0042);
+    for(const [la0,lo0,la1,lo1] of segs){const n=lo0!==lo1?4:2;g.beginPath();let on=false,zmax=-1;
+      for(let k=0;k<=n;k++){const f=k/n;const p=proj(la0+(la1-la0)*f,lo0+(lo1-lo0)*f,rot,tilt);if(p[2]>0){const X=p[0]*R,Y=p[1]*R;on?g.lineTo(X,Y):g.moveTo(X,Y);on=true;zmax=Math.max(zmax,p[2])}else on=false}
+      g.strokeStyle=`rgba(${160+60*zmax|0},${190+40*zmax|0},255,${.25+.6*zmax})`;g.stroke()}
+    // golden thread
+    const N=300,pts=[];for(let k=0;k<=N*.84;k++){const f=k/N;pts.push(proj(-78+156*f,f*1080,rot,tilt))}
+    for(const [w,a,col] of [[S*.024,.2,'255,190,80'],[S*.013,.5,'255,205,95'],[S*.007,1,'255,228,155']]){
+      g.lineWidth=w;g.lineCap='round';g.lineJoin='round';g.strokeStyle=`rgba(${col},${a})`;
+      g.beginPath();let on=false;
+      for(let k=0;k<pts.length;k++){const P=pts[k];if(P[2]>0.05){on?g.lineTo(P[0]*R,P[1]*R):g.moveTo(P[0]*R,P[1]*R);on=true}else on=false}
+      g.stroke()}
+    // glass marble at the thread's head
+    let head=pts[pts.length-1];for(let k=pts.length-1;k>0;k--){if(pts[k][2]>.35){head=pts[k];break}}
+    const mx=head[0]*R,my=head[1]*R,mr=S*.062;
+    g.shadowColor='rgba(0,0,0,.55)';g.shadowBlur=S*.02;g.shadowOffsetY=S*.01;
+    const m=g.createRadialGradient(mx-mr*.35,my-mr*.4,mr*.05,mx,my,mr);m.addColorStop(0,'#ffffff');m.addColorStop(.3,'#dce8f7');m.addColorStop(.7,'#5d7194');m.addColorStop(.9,'#1d2740');m.addColorStop(1,'#9db3d8');
+    g.fillStyle=m;g.beginPath();g.arc(mx,my,mr,0,7);g.fill();g.shadowColor='transparent';
+    g.fillStyle='rgba(255,255,255,.9)';g.beginPath();g.ellipse(mx-mr*.34,my-mr*.4,mr*.22,mr*.13,-.6,0,7);g.fill();
+    g.restore();
+  } else {
+    // monochrome (themed icon): sphere outline, spiral thread and marble in white
+    g.save();g.translate(cx,cy);g.strokeStyle='#fff';g.fillStyle='#fff';g.lineCap='round';
+    g.lineWidth=S*.022;g.beginPath();g.arc(0,0,R,0,7);g.stroke();
+    g.lineWidth=S*.016;g.beginPath();let first=true,head=null;
+    for(let k=0;k<=260;k++){const f=k/300;const p=proj(-78+156*f,f*1080,rot,tilt);if(p[2]>0){first?g.moveTo(p[0]*R,p[1]*R):g.lineTo(p[0]*R,p[1]*R);first=false;head=p}else first=true}
+    g.stroke();const mr=S*.06;g.beginPath();g.arc(head[0]*R,head[1]*R,mr,0,7);g.fill();g.restore();
+  }
+  return c.toDataURL('image/png');
+};
+document.title='ready';
+</script>

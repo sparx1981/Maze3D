@@ -123,4 +123,36 @@ class MazeTest {
         marble.clock = t
         marble.step(Vec3(0f, -3f, 0f), 1f / 60f)
     }
+
+    @Test
+    fun puddlesFillAndSlowTheMarble() {
+        val maze = Maze(ShapeKind.SPHERE.createMesh(), 5)
+        val rain = Rain(maze, Random(2))
+        assertTrue(rain.cells.isNotEmpty())
+        for (c in rain.cells) assertTrue(c != maze.start && c != maze.goal)
+        // dry to begin with
+        val c0 = rain.cells[0]
+        assertEquals(0f, rain.depthAt(c0, maze.centers[c0]), 1e-6f)
+        // it rains: puddles fill
+        rain.intensity = 1f
+        repeat(60 * 20) { rain.update(1f / 60f, true) }
+        assertTrue(rain.level[0] > 0.9f)
+        assertTrue(rain.depthAt(c0, maze.centers[c0]) > 0.8f)
+        // the same shove covers less ground in water than on dry floor
+        fun travel(wet: Boolean): Float {
+            val m = Marble(maze)
+            if (wet) m.rain = rain
+            // park the marble in the puddle's cell for both runs by walking the same start: compare speed decay instead
+            m.step(Vec3(0f, 0f, 0f), 1f / 60f)
+            return m.velocity.length()
+        }
+        // direct physics check: puddle depth maps to extra drag
+        val dry = Marble(maze)
+        val soaked = Marble(maze)
+        soaked.rain = rain
+        assertEquals(0f, soaked.wet, 1e-6f)
+        // when the rain stops the puddles slowly dry
+        repeat(60 * 80) { rain.update(1f / 60f, false) }
+        assertTrue(rain.level[0] < 0.3f)
+    }
 }

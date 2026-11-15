@@ -121,6 +121,7 @@ uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood,
 uniform float uRough;
 uniform float uMetal;
 uniform float uShadowOn;
+uniform float uWet;        // 0..1 rain wetness
 uniform float uAlpha;
 uniform float uTexel;
 uniform mat4 uLightVP;
@@ -165,10 +166,21 @@ vec2 weave(vec2 uv) {
     return vec2(mix(0.55 + 0.6 * fibre * (0.7 + 0.3 * flip), 0.85, fade), flip);
 }
 
+// Bump from a height field (world units) using screen-space derivatives (surface gradient method).
+vec3 bumpN(vec3 N, vec3 p, float h) {
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    float dhx = dFdx(h), dhy = dFdy(h);
+    vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+    float det = dot(dpx, r1);
+    vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
+    return normalize(abs(det) * N - grad);
+}
+
 void main() {
     vec3 N = normalize(vNrm);
     vec3 V = normalize(uCam - vWorld);
     vec3 albedo = pow(vCol, vec3(2.2));
+    float hgt = 0.0;
     float rough = uRough;
     float metal = uMetal;
     float coat = 0.0;
@@ -180,6 +192,7 @@ void main() {
         float tone = a.x * tw.x + b.x * tw.y + c.x * tw.z;
         float dir = a.y * tw.x + b.y * tw.y + c.y * tw.z;
         albedo *= tone * 0.9;
+        hgt = (tone - 0.85) * 0.0011;
         rough = 0.42 - 0.12 * dir;
         coat = 1.0;
     } else if (uMat == 2) {     // brushed metal
@@ -188,6 +201,7 @@ void main() {
         float n3 = vnoise(vec2(P.z * 8.0 + P.y * 5.0, P.x * 260.0));
         float n = n1 * tw.x + n2 * tw.y + n3 * tw.z;
         albedo *= 0.88 + 0.24 * n;
+        hgt = (n - 0.5) * 0.00035;
         rough = uRough + 0.10 * (n - 0.5);
     } else if (uMat == 3) {     // wood grain
         float g1 = vnoise(vec2(P.y * 70.0, P.z * 5.0)) + 0.5 * vnoise(vec2(P.y * 230.0, P.z * 14.0));
@@ -196,6 +210,7 @@ void main() {
         float g = (g1 * tw.x + g2 * tw.y + g3 * tw.z) / 1.5;
         float ring = 0.5 + 0.5 * sin(g * 28.0);
         albedo *= 0.70 + 0.55 * mix(g, ring, 0.45);
+        hgt = (mix(g, ring, 0.45) - 0.5) * 0.0007;
         rough = 0.40 + 0.12 * g;
         coat = 0.6;
     } else if (uMat == 0) {     // lacquer / enamel
@@ -209,6 +224,12 @@ void main() {
         return;
     }
 
+    if (uMat >= 1 && uMat <= 3) N = bumpN(N, vWorld, hgt);
+    if (uWet > 0.0 && uMat != 4) {                         // rain: darker, glossier surfaces
+        albedo *= mix(1.0, 0.7, uWet);
+        rough = mix(rough, rough * 0.45, uWet);
+        coat = max(coat, uWet * 0.9);
+    }
     float NoV = max(dot(N, V), 1e-3);
     float a = max(rough * rough, 0.015);
     vec3 F0 = mix(vec3(0.04), albedo, metal);
@@ -270,11 +291,23 @@ uniform vec3 uCam;
 uniform vec3 uAccent;
 uniform mat3 uBody;
 uniform float uGhost;
+uniform samplerCube uCube;
+uniform float uCubeOn;
 in vec3 vWorld;
 in vec3 vNrmW;
 in vec3 vNrmL;
 out vec4 outColor;
 """ + COMMON + """
+// Studio lighting blended with the live reflection of the maze around the marble.
+vec3 surroundings(vec3 d, float rough) {
+    vec3 st = envMap(d, rough);
+    if (uCubeOn > 0.5) {
+        vec4 c = texture(uCube, d);
+        st = mix(st, pow(c.rgb, vec3(2.2)), c.a);
+    }
+    return st;
+}
+
 void main() {
     vec3 N = normalize(vNrmW);
     vec3 V = normalize(uCam - vWorld);
@@ -285,19 +318,118 @@ void main() {
         outColor = vec4(uAccent * (0.5 + 0.8 * rim), 0.28 + 0.4 * rim);
         return;
     }
-    vec3 b = uBody * normalize(vNrmL);
-    // ribbons through the glass make the roll visible
+    // glass sphere: reflection + refraction of the maze behind it, with ribbons floating inside
+    vec3 R = reflect(-V, N);
+    vec3 T = refract(-V, N, 1.0 / 1.5);
+    float F = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+    vec3 b = uBody * normalize(vNrmL + T * 0.7);
     float s = sin(b.x * 7.0 + sin(b.y * 5.0 + b.z * 3.0) * 1.6);
     float band = smoothstep(0.55, 0.8, s) * (1.0 - smoothstep(0.88, 0.97, s));
-    vec3 albedo = mix(vec3(0.93, 0.95, 0.98), pow(uAccent, vec3(2.2)), band * 0.9);
-    float rough = 0.05;
-    vec3 F0 = albedo;
-    vec3 R = reflect(-V, N);
-    vec3 col = envMap(R, rough) * envBRDF(F0, rough, NoV);
-    col += irradiance(N) * albedo * 0.05;
+    vec3 acc = pow(uAccent, vec3(2.2));
+    vec3 refr = surroundings(T, 0.12) * mix(vec3(0.5, 0.62, 0.86), acc, 0.12) * 0.85;
+    refr *= mix(1.0, 0.3, pow(1.0 - NoV, 1.6));                 // thicker glass toward the rim
+    refr = mix(refr, acc * 1.6 + refr * 0.25, band * 0.85);
+    vec3 refl = surroundings(R, 0.03);
+    vec3 col = refr * (1.0 - F) + refl * (0.18 + 0.82 * F);
     vec3 H = normalize(uLightDir + V);
-    col += pow(max(dot(N, H), 0.0), 400.0) * vec3(6.0);
+    col += pow(max(dot(N, H), 0.0), 500.0) * vec3(7.0);
+    col += irradiance(N) * 0.03;
     outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
+}
+"""
+
+    /** Water puddle: uv in aCol.xy, puddle id in aCol.z. Ripples (world-space centres with age) bend the surface normal. */
+    const val PUDDLE_FS = """#version 300 es
+precision highp float;
+uniform vec3 uCam;
+uniform float uTime;
+uniform float uLevel[24];
+uniform vec4 uRip[32];      // xyz = world position, w = age in seconds (< 0 = unused)
+uniform float uRipA[32];    // amplitude
+in vec3 vWorld;
+in vec3 vNrm;
+in vec3 vCol;
+out vec4 outColor;
+""" + COMMON + """
+void main() {
+    int id = int(vCol.z + 0.5);
+    float lv = uLevel[id];
+    vec2 uv = vCol.xy;
+    float r = length(uv);
+    float en = vnoise(uv * 2.4 + float(id) * 7.31);
+    float R = sqrt(lv) * (0.88 + 0.22 * en);
+    float fw = fwidth(r) * 1.5;
+    float inside = 1.0 - smoothstep(R - 0.05 - fw, R + fw, r);
+    if (lv < 0.01 || inside < 0.01) discard;
+
+    vec3 N = normalize(vNrm);
+    vec3 V = normalize(uCam - vWorld);
+    // expanding ring ripples
+    vec3 tilt = vec3(0.0);
+    float hsum = 0.0;
+    const float WL = 0.0125;       // wavelength in world units
+    const float SPD = 0.105;       // ring speed
+    for (int i = 0; i < 32; i++) {
+        float age = uRip[i].w;
+        if (age < 0.0) continue;
+        vec3 dv = vWorld - uRip[i].xyz;
+        dv -= N * dot(dv, N);
+        float d = length(dv);
+        float front = SPD * age;
+        float x = (d - front) / WL;
+        float win = exp(-x * x * 0.18) * exp(-age * 1.35) * uRipA[i];
+        float ph = 6.2831853 * x;
+        hsum += win * sin(ph);
+        tilt += (dv / max(d, 1e-5)) * (win * cos(ph));
+    }
+    N = normalize(N - tilt * 0.55);
+
+    float NoV = max(dot(N, V), 1e-3);
+    vec3 Rf = reflect(-V, N);
+    float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+    vec3 deep = vec3(0.012, 0.02, 0.03);                      // dark water over the floor
+    float Fv = 0.30 + 0.70 * F;                                // water mirrors the studio more than plain Fresnel says
+    vec3 col = deep * (1.0 - Fv) + envMap(Rf, 0.015) * Fv;
+    vec3 H = normalize(uLightDir + V);
+    col += pow(max(dot(N, H), 0.0), 900.0) * vec3(9.0, 8.6, 8.0);
+    col += max(hsum, 0.0) * 0.08;                              // ring crests catch light
+    float rim = smoothstep(R - 0.22, R, r);
+    col *= 1.0 - 0.35 * rim;                                   // wet edge
+    col += vec3(0.35, 0.45, 0.55) * (1.0 - smoothstep(0.0, 0.07, abs(r - R + 0.03))) * 0.5;   // meniscus glint
+    float alpha = inside * mix(0.9, 0.7, rim);
+    outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
+}
+"""
+
+    /** Falling rain: a static cloud of seeds animated entirely in the vertex shader. */
+    const val RAIN_VS = """#version 300 es
+uniform mat4 uVP;
+uniform float uTime;
+uniform float uScale;
+uniform float uIntensity;
+layout(location=0) in vec4 aSeed;
+out float vA;
+void main() {
+    float speed = 3.4 + 1.6 * aSeed.w;
+    float y = fract(aSeed.y - uTime * speed * 0.28);
+    vec3 p = vec3((aSeed.x - 0.5) * 3.8, (y - 0.5) * 4.2, (aSeed.z - 0.5) * 3.0 + 0.4);
+    p.x += (y - 0.5) * 0.25;                       // slight slant
+    vec4 clip = uVP * vec4(p, 1.0);
+    gl_Position = clip;
+    float vis = step(aSeed.w * 0.9, uIntensity);   // intensity thins the shower out
+    gl_PointSize = vis * max((0.085 + 0.06 * aSeed.w) * uScale / clip.w, 2.0);
+    vA = (0.25 + 0.55 * aSeed.w) * uIntensity * vis;
+}
+"""
+
+    const val RAIN_FS = """#version 300 es
+precision mediump float;
+in float vA;
+out vec4 outColor;
+void main() {
+    vec2 c = gl_PointCoord - 0.5;
+    float streak = exp(-c.x * c.x * 900.0) * smoothstep(0.5, 0.18, abs(c.y));
+    outColor = vec4(vec3(0.72, 0.82, 1.0) * 0.9, streak * vA);
 }
 """
 

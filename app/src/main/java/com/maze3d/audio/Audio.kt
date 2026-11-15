@@ -20,6 +20,12 @@ interface Audio {
 
     /** Cloud ambience level 0..1. */
     fun wind(amount: Float)
+
+    /** Rain ambience level 0..1. */
+    fun rain(amount: Float)
+
+    /** Marble ploughing through a puddle. */
+    fun splash(volume: Float, pan: Float)
 }
 
 object NoAudio : Audio {
@@ -35,4 +41,6 @@ object NoAudio : Audio {
     override fun levelGrow() {}
     override fun levelSink() {}
     override fun wind(amount: Float) {}
+    override fun rain(amount: Float) {}
+    override fun splash(volume: Float, pan: Float) {}
 }

@@ -200,6 +200,38 @@ def wind():
     add("sfx_wind", loopify(y, xf), peak=0.5, loop=True)
 wind()
 
+def rain_loop():
+    d = 8.0; xf = int(1.0 * SR); n = int(d * SR) + xf
+    t = np.arange(n) / SR
+    wash = bp(noise(n / SR), 1800, 9500, 2) * (0.7 + 0.3 * np.sin(2 * np.pi * 0.11 * t + 0.6))
+    body = bp(noise(n / SR), 400, 1600, 2) * 0.35
+    drops = np.zeros(n)
+    r = np.random.default_rng(55)
+    for _ in range(int(d * 60)):
+        at = r.uniform(0, d); f0 = r.uniform(2500, 7500)
+        k = int(r.uniform(0.003, 0.012) * SR)
+        click = np.sin(2 * np.pi * f0 * np.arange(k) / SR) * edecay(k, k / SR / 3) * r.uniform(0.15, 0.7)
+        place(drops, click, at)
+    rumble = lp(noise(n / SR), 140, 2) * 0.25
+    x = wash * 0.8 + body + drops * 0.5 + rumble
+    add("sfx_rain", loopify(x, xf), peak=0.55, loop=True)
+rain_loop()
+
+def splash(i):
+    r = np.random.default_rng(700 + i)
+    d = 0.45; n = int(d * SR); t = T(d)
+    burst = bp(noise(d), 700, 3800, 2) * edecay(n, 0.07) * np.minimum(t / 0.004, 1)
+    bloop = glide(r.uniform(420, 520), r.uniform(150, 210), 0.14) * edecay(int(0.14 * SR), 0.05)
+    x = burst * 0.9
+    place(x, bloop, 0.012, 0.55)
+    for k in range(r.integers(3, 6)):
+        f = r.uniform(900, 2200)
+        dr = glide(f, f * 0.6, 0.05) * edecay(int(0.05 * SR), 0.012)
+        place(x, dr, r.uniform(0.05, 0.3), r.uniform(0.15, 0.4))
+    x = reverb(x, 0.25, 0.1)
+    add(f"sfx_splash_{i}", fade(trim(x), 1, 25), peak=0.55)
+for i in range(2): splash(i)
+
 # --- doors
 def door_open():
     d = 0.7; n = int(d * SR); t = T(d)

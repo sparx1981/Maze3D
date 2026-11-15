@@ -29,6 +29,13 @@ class Marble(private val maze: Maze) {
         set(v) { field = v; buildDoorLists() }
     var clock = 0f
 
+    /** Puddles slow the marble when set. */
+    var rain: Rain? = null
+
+    /** Depth of puddle water the marble is rolling through right now (0..1), for effects and sound. */
+    var wet = 0f
+        private set
+
     /** Where the strongest impact of the last [step] happened (marble surface point) and the wall's push direction. */
     var impactPos: Vec3 = Vec3.ZERO
         private set
@@ -90,8 +97,17 @@ class Marble(private val maze: Maze) {
         // 5/7 for a solid ball rolling without slipping.
         velocity += gt * (0.714f * h)
         velocity -= nrm * (velocity dot nrm)
-        velocity *= exp(-0.5f * h)
-        val maxSpeed = maze.cellSize * 6f
+        val rn = rain
+        wet = 0f
+        var drag = 0.5f
+        var speedCap = 6f
+        if (rn != null) {
+            wet = rn.depthAt(cell, position - nrm * radius)
+            drag += wet * 5.5f            // thick water: strong viscous drag
+            speedCap -= wet * 3.2f
+        }
+        velocity *= exp(-drag * h)
+        val maxSpeed = maze.cellSize * speedCap
         val sp = velocity.length()
         if (sp > maxSpeed) velocity *= maxSpeed / sp
 

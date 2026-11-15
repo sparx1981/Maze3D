@@ -121,6 +121,32 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         }
     }
 
+    /** One quad per puddle; the shader draws the water from uv (aCol.xy) and the puddle id (aCol.z). */
+    fun puddles(cells: IntArray, radius: Float): MeshBuilder {
+        val mb = MeshBuilder()
+        val ext = 1.3f
+        val g = 8                                         // grid so the water follows the curved floor
+        for (i in cells.indices) {
+            val c = cells[i]
+            val ctr = maze.centers[c]
+            val n0 = surface.normal(ctr)
+            var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
+            t1 = (t1 - n0 * (t1 dot n0)).normalized()
+            val t2 = n0 cross t1
+            val ids = IntArray((g + 1) * (g + 1))
+            for (a in 0..g) for (b in 0..g) {
+                val u = (a / g.toFloat() * 2f - 1f)
+                val v = (b / g.toFloat() * 2f - 1f)
+                val p = surface.project(ctr + (t1 * u + t2 * v) * (radius * ext))
+                val n = surface.normal(p)
+                ids[a * (g + 1) + b] = mb.vertex(p + n * (cs * 0.012f), n, Vec3(u * ext, v * ext, i.toFloat()))
+            }
+            for (a in 0 until g) for (b in 0 until g)
+                mb.quad(ids[a * (g + 1) + b], ids[(a + 1) * (g + 1) + b], ids[(a + 1) * (g + 1) + b + 1], ids[a * (g + 1) + b + 1])
+        }
+        return mb
+    }
+
     /** Floor holes: a quad per hole; the fragment shader draws the animated opening from uv in aCol.xy, phase in aCol.z. */
     fun holes(cells: IntArray, phases: FloatArray, radius: Float): MeshBuilder {
         val mb = MeshBuilder()

@@ -39,6 +39,9 @@ class SoundEngine(private val ctx: Context) : Audio {
     private var rollVolHard = 0f
     private var rollVolWood = 0f
     private var windVol = 0f
+    private var rainStream = 0
+    private var rainVol = 0f
+    private var lastSplashAt = 0L
     private var paused = false
 
     private var music: MediaPlayer? = null
@@ -55,7 +58,7 @@ class SoundEngine(private val ctx: Context) : Audio {
             "sfx_impact_h0", "sfx_impact_h1", "sfx_impact_h2", "sfx_spark_0", "sfx_spark_1",
             "sfx_roll_hard", "sfx_roll_wood", "sfx_wind", "sfx_door_open", "sfx_door_close",
             "sfx_hole_open", "sfx_hole_close", "sfx_hole_fall", "sfx_respawn", "sfx_goal",
-            "sfx_level_grow", "sfx_level_sink", "sfx_ui_click", "sfx_ui_on", "sfx_ui_off"
+            "sfx_level_grow", "sfx_level_sink", "sfx_ui_click", "sfx_ui_on", "sfx_ui_off", "sfx_rain", "sfx_splash_0", "sfx_splash_1"
         )
         for (n in names) {
             val res = ctx.resources.getIdentifier(n, "raw", ctx.packageName)
@@ -124,6 +127,20 @@ class SoundEngine(private val ctx: Context) : Audio {
         if (windStream == 0) { if (amount > 0.02f && ready("sfx_wind") != null) windStream = loop("sfx_wind") else return }
         windVol += (amount.coerceIn(0f, 1f) * 0.55f - windVol) * 0.05f
         pool.setVolume(windStream, windVol, windVol)
+    }
+
+    override fun rain(amount: Float) {
+        if (!sfxOn || paused) { if (rainStream != 0) pool.setVolume(rainStream, 0f, 0f); rainVol = 0f; return }
+        if (rainStream == 0) { if (amount > 0.02f && ready("sfx_rain") != null) rainStream = loop("sfx_rain") else return }
+        rainVol += (amount.coerceIn(0f, 1f) * 0.7f - rainVol) * 0.04f
+        pool.setVolume(rainStream, rainVol, rainVol)
+    }
+
+    override fun splash(volume: Float, pan: Float) {
+        val now = System.nanoTime()
+        if (now - lastSplashAt < 160_000_000L) return
+        lastSplashAt = now
+        play("sfx_splash_${Random.nextInt(2)}", volume.coerceIn(0.15f, 0.9f), pan, jitter(0.1f))
     }
 
     private fun loop(name: String): Int {
@@ -197,6 +214,7 @@ class SoundEngine(private val ctx: Context) : Audio {
         paused = true
         silenceRolls()
         if (windStream != 0) pool.setVolume(windStream, 0f, 0f)
+        if (rainStream != 0) pool.setVolume(rainStream, 0f, 0f)
         pool.autoPause()
         handler.post { music?.pause() }
     }
