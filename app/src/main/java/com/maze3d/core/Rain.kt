@@ -14,7 +14,7 @@ class Rain(private val maze: Maze, rnd: Random) {
     private val index = IntArray(maze.cellCount) { -1 }
 
     /** Largest puddle radius in world units (reached at level 1). */
-    val maxRadius = maze.cellSize * 0.55f
+    val maxRadius = maze.cellSize * 0.62f
 
     /** 0..1 how hard it is raining right now. */
     var intensity = 0f
@@ -40,10 +40,20 @@ class Rain(private val maze: Maze, rnd: Random) {
         cells.forEachIndexed { i, c -> index[c] = i }
     }
 
-    fun update(dt: Float, raining: Boolean) {
+    /**
+     * [up] is, per puddle, how far that spot faces upward right now (0 = vertical or hanging, 1 = flat on top).
+     * Water collects where the surface is flat and runs off where it is steep, so tilting the piece moves the puddles.
+     */
+    fun update(dt: Float, raining: Boolean, up: FloatArray? = null) {
         for (i in level.indices) {
-            level[i] = if (raining) (level[i] + fillRate[i] * intensity * dt).coerceAtMost(1f)
-            else (level[i] - 0.02f * dt).coerceAtLeast(0f)
+            val u = up?.getOrNull(i) ?: 1f
+            val flat = (((u - 0.25f) / 0.75f).coerceIn(0f, 1f)).let { it * sqrt(it) }
+            val cap = 0.3f + 0.7f * flat
+            var l = level[i]
+            if (raining) l += fillRate[i] * intensity * flat * dt
+            else l -= 0.02f * dt
+            l -= (1f - flat) * 0.07f * dt                 // run-off from slopes
+            level[i] = l.coerceIn(0f, 1f).coerceAtMost(maxOf(cap, 0f))
         }
     }
 

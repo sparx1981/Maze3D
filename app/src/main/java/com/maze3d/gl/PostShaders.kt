@@ -94,15 +94,31 @@ uniform float uDensity;    // 0.5 sparse .. 1.0 overcast
 uniform vec2 uWind;
 uniform vec3 uTint;        // base cloud colour (bright)
 uniform vec3 uShade;       // shadowed cloud colour
-float h(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+// Gradient noise on an integer hash, rotated between octaves: no visible lattice or axis-aligned blocks.
+uint hashU(uvec2 p) {
+    uvec3 q = uvec3(p, p.x ^ p.y) * uvec3(1597334673u, 3812015801u, 2798796415u);
+    uint h = (q.x ^ q.y ^ q.z) * 1664525u + 1013904223u;
+    h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+    return h;
+}
+vec2 grad(vec2 cell) {
+    uint h = hashU(uvec2(ivec2(cell) + ivec2(32768)));
+    float a = float(h & 65535u) * (6.2831853 / 65535.0);
+    return vec2(cos(a), sin(a));
+}
 float n(vec2 p) {
     vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = dot(grad(i), f);
+    float b = dot(grad(i + vec2(1, 0)), f - vec2(1, 0));
+    float c = dot(grad(i + vec2(0, 1)), f - vec2(0, 1));
+    float d = dot(grad(i + vec2(1, 1)), f - vec2(1, 1));
+    return 0.5 + 0.7 * mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 float fbm(vec2 p) {
     float s = 0.0, a = 0.5;
-    for (int i = 0; i < 6; i++) { s += a * n(p); p = p * 2.02 + vec2(1.7, 9.2); a *= 0.5; }
+    mat2 R = mat2(0.80, -0.60, 0.60, 0.80);
+    for (int i = 0; i < 6; i++) { s += a * n(p); p = R * p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
     return s;
 }
 // density of one layer at p; coverage threshold adapts to uDensity so thin days still have clear banks

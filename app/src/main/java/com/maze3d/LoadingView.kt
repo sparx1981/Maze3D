@@ -1,6 +1,5 @@
 package com.maze3d
 
-import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -11,7 +10,6 @@ import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.view.View
-import android.view.animation.LinearInterpolator
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -24,13 +22,10 @@ import kotlin.math.sin
  */
 class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", private val subtitle: String = "3D MARBLE MAZE") : View(context) {
 
+    /** Animation clock in seconds. Uses the wall clock, so it still plays at full length when the system's animation scale is off. */
     private var t = 0f
-    private val anim = ValueAnimator.ofFloat(0f, 100f).apply {
-        duration = 100_000L
-        interpolator = LinearInterpolator()
-        addUpdateListener { t = (it.animatedValue as Float); invalidate() }
-    }
     private var startNanos = 0L
+    private var running = false
 
     // maze-like lattice drawn on the sphere: (lat0, lon0, lat1, lon1) in degrees
     private val segs: Array<FloatArray>
@@ -59,8 +54,8 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
     /** Seconds the animation has been running. */
     val seconds get() = t
 
-    override fun onAttachedToWindow() { super.onAttachedToWindow(); startNanos = System.nanoTime(); anim.start() }
-    override fun onDetachedFromWindow() { anim.cancel(); super.onDetachedFromWindow() }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); startNanos = System.nanoTime(); running = true; postInvalidateOnAnimation() }
+    override fun onDetachedFromWindow() { running = false; super.onDetachedFromWindow() }
 
     private fun ease(x: Float): Float { val c = x.coerceIn(0f, 1f); return c * c * (3 - 2 * c) }
     private fun easeOut(x: Float): Float { val c = x.coerceIn(0f, 1f); return 1 - (1 - c) * (1 - c) * (1 - c) }
@@ -73,6 +68,8 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
     }
 
     override fun onDraw(c: Canvas) {
+        t = (System.nanoTime() - startNanos) / 1e9f
+        if (running) postInvalidateOnAnimation()
         val w = width.toFloat(); val h = height.toFloat()
         // background
         p.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(16, 26, 51), Color.rgb(4, 6, 12), Shader.TileMode.CLAMP)

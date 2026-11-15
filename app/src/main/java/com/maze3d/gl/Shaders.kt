@@ -343,6 +343,7 @@ void main() {
 precision highp float;
 uniform vec3 uCam;
 uniform float uTime;
+uniform float uRain;
 uniform float uLevel[24];
 uniform vec4 uRip[32];      // xyz = world position, w = age in seconds (< 0 = unused)
 uniform float uRipA[32];    // amplitude
@@ -351,85 +352,149 @@ in vec3 vNrm;
 in vec3 vCol;
 out vec4 outColor;
 """ + COMMON + """
+// Drizzle: a lattice of tiny rings that keep appearing and fading across the surface (uv space).
+vec2 drizzle(vec2 uv, float seed, float t) {
+    vec2 g = uv * 5.0, ip = floor(g), fp = fract(g);
+    vec2 tilt = vec2(0.0);
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 cell = ip + vec2(float(i), float(j));
+        float r0 = hash21(cell + seed * 13.7);
+        vec2 ctr = vec2(hash21(cell * 1.7 + 3.1 + seed), hash21(cell * 2.3 + 9.7 + seed));
+        float ph = fract(t * 0.7 + r0);
+        vec2 dv = fp - vec2(float(i), float(j)) - ctr;
+        float d = length(dv);
+        float x = (d - ph * 0.55) / 0.07;
+        float w = exp(-x * x) * (1.0 - ph) * (1.0 - ph) * step(0.35, hash21(cell * 3.9 + seed * 5.0));
+        tilt += dv / max(d, 1e-4) * w * cos(6.2831853 * x * 0.5);
+    }
+    return tilt;
+}
+
 void main() {
     int id = int(vCol.z + 0.5);
     float lv = uLevel[id];
     vec2 uv = vCol.xy;
     float r = length(uv);
-    float en = vnoise(uv * 2.4 + float(id) * 7.31);
-    float R = sqrt(lv) * (0.88 + 0.22 * en);
+    // irregular, organic outline: two octaves of noise bend the radius
+    float ang = atan(uv.y, uv.x);
+    float en = 0.6 * vnoise(vec2(ang * 1.7 + float(id) * 5.3, 1.3)) + 0.4 * vnoise(vec2(ang * 4.1, float(id) * 2.9));
+    float R = sqrt(lv) * (0.9 + 0.26 * en);
     float fw = fwidth(r) * 1.5;
     float inside = 1.0 - smoothstep(R - 0.05 - fw, R + fw, r);
-    if (lv < 0.01 || inside < 0.01) discard;
+    // damp halo around the puddle where the floor is wet but not flooded
+    float halo = (1.0 - smoothstep(R, R + 0.45, r)) * (1.0 - inside) * 0.38 * smoothstep(0.02, 0.25, lv);
+    if (lv < 0.01 || (inside < 0.01 && halo < 0.01)) discard;
 
     vec3 N = normalize(vNrm);
     vec3 V = normalize(uCam - vWorld);
-    // expanding ring ripples
+    if (inside < 0.01) { outColor = vec4(0.0, 0.0, 0.0, halo); return; }
+
+    // water lies flat: blend the surface normal toward world-up so slopes don't tilt the reflection too much
+    N = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.35));
+
+    // expanding ring ripples from drops and the marble
     vec3 tilt = vec3(0.0);
     float hsum = 0.0;
-    const float WL = 0.0125;       // wavelength in world units
-    const float SPD = 0.105;       // ring speed
+    const float WL = 0.022;        // wavelength in world units
+    const float SPD = 0.15;        // ring speed
     for (int i = 0; i < 32; i++) {
         float age = uRip[i].w;
         if (age < 0.0) continue;
         vec3 dv = vWorld - uRip[i].xyz;
         dv -= N * dot(dv, N);
         float d = length(dv);
-        float front = SPD * age;
-        float x = (d - front) / WL;
-        float win = exp(-x * x * 0.18) * exp(-age * 1.35) * uRipA[i];
-        float ph = 6.2831853 * x;
-        hsum += win * sin(ph);
-        tilt += (dv / max(d, 1e-5)) * (win * cos(ph));
+        float x = (d - SPD * age) / WL;
+        float win = exp(-x * x * 0.14) * exp(-age * 1.15) * uRipA[i];
+        float phs = 6.2831853 * x;
+        hsum += win * sin(phs);
+        tilt += (dv / max(d, 1e-5)) * (win * cos(phs));
     }
-    N = normalize(N - tilt * 0.55);
+    // drizzle micro-ripples, mapped from uv space to the world through screen derivatives
+    if (uRain > 0.05) {
+        vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
+        vec2 ux = dFdx(uv), uy = dFdy(uv);
+        float det = ux.x * uy.y - ux.y * uy.x;
+        if (abs(det) > 1e-9) {
+            vec3 Tu = normalize((dpx * uy.y - dpy * ux.y) / det);
+            vec3 Tv = normalize((dpy * ux.x - dpx * uy.x) / det);
+            vec2 g = drizzle(uv, float(id), uTime) * uRain;
+            tilt += (Tu * g.x + Tv * g.y) * 0.05;
+        }
+    }
+    N = normalize(N - tilt * 0.7);
 
     float NoV = max(dot(N, V), 1e-3);
     vec3 Rf = reflect(-V, N);
     float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-    vec3 deep = vec3(0.012, 0.02, 0.03);                      // dark water over the floor
-    float Fv = 0.30 + 0.70 * F;                                // water mirrors the studio more than plain Fresnel says
-    vec3 col = deep * (1.0 - Fv) + envMap(Rf, 0.015) * Fv;
+    float Fv = 0.10 + 0.90 * F;
+    // water body is darker toward the middle (depth) and lighter at the shallow rim
+    float rim = smoothstep(R - 0.30, R, r);
+    vec3 deep = mix(vec3(0.020, 0.034, 0.048), vec3(0.07, 0.10, 0.125), rim);
+    vec3 col = deep * (1.0 - Fv) + envMap(Rf, 0.012) * vec3(0.50, 0.56, 0.66) * Fv;
     vec3 H = normalize(uLightDir + V);
-    col += pow(max(dot(N, H), 0.0), 900.0) * vec3(9.0, 8.6, 8.0);
-    col += max(hsum, 0.0) * 0.08;                              // ring crests catch light
-    float rim = smoothstep(R - 0.22, R, r);
-    col *= 1.0 - 0.35 * rim;                                   // wet edge
-    col += vec3(0.35, 0.45, 0.55) * (1.0 - smoothstep(0.0, 0.07, abs(r - R + 0.03))) * 0.5;   // meniscus glint
-    float alpha = inside * mix(0.9, 0.7, rim);
-    outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
+    col += pow(max(dot(N, H), 0.0), 1200.0) * vec3(11.0, 10.4, 9.6);
+    col += max(hsum, 0.0) * 0.10;                              // ring crests catch light
+    col += vec3(0.30, 0.40, 0.50) * (1.0 - smoothstep(0.0, 0.06, abs(r - R + 0.03))) * 0.55;   // meniscus glint
+    float alpha = inside * mix(0.94, 0.78, rim);
+    outColor = vec4(finish(col, gl_FragCoord.xy), max(alpha, halo));
 }
 """
 
-    /** Falling rain: a static cloud of seeds animated entirely in the vertex shader. */
+    /**
+     * Falling rain as instanced screen-aligned streaks. Drops are spread through the camera's view frustum and fall
+     * away from the camera, down and toward the maze, so they converge in perspective instead of dropping straight down.
+     */
     const val RAIN_VS = """#version 300 es
 uniform mat4 uVP;
 uniform float uTime;
-uniform float uScale;
 uniform float uIntensity;
+uniform vec2 uViewport;     // render target size in pixels
+uniform float uWidthPx;
+uniform float uCamZ;
+uniform vec2 uTan;          // tan(half fov) in x and y
 layout(location=0) in vec4 aSeed;
 out float vA;
+out vec2 vC;
 void main() {
-    float speed = 3.4 + 1.6 * aSeed.w;
-    float y = fract(aSeed.y - uTime * speed * 0.28);
-    vec3 p = vec3((aSeed.x - 0.5) * 3.8, (y - 0.5) * 4.2, (aSeed.z - 0.5) * 3.0 + 0.4);
-    p.x += (y - 0.5) * 0.25;                       // slight slant
-    vec4 clip = uVP * vec4(p, 1.0);
-    gl_Position = clip;
-    float vis = step(aSeed.w * 0.9, uIntensity);   // intensity thins the shower out
-    gl_PointSize = vis * max((0.085 + 0.06 * aSeed.w) * uScale / clip.w, 2.0);
-    vA = (0.25 + 0.55 * aSeed.w) * uIntensity * vis;
+    const vec2 CORNERS[6] = vec2[6](vec2(0.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(0.0, -1.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
+    vec2 c = CORNERS[gl_VertexID];
+    vec3 D = normalize(vec3(0.0, -0.55, -1.0));            // away from the camera and downward
+    float depth = 0.9 + aSeed.w * (uCamZ + 1.1);          // distance from the camera
+    vec3 base = vec3((aSeed.x * 2.0 - 1.0) * depth * uTan.x * 1.15,
+                     (aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + 0.35 * depth * 0.2,
+                     uCamZ - depth);
+    float ph = fract(aSeed.z - uTime * (0.55 + 0.25 * aSeed.w));
+    float travel = ph * 1.25;
+    vec3 head = base + D * travel;
+    vec3 tail = head - D * (0.09 + 0.12 * (1.0 - aSeed.w));
+    vec4 ch = uVP * vec4(head, 1.0);
+    vec4 ct = uVP * vec4(tail, 1.0);
+    vec2 sh = (ch.xy / ch.w) * uViewport * 0.5;
+    vec2 st = (ct.xy / ct.w) * uViewport * 0.5;
+    vec2 dir = sh - st;
+    float len = length(dir);
+    dir = len > 1e-4 ? dir / len : vec2(0.0, -1.0);
+    vec2 perp = vec2(-dir.y, dir.x);
+    float wpx = uWidthPx * clamp(3.0 / depth, 0.45, 1.8);
+    vec4 pos = mix(ct, ch, c.x);
+    pos.xy += perp * c.y * wpx / uViewport * 2.0 * pos.w * 0.5;
+    gl_Position = pos;
+    float fadeIn = smoothstep(0.0, 0.12, ph) * smoothstep(1.0, 0.8, ph);
+    float vis = step(aSeed.w * 0.9, uIntensity);
+    vA = (0.22 + 0.5 * (1.0 - aSeed.w)) * uIntensity * vis * fadeIn;
+    vC = c;
 }
 """
 
     const val RAIN_FS = """#version 300 es
 precision mediump float;
 in float vA;
+in vec2 vC;
 out vec4 outColor;
 void main() {
-    vec2 c = gl_PointCoord - 0.5;
-    float streak = exp(-c.x * c.x * 900.0) * smoothstep(0.5, 0.18, abs(c.y));
-    outColor = vec4(vec3(0.72, 0.82, 1.0) * 0.9, streak * vA);
+    float across = 1.0 - vC.y * vC.y;
+    float along = smoothstep(0.0, 0.35, vC.x) * (0.5 + 0.5 * vC.x);
+    outColor = vec4(vec3(0.74, 0.84, 1.0), across * across * along * vA * 1.0);
 }
 """
 

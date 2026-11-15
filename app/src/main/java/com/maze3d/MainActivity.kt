@@ -80,13 +80,22 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         h.post(object : Runnable {
             override fun run() {
                 val lv = loading ?: return
-                if (rendererReady && lv.seconds >= 2.9f) {
-                    lv.animate().alpha(0f).setDuration(450).withEndAction { (lv.parent as? android.view.ViewGroup)?.removeView(lv); loading = null }.start()
-                } else h.postDelayed(this, 80)
+                val fadeStart = 3.2f
+                if (rendererReady && lv.seconds >= fadeStart) {
+                    val k = ((lv.seconds - fadeStart) / 0.5f).coerceIn(0f, 1f)
+                    lv.alpha = 1f - k
+                    if (k >= 1f) { (lv.parent as? android.view.ViewGroup)?.removeView(lv); loading = null; return }
+                }
+                h.postDelayed(this, 16)
             }
         })
+        if (Build.VERSION.SDK_INT >= 28) window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        @Suppress("DEPRECATION")
         root.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
     }
 
     private fun dp(v: Float) = (v * resources.displayMetrics.density).toInt()

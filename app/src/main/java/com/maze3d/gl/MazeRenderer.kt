@@ -74,6 +74,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var rippleNext = 0
     private val ripUniform = FloatArray(32 * 4)
     private val levelUniform = FloatArray(24)
+    private val puddleUp = FloatArray(24)
     private var sparkProg = 0
     private var cloudProg = 0
     private var doorMesh: GlMesh? = null
@@ -183,7 +184,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val bb = java.nio.ByteBuffer.allocateDirect(seeds.size * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
             bb.put(seeds).position(0)
             GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, seeds.size * 4, bb, GLES30.GL_STATIC_DRAW)
-            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 16, 0)
+            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 16, 0); GLES30.glVertexAttribDivisor(0, 1)
             GLES30.glBindVertexArray(0)
         }
         doorMesh = GlMesh(GlMesh.SCENE)
@@ -249,7 +250,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         rain?.let { rn ->
             val mbp = b.puddles(rn.cells, rn.maxRadius * 0.9f)
             puddleMesh!!.upload(mbp.vertices(), mbp.indices())
-            if (useClouds) cloudDensity = max(cloudDensity, 0.75f)
+            if (useClouds) cloudDensity = max(cloudDensity, 0.8f)
         }
         hazards = hz
         marble!!.hazards = hz
@@ -261,7 +262,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
-        cloudDensity = 0.5f + 0.3f * rnd.nextFloat()
+        cloudDensity = 0.62f + 0.3f * rnd.nextFloat()
         val wa = rnd.nextFloat() * 6.2831853f
         windX = kotlin.math.cos(wa) * 0.07f; windY = kotlin.math.sin(wa) * 0.035f
         fallTimer = 0f
@@ -520,7 +521,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (rn == null) { rainWet = max(0f, rainWet - dt * 0.2f); audio.rain(0f); return }
         val target = if (phase == Phase.SINK) 0f else 1f
         rn.intensity += (target - rn.intensity) * min(1f, dt * 0.45f)
-        rn.update(dt, rn.intensity > 0.05f)
+        for (i in rn.cells.indices) puddleUp[i] = orient.rotate(mb.surface.normal(m.centers[rn.cells[i]])).y
+        rn.update(dt, rn.intensity > 0.05f, puddleUp)
         rainWet += (rn.intensity - rainWet) * min(1f, dt * 0.5f)
         audio.rain(rn.intensity)
 
@@ -800,13 +802,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         dust.draw(smokeProg, 1f)
         val rnI = rain?.intensity ?: 0f
         if (rnI > 0.02f) {
+            val aspect = width.toFloat() / height
+            val tanY = tan(Math.toRadians(19.0)).toFloat()
             GLES30.glUseProgram(rainProg)
             GLES30.glUniformMatrix4fv(loc(rainProg, "uVP"), 1, false, vp, 0)
             GLES30.glUniform1f(loc(rainProg, "uTime"), time)
-            GLES30.glUniform1f(loc(rainProg, "uScale"), rh / (2f * tan(Math.toRadians(19.0)).toFloat()))
             GLES30.glUniform1f(loc(rainProg, "uIntensity"), rnI)
+            GLES30.glUniform2f(loc(rainProg, "uViewport"), rw.toFloat(), rh.toFloat())
+            GLES30.glUniform1f(loc(rainProg, "uWidthPx"), 2.2f * rh / 1000f * 2f)
+            GLES30.glUniform1f(loc(rainProg, "uCamZ"), camDist)
+            GLES30.glUniform2f(loc(rainProg, "uTan"), tanY * aspect, tanY)
             GLES30.glBindVertexArray(rainVao[0])
-            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, RAIN_DROPS)
+            GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, RAIN_DROPS)
             GLES30.glBindVertexArray(0)
         }
         GLES30.glDepthMask(true)
@@ -835,6 +842,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(loc(puddleProg, "uModel"), 1, false, model, 0)
         GLES30.glUniform1f(loc(puddleProg, "uGrowT"), growT)
         GLES30.glUniform1f(loc(puddleProg, "uTime"), time)
+        GLES30.glUniform1f(loc(puddleProg, "uRain"), rain?.intensity ?: 0f)
         GLES30.glUniform1f(loc(puddleProg, "uDoorMode"), 0f)
         GLES30.glUniform3f(loc(puddleProg, "uCam"), cam.x, cam.y, cam.z)
         GLES30.glUniform3f(loc(puddleProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
