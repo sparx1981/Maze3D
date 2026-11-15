@@ -11,6 +11,7 @@ class PostParams {
     var cloudOn = false
     var contrast = 0.35f; var saturation = 1.08f; var warmth = 0.02f
     var vignette = 0.35f
+    var motion = 0f
     var time = 0f; var grain = 0.035f; var fxaa = true
     var ssao = true; var dof = true
 }
@@ -265,6 +266,7 @@ class PostFx {
             GLES30.glUniform1f(loc(compositeP, "uCloudOn"), if (p.cloudOn) 1f else 0f)
             GLES30.glUniform3f(loc(compositeP, "uGrade"), p.contrast, p.saturation, p.warmth)
             GLES30.glUniform1f(loc(compositeP, "uVignette"), p.vignette)
+            GLES30.glUniform1f(loc(compositeP, "uMotion"), p.motion)
         }
         bindTex(0, 0)
 

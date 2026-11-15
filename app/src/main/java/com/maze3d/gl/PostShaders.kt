@@ -167,10 +167,18 @@ uniform float uDofAmt;
 uniform float uBloomAmt;
 uniform float uCloudOn;
 uniform vec3 uGrade;         // x contrast, y saturation, z warmth
+uniform float uMotion;       // radial speed blur strength (chase view)
 uniform float uVignette;
 float linZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uProj.x * uProj.y / (uProj.y + uProj.x - z * (uProj.y - uProj.x)); }
 void main() {
     vec3 c = texture(uScene, vUv).rgb;
+    if (uMotion > 0.01) {                                     // radial blur toward the edges: a sense of speed
+        vec2 dv = vUv - vec2(0.5, 0.55);
+        float edge = smoothstep(0.12, 0.7, length(dv));
+        vec3 acc = c;
+        for (int i = 1; i < 6; i++) acc += texture(uScene, vUv - dv * (uMotion * edge * 0.045 * float(i))).rgb;
+        c = acc / 6.0;
+    }
     float d = texture(uDepth, vUv).r;
     float ao = texture(uAO, vUv).r;
     c *= mix(1.0, ao, uAOAmt);

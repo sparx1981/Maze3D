@@ -123,6 +123,11 @@ uniform float uMetal;
 uniform int uHoleN;
 uniform vec4 uHoleC[16];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
 uniform float uShadowOn;
+uniform vec3 uMarbleL;      // marble position (world) for its glow and contact shadow
+uniform float uMarbleR;     // marble radius; 0 disables
+uniform vec3 uMarbleC;
+uniform float uFog;         // distance haze density (chase view)
+uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uAlpha;
 uniform float uTexel;
@@ -251,6 +256,11 @@ void main() {
         rough = mix(rough, rough * 0.45, uWet);
         coat = max(coat, uWet * 0.9);
     }
+    {   // specular anti-aliasing: bumpy or sharply curved surfaces get a little rougher so highlights stop shimmering
+        vec3 dnx = dFdx(N), dny = dFdy(N);
+        float variance = 0.25 * (dot(dnx, dnx) + dot(dny, dny));
+        rough = sqrt(rough * rough + min(2.0 * variance, 0.18));
+    }
     float NoV = max(dot(N, V), 1e-3);
     float a = max(rough * rough, 0.015);
     vec3 F0 = mix(vec3(0.04), albedo, metal);
@@ -282,6 +292,15 @@ void main() {
     col += irradiance(N) * diffC * 1.0 + spec * occ;
     // rim light
     col += pow(1.0 - NoV, 3.5) * vec3(0.10, 0.12, 0.16) * (0.4 + 0.6 * metal);
+    if (uMarbleR > 0.0) {                                     // the glass marble lights its surroundings and sits in its own shadow
+        vec3 Lm = uMarbleL - vWorld;
+        float dm2 = dot(Lm, Lm);
+        float r2 = uMarbleR * uMarbleR;
+        float att = 1.0 / (1.0 + dm2 / (r2 * 7.0));
+        col += diffC * uMarbleC * att * 0.45 * max(dot(N, normalize(Lm)), 0.0);
+        col *= 1.0 - 0.42 * exp(-dm2 / (r2 * 6.0));
+    }
+    if (uFog > 0.0) col = mix(col, uFogCol, 1.0 - exp(-length(uCam - vWorld) * uFog));
 
     outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
 }

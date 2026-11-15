@@ -897,6 +897,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
+        val mbL = marble
+        if (mbL != null && phase != Phase.MENU) {
+            val wp = orient.rotate(mbL.position)
+            GLES30.glUniform3f(loc(sceneProg, "uMarbleL"), wp.x, wp.y, wp.z)
+            GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), mbL.radius)
+            GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), 0.45f + pal.accent.x * 0.3f, 0.6f + pal.accent.y * 0.25f, 0.9f)
+        } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
+        val fogK = ease01(chaseBlend)
+        GLES30.glUniform1f(loc(sceneProg, "uFog"), 0.55f * fogK)
+        GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
         if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
@@ -1103,6 +1113,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             pp.aoAmt = 0.85f; pp.dofAmt = 0.85f
             pp.bloomAmt = if (quality >= 2) 0.34f else 0.26f
             pp.fxaa = true
+            pp.motion = ease01(chaseBlend) * chaseSpeed * 0.9f
             post.finish(pp)
         } else if (cloudsOn) {
             post.blitClouds()
