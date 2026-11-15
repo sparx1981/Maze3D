@@ -48,8 +48,12 @@ class DumpSceneTest {
 
     @Test
     fun dump() {
-        val out = System.getenv("MAZE_DUMP") ?: return
-        val kind = ShapeKind.valueOf(System.getenv("MAZE_SHAPE") ?: "SPHERE")
+        val out0 = System.getenv("MAZE_DUMP") ?: return
+        val kinds = (System.getenv("MAZE_SHAPE") ?: "SPHERE").split(",").map { ShapeKind.valueOf(it.trim()) }
+        for (k in kinds) dumpOne(k, if (kinds.size > 1) out0.replace(".json", "_${k.name}.json") else out0)
+    }
+
+    private fun dumpOne(kind: ShapeKind, out: String) {
         var pal = Palette.all[(System.getenv("MAZE_PAL") ?: "0").toInt()]
         val terrain = System.getenv("MAZE_TERRAIN") ?: ""
         if (terrain == "SAND") pal = pal.withFloor(com.maze3d.core.Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)

@@ -23,6 +23,9 @@ class Maze(val mesh: CellMesh, seed: Long) {
     val open: BooleanArray
 
     val centers: Array<Vec3>
+    /** Per cell: (p - centre) dotted with these gives cell-local coordinates in -0.5..0.5 when inside. */
+    val axisU: Array<Vec3>
+    val axisV: Array<Vec3>
     val cellSize: Float
     /** Marble and wall sizes, limited by the narrowest cell so it can never jam. */
     val marbleRadius: Float
@@ -71,35 +74,72 @@ class Maze(val mesh: CellMesh, seed: Long) {
             for (k in 0..3) s += mesh.vertices[mesh.cellVertex(c, k)]
             mesh.surface.project(s / 4f)
         }
+        // dual basis of the cell's two mid-edge vectors, so (p - centre) . axisU/axisV are exact cell-local coordinates even for sheared cells
+        val au = ArrayList<Vec3>(n); val av = ArrayList<Vec3>(n)
+        for (c in 0 until n) {
+            val v = mesh.vertices
+            val a = v[mesh.cellVertex(c, 0)]; val b = v[mesh.cellVertex(c, 1)]; val cc = v[mesh.cellVertex(c, 2)]; val d = v[mesh.cellVertex(c, 3)]
+            val e1 = ((b - a) + (cc - d)) * 0.5f
+            val e2 = ((d - a) + (cc - b)) * 0.5f
+            val g11 = e1 dot e1; val g12 = e1 dot e2; val g22 = e2 dot e2
+            val det = (g11 * g22 - g12 * g12).let { if (kotlin.math.abs(it) < 1e-12f) 1e-12f else it }
+            au.add((e1 * g22 - e2 * g12) / det)
+            av.add((e2 * g11 - e1 * g12) / det)
+        }
+        axisU = au.toTypedArray(); axisV = av.toTypedArray()
         var total = 0f
         for (e in 0 until edgeCount) total += (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length()
         cellSize = total / edgeCount
-        var minEdge = Float.MAX_VALUE
-        for (e in 0 until edgeCount) minEdge = minOf(minEdge, (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length())
-        marbleRadius = minOf(cellSize * 0.26f, minEdge * 0.30f)
-        wallHalfThickness = minOf(cellSize * 0.09f, minEdge * 0.10f)
+        // size the marble from the narrow cells, ignoring a few extreme outliers
+        val lens = FloatArray(edgeCount) { e -> (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length() }
+        val sortedLens = lens.sortedArray()
+        val narrow = sortedLens[(edgeCount * 0.05f).toInt()]
+        val r0 = minOf(cellSize * 0.26f, narrow * 0.30f)
+        val wh = minOf(cellSize * 0.09f, narrow * 0.10f)
+        wallHalfThickness = wh
+        // a passage must be wide enough for the marble between two walls; narrower ones are opened only as a last resort
+        val minPassage = 2f * r0 * 1.15f + 2f * wh
 
-        // Randomised depth-first search carve (iterative).
+        // Randomised depth-first search carve (iterative). Narrow edges are skipped; leftovers are bridged afterwards.
         val visited = BooleanArray(n)
         val stack = IntArray(n)
-        var sp = 0
-        stack[sp++] = rnd.nextInt(n)
-        visited[stack[0]] = true
-        while (sp > 0) {
-            val c = stack[sp - 1]
-            val choices = ArrayList<Int>(4)
-            for (k in 0..3) {
-                val e = cellEdges[c * 4 + k]
+        var remaining = n
+        fun carveFrom(startCell: Int) {
+            var sp = 0
+            stack[sp++] = startCell
+            if (!visited[startCell]) { visited[startCell] = true; remaining-- }
+            while (sp > 0) {
+                val c = stack[sp - 1]
+                val choices = ArrayList<Int>(4)
+                for (k in 0..3) {
+                    val e = cellEdges[c * 4 + k]
+                    val o = if (edgeCellL[e] == c) edgeCellR[e] else edgeCellL[e]
+                    if (!visited[o] && lens[e] >= minPassage) choices.add(e)
+                }
+                if (choices.isEmpty()) { sp--; continue }
+                val e = choices[rnd.nextInt(choices.size)]
                 val o = if (edgeCellL[e] == c) edgeCellR[e] else edgeCellL[e]
-                if (!visited[o]) choices.add(e)
+                open[e] = true
+                visited[o] = true; remaining--
+                stack[sp++] = o
             }
-            if (choices.isEmpty()) { sp--; continue }
-            val e = choices[rnd.nextInt(choices.size)]
-            val o = if (edgeCellL[e] == c) edgeCellR[e] else edgeCellL[e]
-            open[e] = true
-            visited[o] = true
-            stack[sp++] = o
         }
+        carveFrom(rnd.nextInt(n))
+        while (remaining > 0) {
+            // connect an unvisited cell to the carved area through its widest available edge, then keep carving from there
+            var bestE = -1; var bestLen = -1f
+            for (e in 0 until edgeCount) {
+                val l = edgeCellL[e]; val r = edgeCellR[e]
+                if (visited[l] != visited[r] && lens[e] > bestLen) { bestLen = lens[e]; bestE = e }
+            }
+            check(bestE >= 0) { "maze graph is disconnected" }
+            open[bestE] = true
+            carveFrom(if (visited[edgeCellL[bestE]]) edgeCellR[bestE] else edgeCellL[bestE])
+        }
+        // marble: the narrowest open passage decides the largest size that still fits
+        var minOpen = Float.MAX_VALUE
+        for (e in 0 until edgeCount) if (open[e]) minOpen = minOf(minOpen, lens[e])
+        marbleRadius = minOf(r0, maxOf(r0 * 0.62f, (minOpen - 2f * wh) * 0.5f / 1.12f))
 
         links = Array(n) { c ->
             val l = ArrayList<Int>(4)

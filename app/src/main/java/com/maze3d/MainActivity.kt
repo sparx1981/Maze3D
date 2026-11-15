@@ -406,13 +406,17 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         return row
     }
 
-    private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout {
+    private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout = chipGrid(options, options.size.coerceAtLeast(1), get, set)
+
+    private fun chipGrid(options: List<String>, columns: Int, get: () -> Int, set: (Int) -> Unit): LinearLayout {
         val usePreview = !noPreview
         noPreview = false
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        var row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val chips = ArrayList<TextView>()
         fun refresh() { chips.forEachIndexed { i, c -> c.background = glass(get() == i) } }
         options.forEachIndexed { i, label ->
+            if (i > 0 && i % columns == 0) { grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(6f)) }); row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL } }
             val c = TextView(this).apply {
                 text = label.uppercase(); setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.1f
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -424,7 +428,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             chips.add(c)
             row.addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(3f), 0, dp(3f), 0) })
         }
-        return row
+        // pad the last row so the chips keep their width
+        while (options.size % columns != 0 && row.childCount < columns) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)); if (row.childCount == columns) break }
+        grid.addView(row, LinearLayout.LayoutParams(-1, -2))
+        return grid
     }
 
     private fun selectedShape(): ShapeKind? = if (selShape == 0) null else ShapeKind.values()[selShape - 1]
@@ -473,7 +480,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuLevels.addView(header("select level"))
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(sectionLabel("Shape"))
-        panel.addView(chipRow(listOf("Random", "Sphere", "Torus", "Cube"), { selShape }) { selShape = it })
+        panel.addView(chipGrid(listOf("Random") + ShapeKind.values().map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }, 4, { selShape }, { selShape = it }))
         panel.addView(sectionLabel("Surface"))
         panel.addView(chipRow(listOf("Random", "Standard", "Sand", "Mud"), { selSurface }) { selSurface = it })
         panel.addView(sectionLabel("Hazards"))

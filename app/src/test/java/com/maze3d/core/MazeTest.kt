@@ -39,17 +39,31 @@ class MazeTest {
             for (seed in 1L..3L) {
                 val maze = Maze(kind.createMesh(), seed)
                 val marble = Marble(maze)
-                val path = maze.solution
-                var idx = 0
+                var path = maze.pathFrom(marble.cell)
+                var planned = marble.cell
                 var t = 0f
                 val dt = 1f / 60f
-                while (t < 240f && !marble.atGoal) {
-                    while (idx < path.size - 1 && marble.cell == path[idx + 1]) idx++
-                    val target = maze.centers[path[minOf(idx + 1, path.size - 1)]]
-                    val nrm = maze.mesh.surface.normal(marble.position)
+                while (t < 400f && !marble.atGoal) {
+                    if (marble.cell != planned) { planned = marble.cell; path = maze.pathFrom(planned) }   // re-plan from wherever the ball is
+                    val next = path[minOf(1, path.size - 1)]
+                    // aim for the middle of the doorway, a little way into the next cell, so the line never clips a wall corner
+                    var door = maze.centers[next]
+                    for (k in 0..3) {
+                        val e = maze.cellEdges[planned * 4 + k]
+                        val o = if (maze.edgeCellL[e] == planned) maze.edgeCellR[e] else maze.edgeCellL[e]
+                        if (o == next && maze.open[e]) {
+                            val mid = maze.mesh.surface.project((maze.mesh.vertices[maze.edgeA[e]] + maze.mesh.vertices[maze.edgeB[e]]) * 0.5f)
+                            val d0 = (marble.position - mid).length()
+                            door = if (d0 > maze.cellSize * 0.35f) mid else maze.centers[next]
+                            break
+                        }
+                    }
+                    val target = door
+                    // steer along the surface, using the mean normal between here and the target so tight curves don't confuse the aim
+                    val nrm = (maze.mesh.surface.normal(marble.position) + maze.mesh.surface.normal(target)).normalized()
                     var dir = target - marble.position
                     dir -= nrm * (dir dot nrm)
-                    val g = dir.normalized() * 3f - marble.velocity * 2.0f
+                    val g = (dir.normalized() * 0.5f - marble.velocity) * 8f   // steer toward a target speed
                     marble.step(g, dt)
                     // marble must always rest on the surface
                     val surfDist = (marble.position - maze.mesh.surface.core(marble.position)).length()

@@ -160,9 +160,15 @@ class Marble(private val maze: Maze) {
         }
     }
 
+    /** How far [p] is from being inside [c], in cell-local units (<= 0.5 means inside). Works for long thin cells too. */
+    private fun cellMetric(c: Int, p: Vec3): Float {
+        val d = p - maze.centers[c]
+        return maxOf(kotlin.math.abs(d dot maze.axisU[c]), kotlin.math.abs(d dot maze.axisV[c]))
+    }
+
     private fun updateCell() {
         var best = cell
-        var bestD = (maze.centers[best] - position).lengthSq()
+        var bestM = cellMetric(best, position)
         var moved = true
         var guard = 0
         while (moved && guard++ < 8) {
@@ -170,8 +176,8 @@ class Marble(private val maze: Maze) {
             for (k in 0..3) {
                 val e = maze.cellEdges[best * 4 + k]
                 val o = if (maze.edgeCellL[e] == best) maze.edgeCellR[e] else maze.edgeCellL[e]
-                val d = (maze.centers[o] - position).lengthSq()
-                if (d < bestD) { bestD = d; best = o; moved = true }
+                val m = cellMetric(o, position)
+                if (m < bestM - 1e-4f) { bestM = m; best = o; moved = true }
             }
         }
         cell = best
