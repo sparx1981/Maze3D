@@ -58,66 +58,121 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return list
     }
 
-    fun walls(): MeshBuilder {
-        val mb = MeshBuilder()
-        val t = wallHalfThickness
+    private fun fullProfile(): List<FloatArray> {
         val half = halfProfile()
-        // full loop: left side up and over the top, then down the right side
         val prof = ArrayList<FloatArray>()
         for (q in half) prof.add(floatArrayOf(-q[0], q[1], -q[2], q[3]))
         for (q in half.reversed()) prof.add(q)
+        return prof
+    }
+
+    fun walls(): MeshBuilder {
+        val mb = MeshBuilder()
+        val prof = fullProfile()
         val lowC = pal.wall * 0.35f
         val topC = pal.wall * 1.05f
-
         for (e in 0 until maze.edgeCount) {
             if (!maze.isWall(e)) continue
-            val a0 = maze.mesh.vertices[maze.edgeA[e]]
-            val b0 = maze.mesh.vertices[maze.edgeB[e]]
-            val dir = (b0 - a0).normalized()
-            val ends = arrayOf(a0 - dir * t, b0 + dir * t)
             val dl = (maze.depthFromStart[maze.edgeCellL[e]] + maze.depthFromStart[maze.edgeCellR[e]]) * 0.5f / maze.maxDepth
-            val delay = dl * 0.75f + 0.05f * hash(e)
-
-            val rings = Array(2) { r ->
-                val base = ends[r]
-                val n = surface.normal(if (r == 0) a0 else b0)
-                val side = (dir cross n).normalized()
-                IntArray(prof.size) { k ->
-                    val q = prof[k]
-                    val pos = base + side * (q[0] * t)
-                    val nrm = (side * q[2] + n * q[3]).normalized()
-                    val h = q[1].coerceIn(0f, 1f)
-                    val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
-                    // positions sit at the base plane; the lift vector raises them as the wall grows
-                    val lift = n * (q[1] * wallHeight)
-                    mb.vertex(pos, nrm, col, lift, delay)
-                }
-            }
-            for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
-
-            // end caps (flat)
-            for (r in 0..1) {
-                val base = ends[r]
-                val n = surface.normal(if (r == 0) a0 else b0)
-                val side = (dir cross n).normalized()
-                val cn = if (r == 0) -dir else dir
-                val idx = IntArray(prof.size) { k ->
-                    val q = prof[k]
-                    mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * wallHeight), delay)
-                }
-                for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
-            }
+            addWall(mb, e, dl * 0.75f + 0.05f * hash(e), prof, lowC, topC)
         }
         return mb
     }
 
-    fun markers(): MeshBuilder {
+    /** Sliding doors on open passages. Their "delay" attribute carries the animation phase (0..1). */
+    fun doors(edges: IntArray, phases: FloatArray): MeshBuilder {
         val mb = MeshBuilder()
+        val prof = fullProfile()
+        val tint = pal.door
+        for (i in edges.indices) addWall(mb, edges[i], phases[i].coerceIn(0f, 0.999f), prof, tint * 0.45f, tint * 1.1f)
+        return mb
+    }
+
+    private fun addWall(mb: MeshBuilder, e: Int, delay: Float, prof: List<FloatArray>, lowC: Vec3, topC: Vec3) {
+        val t = wallHalfThickness
+        val a0 = maze.mesh.vertices[maze.edgeA[e]]
+        val b0 = maze.mesh.vertices[maze.edgeB[e]]
+        val dir = (b0 - a0).normalized()
+        val ends = arrayOf(a0 - dir * t, b0 + dir * t)
+        val rings = Array(2) { r ->
+            val base = ends[r]
+            val n = surface.normal(if (r == 0) a0 else b0)
+            val side = (dir cross n).normalized()
+            IntArray(prof.size) { k ->
+                val q = prof[k]
+                val pos = base + side * (q[0] * t)
+                val nrm = (side * q[2] + n * q[3]).normalized()
+                val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
+                // positions sit at the base plane; the lift vector raises them as the wall grows
+                mb.vertex(pos, nrm, col, n * (q[1] * wallHeight), delay)
+            }
+        }
+        for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
+        for (r in 0..1) {
+            val base = ends[r]
+            val n = surface.normal(if (r == 0) a0 else b0)
+            val side = (dir cross n).normalized()
+            val cn = if (r == 0) -dir else dir
+            val idx = IntArray(prof.size) { k ->
+                val q = prof[k]
+                mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * wallHeight), delay)
+            }
+            for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
+        }
+    }
+
+    /** Floor holes: a quad per hole; the fragment shader draws the animated opening from uv in aCol.xy, phase in aCol.z. */
+    fun holes(cells: IntArray, phases: FloatArray, radius: Float): MeshBuilder {
+        val mb = MeshBuilder()
+        val ext = 1.4f
+        for (i in cells.indices) {
+            val c = cells[i]
+            val ctr = maze.centers[c]
+            val n = surface.normal(ctr)
+            var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
+            t1 = (t1 - n * (t1 dot n)).normalized()
+            val t2 = n cross t1
+            val ids = IntArray(4)
+            val us = floatArrayOf(-1f, 1f, 1f, -1f)
+            val vs = floatArrayOf(-1f, -1f, 1f, 1f)
+            for (k in 0..3) {
+                val p = surface.project(ctr + (t1 * us[k] + t2 * vs[k]) * (radius * ext))
+                ids[k] = mb.vertex(p + surface.normal(p) * (cs * 0.01f), surface.normal(p), Vec3(us[k] * ext, vs[k] * ext, phases[i]))
+            }
+            mb.quad(ids[0], ids[1], ids[2], ids[3])
+        }
+        return mb
+    }
+
+    fun markers(doorEdges: IntArray = IntArray(0)): MeshBuilder {
+        val mb = MeshBuilder()
+        for (e in doorEdges) track(mb, e)
         disc(mb, maze.start, cs * 0.42f, cs * 0.30f, Vec3(0.35f, 0.75f, 1f))
         disc(mb, maze.goal, cs * 0.64f, cs * 0.40f, Vec3(0.55f, 0.42f, 0.12f), 0.0004f)
         disc(mb, maze.goal, cs * 0.40f, 0f, Vec3(1f, 0.86f, 0.30f))
         disc(mb, maze.goal, cs * 0.22f, 0f, Vec3(0.55f, 1f, 0.6f), 0.0012f)
         return mb
+    }
+
+    /** Glowing slot in the floor under a door, so you can see where it will close. */
+    private fun track(mb: MeshBuilder, e: Int) {
+        val a = maze.mesh.vertices[maze.edgeA[e]]
+        val b = maze.mesh.vertices[maze.edgeB[e]]
+        val dir = (b - a).normalized()
+        val w = wallHalfThickness * 1.5f
+        val col = pal.door * 0.9f
+        val ids = IntArray(4)
+        val pts = arrayOf(a - dir * wallHalfThickness, b + dir * wallHalfThickness)
+        var k = 0
+        for (pt in pts) {
+            val n = surface.normal(pt)
+            val side = (dir cross n).normalized() * w
+            for (sgn in intArrayOf(1, -1)) {
+                val p = surface.project(pt + side * sgn.toFloat())
+                ids[k++] = mb.vertex(p + surface.normal(p) * (cs * 0.008f), surface.normal(p), col)
+            }
+        }
+        mb.quad(ids[0], ids[1], ids[3], ids[2])
     }
 
     private fun disc(mb: MeshBuilder, cell: Int, outer: Float, inner: Float, color: Vec3, lift: Float = 0.0006f) {

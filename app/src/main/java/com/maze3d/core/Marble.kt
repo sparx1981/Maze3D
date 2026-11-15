@@ -24,6 +24,17 @@ class Marble(private val maze: Maze) {
     var lastImpact = 0f
         private set
 
+    /** Moving hazards for this level, and the shared game clock they run on. */
+    var hazards: Hazards? = null
+        set(v) { field = v; buildDoorLists() }
+    var clock = 0f
+
+    /** Where the strongest impact of the last [step] happened (marble surface point) and the wall's push direction. */
+    var impactPos: Vec3 = Vec3.ZERO
+        private set
+    var impactDir: Vec3 = Vec3.ZERO
+        private set
+    private var doorsNear: Array<IntArray> = emptyArray()
     private val wallsNear: Array<IntArray>
 
     init {
@@ -41,6 +52,22 @@ class Marble(private val maze: Maze) {
             set.toIntArray()
         }
         reset()
+    }
+
+    private fun buildDoorLists() {
+        val h = hazards
+        if (h == null || !h.hasDoors) { doorsNear = emptyArray(); return }
+        val doorIdx = HashMap<Int, Int>()
+        h.doorEdges.forEachIndexed { i, e -> doorIdx[e] = i }
+        val vertexCells = HashMap<Int, MutableList<Int>>()
+        for (c in 0 until maze.cellCount) for (k in 0..3)
+            vertexCells.getOrPut(maze.mesh.cellVertex(c, k)) { ArrayList() }.add(c)
+        doorsNear = Array(maze.cellCount) { c ->
+            val set = LinkedHashSet<Int>()
+            for (k in 0..3) for (oc in vertexCells[maze.mesh.cellVertex(c, k)]!!)
+                for (j in 0..3) { val e = maze.cellEdges[oc * 4 + j]; if (e in doorIdx) set.add(doorIdx[e]!!) }
+            set.toIntArray()
+        }
     }
 
     fun reset() {
@@ -79,27 +106,38 @@ class Marble(private val maze: Maze) {
     private fun collide() {
         val minDist = wallHalfThickness + radius
         repeat(2) {
-            for (e in wallsNear[cell]) {
-                val a = maze.mesh.vertices[maze.edgeA[e]]
-                val b = maze.mesh.vertices[maze.edgeB[e]]
-                val ab = b - a
-                val t = (((position - a) dot ab) / ab.lengthSq()).coerceIn(0f, 1f)
-                val q = a + ab * t
-                val nrm = surface.normal(position)
-                var d = position - q
-                d -= nrm * (d dot nrm)
-                val dist = d.length()
-                if (dist < minDist) {
-                    val dir = if (dist > 1e-6f) d / dist else (nrm cross ab).normalized()
-                    position += dir * (minDist - dist)
-                    val vn = velocity dot dir
-                    if (vn < 0f) {
-                        velocity -= dir * (vn * 1.35f) // restitution ~0.35
-                        lastImpact = maxOf(lastImpact, -vn / maze.cellSize)
-                    }
-                }
+            for (e in wallsNear[cell]) hit(e, minDist)
+            val h = hazards
+            if (h != null && doorsNear.isNotEmpty()) {
+                for (i in doorsNear[cell]) if (h.doorClosed(i, clock)) hit(h.doorEdges[i], minDist)
             }
             position = surface.project(position) + surface.normal(position) * radius
+        }
+    }
+
+    private fun hit(e: Int, minDist: Float) {
+        val a = maze.mesh.vertices[maze.edgeA[e]]
+        val b = maze.mesh.vertices[maze.edgeB[e]]
+        val ab = b - a
+        val t = (((position - a) dot ab) / ab.lengthSq()).coerceIn(0f, 1f)
+        val q = a + ab * t
+        val nrm = surface.normal(position)
+        var d = position - q
+        d -= nrm * (d dot nrm)
+        val dist = d.length()
+        if (dist < minDist) {
+            val dir = if (dist > 1e-6f) d / dist else (nrm cross ab).normalized()
+            position += dir * (minDist - dist)
+            val vn = velocity dot dir
+            if (vn < 0f) {
+                velocity -= dir * (vn * 1.35f) // restitution ~0.35
+                val strength = -vn / maze.cellSize
+                if (strength > lastImpact) {
+                    lastImpact = strength
+                    impactPos = position - dir * radius
+                    impactDir = dir
+                }
+            }
         }
     }
 

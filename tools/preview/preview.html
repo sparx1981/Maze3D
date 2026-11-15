@@ -30,6 +30,7 @@ async function main(){
     const stride=attribs.reduce((a,b)=>a+b,0);let off=0;attribs.forEach((sz,i)=>{gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,sz,gl.FLOAT,false,stride*4,off*4);off+=sz});
     gl.bindVertexArray(null);return {vao,n:m.i.length}};
   const draw=m=>{gl.bindVertexArray(m.vao);gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_INT,0);gl.bindVertexArray(null)};
+  const doorsM=mk(D.doors,[3,3,3,3,1]), holesM=mk(D.holes,[3,3,3,3,1]); const holeP=prog(sh.SCENE_VS, sh.HOLE_FS), cloudP=prog(sh.BG_VS, sh.CLOUD_FS);
   const floor=mk(D.floor,[3,3,3,3,1]), walls=mk(D.walls,[3,3,3,3,1]), markers=mk(D.markers,[3,3,3,3,1]), thread=mk(D.thread,[3,3,3,3,1]);
   // unit sphere
   const rings=40,segs=72,sv=[],si=[];for(let i=0;i<=rings;i++){const th=Math.PI*i/rings;for(let j=0;j<=segs;j++){const ph=2*Math.PI*j/segs;sv.push(Math.sin(th)*Math.cos(ph),Math.cos(th),Math.sin(th)*Math.sin(ph))}}
@@ -39,7 +40,7 @@ async function main(){
   const W=canvas.width,H=canvas.height;
   const orient = (q.get('orient')||'1,0.3,0,0.5').split(',').map(Number); // axis x,y,z, angle
   const oq = axisQuat(orient.slice(0,3), orient[3]); const model = quatMat(...oq);
-  const zoom = parseFloat(q.get('zoom')||'0.9'); const growT = parseFloat(q.get('grow')||'1.4');
+  const zoom = parseFloat(q.get('zoom')||'0.9'); const growT = parseFloat(q.get('grow')||'1.4'); const TIME=parseFloat(q.get('t')||'0.5');
   const shadowOn = (q.get('shadow')||'1')==='1'; const SS = parseInt(q.get('ss')||'2048');
   const fovY=38, asp=W/H; const tanY=Math.tan(fovY*Math.PI/360), tanMin=Math.min(tanY,tanY*asp);
   const r=D.outer*1.12; const camDist=(r/tanMin+r)*zoom;
@@ -62,7 +63,7 @@ async function main(){
   if(shadowOn){
     gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);gl.viewport(0,0,SS,SS);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(2,4);
-    gl.useProgram(shScene);gl.uniformMatrix4fv(U(shScene,'uVP'),false,lightVP);gl.uniformMatrix4fv(U(shScene,'uModel'),false,model);gl.uniform1f(U(shScene,'uGrowT'),growT);draw(floor);draw(walls);
+    gl.useProgram(shScene);gl.uniformMatrix4fv(U(shScene,'uVP'),false,lightVP);gl.uniformMatrix4fv(U(shScene,'uModel'),false,model);gl.uniform1f(U(shScene,'uGrowT'),growT);gl.uniform1f(U(shScene,'uTime'),TIME);gl.uniform1f(U(shScene,'uDoorMode'),0);draw(floor);draw(walls);gl.uniform1f(U(shScene,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(shScene,'uDoorMode'),0);
     marbleU(shMarble,lightVP);draw(sphere);
     gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,W,H);
   }
@@ -73,15 +74,18 @@ async function main(){
 
   const sp=sceneP;gl.useProgram(sp);
   gl.uniformMatrix4fv(U(sp,'uVP'),false,vp);gl.uniformMatrix4fv(U(sp,'uModel'),false,model);gl.uniformMatrix4fv(U(sp,'uLightVP'),false,lightVP);
-  gl.uniform3f(U(sp,'uCam'),0,0,camDist);gl.uniform3fv(U(sp,'uLightDir'),L);gl.uniform1f(U(sp,'uTime'),0.5);gl.uniform1f(U(sp,'uGrowT'),growT);
+  gl.uniform3f(U(sp,'uCam'),0,0,camDist);gl.uniform3fv(U(sp,'uLightDir'),L);gl.uniform1f(U(sp,'uTime'),TIME);gl.uniform1f(U(sp,'uGrowT'),growT);gl.uniform1f(U(sp,'uDoorMode'),0);
   gl.uniform1f(U(sp,'uShadowOn'),shadowOn?1:0);gl.uniform1f(U(sp,'uTexel'),1/SS);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(U(sp,'uShadow'),0);
   const sc=(m,r,me,em)=>{gl.uniform1i(U(sp,'uMat'),m);gl.uniform1f(U(sp,'uRough'),r);gl.uniform1f(U(sp,'uMetal'),me);gl.uniform1f(U(sp,'uEmissive'),em)};
-  sc(pal.floorMat,pal.floorRough,0,0);draw(floor);sc(pal.wallMat,pal.wallRough,1,0);draw(walls);
+  sc(pal.floorMat,pal.floorRough,0,0);draw(floor);sc(pal.wallMat,pal.wallRough,1,0);draw(walls);gl.uniform1f(U(sp,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(sp,'uDoorMode'),0);
+  gl.useProgram(holeP);gl.uniformMatrix4fv(U(holeP,'uVP'),false,vp);gl.uniformMatrix4fv(U(holeP,'uModel'),false,model);gl.uniform1f(U(holeP,'uGrowT'),growT);gl.uniform1f(U(holeP,'uTime'),TIME);gl.uniform1f(U(holeP,'uDoorMode'),0);gl.uniform1f(U(holeP,'uAppear'),1);gl.uniform3fv(U(holeP,'uAccent'),pal.accent);gl.uniform3fv(U(holeP,'uLightDir'),L);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);draw(holesM);gl.disable(gl.POLYGON_OFFSET_FILL);gl.disable(gl.BLEND);gl.useProgram(sp);
   gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);sc(4,0.5,0,0.9);draw(markers);if(q.get('hint')!=='0'){sc(4,0.5,0,0.55);draw(thread)}gl.disable(gl.POLYGON_OFFSET_FILL);
 
   marbleU(marbleP,vp);gl.uniform3f(U(marbleP,'uCam'),0,0,camDist);gl.uniform3fv(U(marbleP,'uLightDir'),L);gl.uniform3fv(U(marbleP,'uAccent'),pal.accent);
   gl.uniformMatrix3fv(U(marbleP,'uBody'),false,[1,0,0,0,1,0,0,0,1]);gl.uniform1f(U(marbleP,'uGhost'),0);draw(sphere);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthFunc(gl.GREATER);gl.depthMask(false);gl.uniform1f(U(marbleP,'uGhost'),1);draw(sphere);gl.depthMask(true);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);
+  if(q.get('cloud')==='1'){gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.useProgram(cloudP);gl.uniform1f(U(cloudP,'uTime'),TIME);gl.uniform1f(U(cloudP,'uAspect'),W/H);gl.uniform1f(U(cloudP,'uAmount'),1);gl.uniform3f(U(cloudP,'uTint'),pal.bgTop[0]*1.6,pal.bgTop[1]*1.6,pal.bgTop[2]*1.6);gl.bindVertexArray(e);gl.drawArrays(gl.TRIANGLES,0,3);gl.disable(gl.BLEND)}
   gl.finish();document.title='ready';
 }
 main().catch(e=>{document.title='error';window.__err=String(e);console.error(e)});

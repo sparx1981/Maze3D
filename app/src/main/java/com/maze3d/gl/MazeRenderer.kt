@@ -3,6 +3,7 @@ package com.maze3d.gl
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import com.maze3d.core.Hazards
 import com.maze3d.core.Marble
 import com.maze3d.core.Maze
 import com.maze3d.core.Quat
@@ -32,6 +33,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     private enum class Phase { GROW, PLAY, SOLVED, SINK }
 
+    private class Door(val mid: Vec3, val normal: Vec3, var closed: Boolean)
+
     // ---- inputs (written from the UI thread) --------------------------------------------
     @Volatile var tiltMode = false
     @Volatile var hintOn = true
@@ -41,6 +44,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     // ---- GL resources ---------------------------------------------------------------------
     private var sceneProg = 0
     private var shadowSceneProg = 0
+    private var holeProg = 0
+    private var sparkProg = 0
+    private var cloudProg = 0
+    private var doorMesh: GlMesh? = null
+    private var holeMesh: GlMesh? = null
+    private val sparks = Sparks()
+    private var hazards: Hazards? = null
+    private var doors: List<Door> = emptyList()
+    private var useClouds = false
+    private var cloudAmt = 0f
+    private var fallTimer = 0f
+    private var fallTo = Vec3.ZERO
+    private var fallFrom = Vec3.ZERO
+    private var goalBursted = false
+    private var lastSparkAt = 0f
+    private var impactSparkSeed = 0
     private var shadowMarbleProg = 0
     private var shadow: ShadowMap? = null
     @Volatile var quality = 2
@@ -95,6 +114,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         bgProg = Shaders.program(Shaders.BG_VS, Shaders.BG_FS)
         shadowSceneProg = Shaders.program(Shaders.SCENE_VS, Shaders.SHADOW_FS)
         shadowMarbleProg = Shaders.program(Shaders.MARBLE_VS, Shaders.SHADOW_FS)
+        holeProg = Shaders.program(Shaders.SCENE_VS, Shaders.HOLE_FS)
+        sparkProg = Shaders.program(Shaders.SPARK_VS, Shaders.SPARK_FS)
+        cloudProg = Shaders.program(Shaders.BG_VS, Shaders.CLOUD_FS)
+        sparks.init()
+        doorMesh = GlMesh(GlMesh.SCENE)
+        holeMesh = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
@@ -135,12 +160,28 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         maze = m
         marble = Marble(m)
         pal = Palette.random(rnd, pal)
-        host.onFinish(pal.name, pal.accent)
         val b = SceneBuilder(m, pal)
         builder = b
         floorMesh!!.let { val mb = b.floor(); it.upload(mb.vertices(), mb.indices()) }
         wallMesh!!.let { val mb = b.walls(); it.upload(mb.vertices(), mb.indices()) }
-        markerMesh!!.let { val mb = b.markers(); it.upload(mb.vertices(), mb.indices()) }
+        var wantDoors = rnd.nextFloat() < 0.5f
+        var wantHoles = rnd.nextFloat() < 0.5f
+        useClouds = rnd.nextFloat() < 0.45f
+        if (!wantDoors && !wantHoles && !useClouds) when (rnd.nextInt(3)) { 0 -> wantDoors = true; 1 -> wantHoles = true; else -> useClouds = true }
+        val hz = Hazards(m, rnd, wantDoors, wantHoles)
+        hazards = hz
+        marble!!.hazards = hz
+        doors = hz.doorEdges.map { e ->
+            val mid = m.mesh.surface.project((m.mesh.vertices[m.edgeA[e]] + m.mesh.vertices[m.edgeB[e]]) * 0.5f)
+            Door(mid, m.mesh.surface.normal(mid), false)
+        }
+        doorMesh!!.let { val mb = b.doors(hz.doorEdges, hz.doorPhase); it.upload(mb.vertices(), mb.indices()) }
+        holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
+        markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
+        cloudAmt = 0f
+        fallTimer = 0f
+        goalBursted = false
+        host.onFinish(pal.name + listOfNotNull(if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
         rollQ = Quat.IDENTITY
         growT = 0f
@@ -227,15 +268,48 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 playSeconds += dt
                 val worldG = if (tiltMode) deviceGravity else Vec3(0f, -1f, 0f)
                 val gLocal = orient.inverseRotate(worldG.normalized()) * GRAVITY
-                mb.step(gLocal, dt)
-                rollMarble(mb, dt)
-                if (mb.lastImpact > 0.9f && time - lastImpactAt > 0.12f) {
-                    lastImpactAt = time
-                    host.onImpact(min(mb.lastImpact / 4f, 1f))
+                if (fallTimer > 0f) {
+                    // marble is dropping into a hole; physics paused
+                    fallTimer -= dt
+                    if (fallTimer <= 0f) {
+                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1
+                        val sc = m.centers[m.start]
+                        sparks.burst(sc, mb.surface.normal(sc), 28, 0.9f, Vec3(0.4f, 0.8f, 1f))
+                    }
+                } else {
+                    mb.clock = time
+                    mb.step(gLocal, dt)
+                    rollMarble(mb, dt)
+                    if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
+                        lastSparkAt = time
+                        sparks.impact(mb.impactPos, mb.impactDir, min(mb.lastImpact / 3f, 1f), pal.wall * 1.2f)
+                    }
+                    if (mb.lastImpact > 0.9f && time - lastImpactAt > 0.12f) {
+                        lastImpactAt = time
+                        host.onImpact(min(mb.lastImpact / 4f, 1f))
+                    }
+                    val hz = hazards
+                    if (hz != null && hz.hasHoles) {
+                        val under = mb.position - mb.surface.normal(mb.position) * mb.radius
+                        val h = hz.fellInto(mb.cell, under, time)
+                        if (h >= 0) {
+                            fallTimer = 0.55f
+                            fallFrom = mb.position
+                            fallTo = m.centers[hz.holeCells[h]] - mb.surface.normal(m.centers[hz.holeCells[h]]) * (mb.radius * 2.5f)
+                            sparks.burst(m.centers[hz.holeCells[h]], mb.surface.normal(m.centers[hz.holeCells[h]]), 10, 0.5f, pal.accent)
+                        }
+                    }
+                    if (mb.atGoal) { phase = Phase.SOLVED; solvedTimer = 0f }
                 }
-                if (mb.atGoal) { phase = Phase.SOLVED; solvedTimer = 0f }
+                updateDoors(m)
             }
             Phase.SOLVED -> {
+                if (!goalBursted) {
+                    goalBursted = true
+                    val gc = m.centers[m.goal]
+                    sparks.burst(gc, mb.surface.normal(gc), 70, 1.5f, Vec3(1f, 0.85f, 0.35f))
+                    sparks.burst(gc, mb.surface.normal(gc), 40, 0.8f, Vec3(0.6f, 1f, 0.7f))
+                }
                 solvedTimer += dt
                 if (solvedTimer > 1.6f) { phase = Phase.SINK; nextKind = pickNext() }
             }
@@ -244,6 +318,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 if (growT <= 0f) { newLabyrinth(nextKind ?: pickNext()); nextKind = null }
             }
         }
+
+        val gl = orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY
+        sparks.update(dt, gl)
+        val cloudTarget = if (useClouds && phase != Phase.SINK) 1f else 0f
+        cloudAmt += (cloudTarget - cloudAmt) * min(1f, dt * 0.8f)
 
         val sec = playSeconds.toInt()
         val code = sec * 4 + (if (phase == Phase.SOLVED) 1 else 0)
@@ -254,6 +333,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (hintOn && mb.cell != threadCell && phase != Phase.SINK) {
             threadCell = mb.cell
             builder?.thread(mb.cell)?.let { t -> threadMesh?.upload(t.vertices(), t.indices(), dynamic = true) }
+        }
+    }
+
+    /** Slam sparks the moment a door finishes closing. */
+    private fun updateDoors(m: Maze) {
+        val hz = hazards ?: return
+        for (i in doors.indices) {
+            val closed = hz.doorClosed(i, time)
+            if (closed && !doors[i].closed && phase == Phase.PLAY) {
+                sparks.burst(doors[i].mid, doors[i].normal, 6, 0.5f, pal.door)
+            }
+            doors[i].closed = closed
         }
     }
 
@@ -282,7 +373,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(loc(prog, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(prog, "uModel"), 1, false, model, 0)
         GLES30.glUniform1f(loc(prog, "uGrowT"), growT)
-        if (shadowPass) { floorMesh?.draw(); wallMesh?.draw() }
+        GLES30.glUniform1f(loc(prog, "uTime"), time)
+        if (shadowPass) {
+            GLES30.glUniform1f(loc(prog, "uDoorMode"), 0f)
+            floorMesh?.draw(); wallMesh?.draw()
+            GLES30.glUniform1f(loc(prog, "uDoorMode"), 1f)
+            doorMesh?.draw()
+            GLES30.glUniform1f(loc(prog, "uDoorMode"), 0f)
+        }
     }
 
     private fun draw() {
@@ -334,6 +432,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform3f(loc(sceneProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
         GLES30.glUniform1f(loc(sceneProg, "uTime"), time)
         GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
         if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
@@ -341,6 +440,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
         scene(pal.wallMat, pal.wallRough, 1f, 0f); wallMesh?.draw()
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
+        doorMesh?.draw()
+        GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
+        drawHoles()
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
         scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
@@ -353,8 +456,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uModel"), 1, false, model, 0)
         GLES30.glUniform3f(loc(marbleProg, "uCam"), 0f, 0f, camDist)
         GLES30.glUniform3f(loc(marbleProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
-        GLES30.glUniform3f(loc(marbleProg, "uCenter"), mb.position.x, mb.position.y, mb.position.z)
-        GLES30.glUniform1f(loc(marbleProg, "uRadius"), mb.radius)
+        var drawPos = mb.position
+        var drawR = mb.radius
+        if (fallTimer > 0f) {
+            val k = 1f - fallTimer / 0.55f
+            val e = k * k
+            drawPos = Vec3.lerp(fallFrom, fallTo, e)
+            drawR = mb.radius * (1f - 0.85f * e)
+        }
+        GLES30.glUniform3f(loc(marbleProg, "uCenter"), drawPos.x, drawPos.y, drawPos.z)
+        GLES30.glUniform1f(loc(marbleProg, "uRadius"), drawR)
         GLES30.glUniform3f(loc(marbleProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
         val bm = FloatArray(16)
         rollQ.conjugate().toMatrix(bm)
@@ -372,7 +483,54 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         sphere?.draw()
         GLES30.glDepthMask(true)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
+
+        // sparks: additive glow points
+        GLES30.glUseProgram(sparkProg)
+        GLES30.glUniformMatrix4fv(loc(sparkProg, "uVP"), 1, false, vp, 0)
+        GLES30.glUniformMatrix4fv(loc(sparkProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(sparkProg, "uScale"), height / (2f * tan(Math.toRadians(19.0)).toFloat()))
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE)
+        GLES30.glDepthMask(false)
+        sparks.draw(sparkProg, 1f)
+        GLES30.glDepthMask(true)
+
+        // drifting clouds over everything
+        if (cloudAmt > 0.01f) {
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glUseProgram(cloudProg)
+            GLES30.glUniform1f(loc(cloudProg, "uTime"), time)
+            GLES30.glUniform1f(loc(cloudProg, "uAspect"), width.toFloat() / height)
+            GLES30.glUniform1f(loc(cloudProg, "uAmount"), cloudAmt)
+            GLES30.glUniform3f(loc(cloudProg, "uTint"), pal.bgTop.x * 1.6f, pal.bgTop.y * 1.6f, pal.bgTop.z * 1.6f)
+            GLES30.glBindVertexArray(emptyVao[0])
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+            GLES30.glBindVertexArray(0)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        }
         GLES30.glDisable(GLES30.GL_BLEND)
+    }
+
+    private fun drawHoles() {
+        val hz = hazards ?: return
+        if (!hz.hasHoles) return
+        GLES30.glUseProgram(holeProg)
+        GLES30.glUniformMatrix4fv(loc(holeProg, "uVP"), 1, false, vp, 0)
+        GLES30.glUniformMatrix4fv(loc(holeProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(holeProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(holeProg, "uTime"), time)
+        GLES30.glUniform1f(loc(holeProg, "uDoorMode"), 0f)
+        GLES30.glUniform1f(loc(holeProg, "uAppear"), (growT - 0.2f).coerceIn(0f, 1f))
+        GLES30.glUniform3f(loc(holeProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
+        GLES30.glUniform3f(loc(holeProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glPolygonOffset(-2f, -2f)
+        holeMesh?.draw()
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(sceneProg)
     }
 
     private fun scene(mat: Int, rough: Float, metal: Float, emissive: Float) {

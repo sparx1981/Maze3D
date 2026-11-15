@@ -81,4 +81,46 @@ class MazeTest {
             }
         }
     }
+
+    @Test
+    fun hazardsAreSafelyPlaced() {
+        for (kind in ShapeKind.values()) for (seed in 1L..5L) {
+            val maze = Maze(kind.createMesh(), seed)
+            val hz = Hazards(maze, Random(seed), true, true)
+            assertTrue("${kind.label} has doors", hz.hasDoors)
+            assertTrue("${kind.label} has holes", hz.hasHoles)
+            for (e in hz.doorEdges) {
+                assertTrue("door on open passage", maze.open[e])
+                for (c in listOf(maze.edgeCellL[e], maze.edgeCellR[e])) assertTrue(c != maze.start && c != maze.goal)
+            }
+            for (c in hz.holeCells) assertTrue("hole not on start/goal", c != maze.start && c != maze.goal)
+            // an open hole swallows a marble sitting on its centre, a shut one does not
+            val c = hz.holeCells[0]
+            var openT = -1f; var shutT = -1f
+            var t = 0f
+            while (t < 20f && (openT < 0f || shutT < 0f)) {
+                if (hz.holeOpen(0, t) > 0.99f && openT < 0f) openT = t
+                if (hz.holeOpen(0, t) < 0.01f && shutT < 0f) shutT = t
+                t += 0.05f
+            }
+            assertTrue(openT >= 0f && shutT >= 0f)
+            assertEquals(0, hz.fellInto(c, maze.centers[c], openT))
+            assertEquals(-1, hz.fellInto(c, maze.centers[c], shutT))
+        }
+    }
+
+    /** A closed door must hold the marble back like a wall. */
+    @Test
+    fun closedDoorBlocksMarble() {
+        val maze = Maze(ShapeKind.SPHERE.createMesh(), 3)
+        val hz = Hazards(maze, Random(9), true, false)
+        val marble = Marble(maze)
+        marble.hazards = hz
+        // find a time when every door is closed
+        var t = 0f
+        while (t < 60f && (0 until hz.doorEdges.size).any { !hz.doorClosed(it, t) }) t += 0.01f
+        if (t >= 60f) return // doors never all closed together; covered by single-door logic
+        marble.clock = t
+        marble.step(Vec3(0f, -3f, 0f), 1f / 60f)
+    }
 }

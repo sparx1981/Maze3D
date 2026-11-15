@@ -9,6 +9,8 @@ object Shaders {
 uniform mat4 uVP;
 uniform mat4 uModel;
 uniform float uGrowT;
+uniform float uTime;
+uniform float uDoorMode;   // 1 = door mesh: aDelay is the phase of its open/close cycle
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNrm;
 layout(location=2) in vec3 aCol;
@@ -22,6 +24,11 @@ out vec3 vNL;
 void main() {
     float g = clamp((uGrowT - aDelay) / 0.35, 0.0, 1.0);
     g = g * g * (3.0 - 2.0 * g);
+    if (uDoorMode > 0.5) {
+        // keep in sync with Hazards.doorG: smoothstep(0.4, 0.8, 0.5 + 0.5 sin(1.15 t + 2 pi phase))
+        float s = 0.5 + 0.5 * sin(1.15 * uTime + aDelay * 6.2831853);
+        g = smoothstep(0.4, 0.8, s) * smoothstep(0.0, 0.6, uGrowT);
+    }
     vec3 p = aPos + aLift * g;
     vec4 w = uModel * vec4(p, 1.0);
     vWorld = w.xyz;
@@ -290,6 +297,101 @@ void main() {
     vec3 H = normalize(uLightDir + V);
     col += pow(max(dot(N, H), 0.0), 400.0) * vec3(6.0);
     outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
+}
+"""
+
+    /** Floor hole: uv in aCol.xy, phase in aCol.z (see Hazards.holeOpen: smoothstep(0, 0.6, sin(0.9 t + 2 pi phase))). */
+    const val HOLE_FS = """#version 300 es
+precision highp float;
+uniform float uTime;
+uniform float uAppear;
+uniform vec3 uAccent;
+in vec3 vCol;
+in vec3 vNrm;
+out vec4 outColor;
+""" + COMMON + """
+void main() {
+    vec2 uv = vCol.xy;
+    float r = length(uv);
+    float s = sin(0.9 * uTime + vCol.z * 6.2831853);
+    float a = smoothstep(0.0, 0.6, s) * uAppear;
+    float R = a;                        // opening radius in uv units (1.0 = full hole)
+    float fw = fwidth(r) * 1.5;
+    float lip = 1.0 - smoothstep(0.0, 0.12 + fw, abs(r - R - 0.06));   // glowing rim just outside
+    float inside = 1.0 - smoothstep(R - fw, R + fw, r);
+    float rimGlow = smoothstep(R - 0.4, R, r) * inside;
+    vec3 acc = pow(uAccent, vec3(2.2));
+    vec3 col = mix(vec3(0.004, 0.004, 0.008), acc * 1.4, rimGlow * 0.55);
+    float alpha = max(inside, lip * 0.9 * step(0.02, a));
+    col = mix(col, acc * 2.2, lip * (1.0 - inside) * 0.9);
+    if (alpha < 0.01) discard;
+    outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
+}
+"""
+
+    /** Additive glow sprites for sparks. */
+    const val SPARK_VS = """#version 300 es
+uniform mat4 uVP;
+uniform mat4 uModel;
+uniform float uScale;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aCol;
+layout(location=2) in float aLife;
+layout(location=3) in float aSize;
+out vec3 vCol;
+out float vLife;
+void main() {
+    vec4 clip = uVP * (uModel * vec4(aPos, 1.0));
+    gl_Position = clip;
+    gl_PointSize = max(aSize * uScale / clip.w, 1.0);
+    vCol = aCol;
+    vLife = aLife;
+}
+"""
+
+    const val SPARK_FS = """#version 300 es
+precision mediump float;
+in vec3 vCol;
+in float vLife;
+out vec4 outColor;
+void main() {
+    vec2 d = gl_PointCoord - 0.5;
+    float r = dot(d, d) * 4.0;
+    float a = exp(-r * 3.5) * vLife;
+    outColor = vec4(vCol * (1.0 + vLife) , a);
+}
+"""
+
+    /** Drifting cloud bank drawn over the scene. */
+    const val CLOUD_FS = """#version 300 es
+precision highp float;
+uniform float uTime;
+uniform float uAspect;
+uniform float uAmount;
+uniform vec3 uTint;
+in vec2 vUv;
+out vec4 outColor;
+float h(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float n(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p) {
+    float s = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+    return s;
+}
+void main() {
+    vec2 p = vec2(vUv.x * uAspect, vUv.y) * 2.2;
+    vec2 wind = vec2(0.05, 0.02) * uTime;
+    float d = fbm(p + wind + 0.6 * vec2(fbm(p * 0.7 - wind * 1.5), fbm(p * 0.7 + 3.1 + wind)));
+    float cover = smoothstep(0.30, 0.56, d);
+    float lightSide = fbm(p * 1.3 + wind * 1.2 + 4.0);
+    vec3 col = mix(uTint * 0.5 + vec3(0.30, 0.33, 0.40), vec3(0.95, 0.97, 1.0), 0.3 + 0.6 * lightSide);
+    float a = cover * 0.62 * uAmount;
+    col = pow(col, vec3(1.0 / 2.2));
+    outColor = vec4(col, a);
 }
 """
 
