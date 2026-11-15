@@ -34,6 +34,11 @@ class Marble(private val maze: Maze) {
 
     /** Puddles slow the marble when set. */
     var rain: Rain? = null
+    /** Flood water slows the ball and makes it splash. */
+    var field: MediumField? = null
+    /** 0 basic, 1 detailed, 2 ultra: how much the loose-material behaviour is simulated. */
+    var simDetail = 1
+    private var mudLoad = 0f
 
     /** Depth of puddle water the marble is rolling through right now (0..1), for effects and sound. */
     var wet = 0f
@@ -108,6 +113,24 @@ class Marble(private val maze: Maze) {
             wet = rn.depthAt(cell, position - nrm * radius)
             drag += wet * 5.5f            // thick water: strong viscous drag
             speedCap -= wet * 3.2f
+        }
+        if (simDetail >= 1 && terrain != Terrain.NONE) {
+            val spd = velocity.length() / maze.cellSize
+            if (terrain == Terrain.SAND) {
+                // slow rolling digs in; speed lets the ball plane over the surface
+                drag *= 1f + 0.55f * exp(-spd / 1.4f) - 0.25f * (spd / (spd + 1.5f))
+            } else {
+                // mud clings: the longer the ball ploughs through, the more it carries and the harder it pulls
+                mudLoad = (mudLoad + (0.12f + 0.2f * spd.coerceAtMost(2f)) * h).coerceAtMost(1f)
+                drag *= 1f + (if (simDetail >= 2) 0.7f else 0.4f) * mudLoad
+            }
+        } else mudLoad = maxOf(0f, mudLoad - 0.5f * h)
+        val f = field
+        if (f != null && f.kind == Medium.WATER) {
+            val w = f.levelAt(cell)
+            wet = maxOf(wet, w)
+            drag += w * 3.4f
+            speedCap -= w * 2.4f
         }
         velocity *= exp(-drag * h)
         val maxSpeed = maze.cellSize * speedCap

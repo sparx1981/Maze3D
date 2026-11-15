@@ -82,12 +82,20 @@ class DumpSceneTest {
         b.planProps(kind.outerRadius)
         val gal = System.getenv("MAZE_GALLERY") != null
         sb.append("\"props\":${mesh(if (gal) b.gallery() else b.props())},")
+        val med = System.getenv("MAZE_MEDIUM")
+        if (med != null) {
+            val mk = com.maze3d.core.Medium.valueOf(med)
+            val fld = com.maze3d.core.MediumField(maze, mk, java.util.Random(3), kind.outerRadius)
+            fld.warmUp(20f)
+            val mm = MediumMesh(maze, mk, b.wallHeight)
+            sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}},")
+        }
         sb.append("\"outer\":${kind.outerRadius},")
         sb.append("\"floor\":${mesh(b.floor())},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")
         fun v(c: com.maze3d.core.Vec3) = arr(floatArrayOf(c.x, c.y, c.z))
         sb.append("\"pal\":{\"floor\":${v(pal.floor)},\"floor2\":${v(pal.floor2)},\"wallMetal\":${pal.wallMetal},\"backdrop\":${pal.backdrop},\"floorMat\":${pal.floorMat},\"floorRough\":${pal.floorRough},\"wall\":${v(pal.wall)},\"wallMat\":${pal.wallMat},\"wallRough\":${pal.wallRough},\"bgTop\":${v(pal.bgTop)},\"bgBottom\":${v(pal.bgBottom)},\"accent\":${v(pal.accent)}},")
-        sb.append("\"sh\":{\"SCENE_VS\":${esc(Shaders.SCENE_VS)},\"SCENE_FS\":${esc(Shaders.SCENE_FS)},\"MARBLE_VS\":${esc(Shaders.MARBLE_VS)},\"MARBLE_FS\":${esc(Shaders.MARBLE_FS)},\"SHADOW_FS\":${esc(Shaders.SHADOW_FS)},\"BG_VS\":${esc(Shaders.BG_VS)},\"BG_FS\":${esc(Shaders.BG_FS)},\"HOLE_FS\":${esc(Shaders.PIT_FS)},\"LID_VS\":${esc(Shaders.LID_VS)},\"LID_FS\":${esc(Shaders.LID_FS)},\"CLOUD_FS\":${esc(Shaders.CLOUD_FS)},\"P_DOWN\":${esc(PostShaders.DOWN_FS)},\"P_BLUR\":${esc(PostShaders.BLUR_FS)},\"P_BRIGHT\":${esc(PostShaders.BRIGHT_FS)},\"P_SSAO\":${esc(PostShaders.SSAO_FS)},\"P_CLOUD\":${esc(PostShaders.CLOUD_FS)},\"P_COMP\":${esc(PostShaders.COMPOSITE_FS)},\"P_FXAA\":${esc(PostShaders.FXAA_FS)},\"PUDDLE_FS\":${esc(Shaders.PUDDLE_FS)},\"RAIN_VS\":${esc(Shaders.RAIN_VS)},\"RAIN_FS\":${esc(Shaders.RAIN_FS)},\"TRAIL_VS\":${esc(Shaders.TRAIL_VS)},\"TRAIL_FS\":${esc(Shaders.TRAIL_FS)},\"SPARK_VS\":${esc(Shaders.SPARK_VS)},\"SMOKE_FS\":${esc(PostShaders.SMOKE_FS)}}")
+        sb.append("\"sh\":{\"SCENE_VS\":${esc(Shaders.SCENE_VS)},\"SCENE_FS\":${esc(Shaders.SCENE_FS)},\"MARBLE_VS\":${esc(Shaders.MARBLE_VS)},\"MARBLE_FS\":${esc(Shaders.MARBLE_FS)},\"SHADOW_FS\":${esc(Shaders.SHADOW_FS)},\"BG_VS\":${esc(Shaders.BG_VS)},\"BG_FS\":${esc(Shaders.BG_FS)},\"HOLE_FS\":${esc(Shaders.PIT_FS)},\"LID_VS\":${esc(Shaders.LID_VS)},\"LID_FS\":${esc(Shaders.LID_FS)},\"CLOUD_FS\":${esc(Shaders.CLOUD_FS)},\"P_DOWN\":${esc(PostShaders.DOWN_FS)},\"P_BLUR\":${esc(PostShaders.BLUR_FS)},\"P_BRIGHT\":${esc(PostShaders.BRIGHT_FS)},\"P_SSAO\":${esc(PostShaders.SSAO_FS)},\"P_CLOUD\":${esc(PostShaders.CLOUD_FS)},\"P_COMP\":${esc(PostShaders.COMPOSITE_FS)},\"P_FXAA\":${esc(PostShaders.FXAA_FS)},\"MEDIUM_FS\":${esc(Shaders.MEDIUM_FS)},\"PUDDLE_FS\":${esc(Shaders.PUDDLE_FS)},\"RAIN_VS\":${esc(Shaders.RAIN_VS)},\"RAIN_FS\":${esc(Shaders.RAIN_FS)},\"TRAIL_VS\":${esc(Shaders.TRAIL_VS)},\"TRAIL_FS\":${esc(Shaders.TRAIL_FS)},\"SPARK_VS\":${esc(Shaders.SPARK_VS)},\"SMOKE_FS\":${esc(PostShaders.SMOKE_FS)}}")
         sb.append("}")
         File(out).writeText(sb.toString())
     }

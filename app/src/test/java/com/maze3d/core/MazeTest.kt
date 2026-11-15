@@ -194,4 +194,16 @@ class MazeTest {
         assertTrue("sand ($sand) slower than bare floor ($none)", sand < none)
         assertTrue("mud ($mud) slower than sand ($sand)", mud < sand)
     }
+
+    @Test
+    fun mediumFieldsStayBoundedAndLeaveTheStartClear() {
+        for (kind in listOf(Medium.WATER, Medium.GAS, Medium.FOG)) {
+            val maze = Maze(ShapeKind.SPHERE.createMesh(), 5)
+            val f = MediumField(maze, kind, java.util.Random(2), 1f)
+            f.warmUp(30f)
+            assertTrue(f.level.all { it in 0f..1f })
+            assertTrue("$kind covers something", f.level.any { it > 0.1f })
+            if (kind != Medium.FOG) assertTrue("$kind keeps the start clear", f.levelAt(maze.start) < 0.5f)
+        }
+    }
 }

@@ -642,6 +642,77 @@ void main() {
 }
 """
 
+    /** Flood water, poison gas and drifting fog sheets (see MediumMesh). vCol.x = concentration, vCol.y = layer. */
+    const val MEDIUM_FS = """#version 300 es
+precision highp float;
+uniform vec3 uCam;
+uniform float uTime;
+uniform float uKind;        // 1 water, 2 gas, 3 fog
+uniform float uScale;       // 1 / cell size
+uniform float uNear;        // sheets fade out close to the camera so the ball stays visible
+uniform vec3 uMarbleP;
+uniform float uMarbleSp;
+in vec3 vWorld;
+in vec3 vNrm;
+in vec3 vCol;
+in vec3 vLocal;
+out vec4 outColor;
+""" + COMMON + """
+float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 7.3) + 0.15 * vnoise(p * 4.3 + 1.9); }
+void main() {
+    float lv = vCol.x;
+    float layer = vCol.y * 3.0;
+    if (lv < 0.02) discard;
+    vec3 N = normalize(vNrm);
+    vec3 V = normalize(uCam - vWorld);
+    vec3 t1 = normalize(cross(N, vec3(0.31, 0.93, 0.19)));
+    vec3 t2 = cross(N, t1);
+    vec2 p = vec2(dot(vLocal, t1), dot(vLocal, t2)) * uScale;
+    float near = smoothstep(uNear * 0.4, uNear * 2.4, distance(uCam, vWorld));
+    if (uKind < 1.5) {                                          // ---- water
+        float t = uTime;
+        vec2 a = p * 2.6 + vec2(t * 0.35, t * 0.22);
+        vec2 b = p * 5.3 - vec2(t * 0.28, -t * 0.4);
+        float e = 0.06;
+        float h0 = vnoise(a) + 0.5 * vnoise(b);
+        vec2 grad = vec2(vnoise(a + vec2(e, 0.0)) + 0.5 * vnoise(b + vec2(e, 0.0)) - h0,
+                         vnoise(a + vec2(0.0, e)) + 0.5 * vnoise(b + vec2(0.0, e)) - h0) / e;
+        // wake and ripples around the ball
+        vec3 dm = vLocal - uMarbleP;
+        float d = length(dm) * uScale;
+        float ring = sin(d * 38.0 - uTime * 7.0) * exp(-d * 3.2) * smoothstep(0.0, 0.25, uMarbleSp);
+        grad += normalize(dm.xy + 1e-5) * ring * 0.8;
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.11 * (0.4 + lv));
+        float NoV = max(dot(N, V), 1e-3);
+        float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+        vec3 deep = mix(vec3(0.06, 0.34, 0.38), vec3(0.008, 0.07, 0.13), smoothstep(0.1, 0.8, lv));
+        vec3 col = deep * (0.7 + 0.3 * max(dot(N, uLightDir), 0.0)) + envMap(reflect(-V, N), 0.02) * vec3(0.5, 0.58, 0.7) * (0.12 + 0.88 * F);
+        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 900.0) * vec3(10.0, 9.4, 8.6);
+        float foam = smoothstep(0.30, 0.05, lv) * smoothstep(0.5, 0.8, vnoise(p * 9.0 + t * 0.5)) + max(ring, 0.0) * 0.35 * smoothstep(0.35, 0.0, d);
+        col = mix(col, vec3(0.9, 0.97, 1.0), clamp(foam, 0.0, 0.8));
+        float alpha = smoothstep(0.02, 0.16, lv) * (0.30 + 0.38 * smoothstep(0.1, 0.7, lv) + 0.35 * F) * (0.55 + 0.45 * near);
+        outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
+    } else {                                                    // ---- gas and fog
+        bool gas = uKind < 2.5;
+        float sc = gas ? 2.2 : 1.1;
+        vec2 q = p * sc + vec2(uTime * 0.07 + layer * 3.7, -uTime * 0.05 + layer * 1.3);
+        float n = fbm(q + 0.8 * vec2(fbm(q * 0.9 + uTime * 0.06), fbm(q * 0.9 - uTime * 0.05)));
+        float dens = clamp((n - 0.28) * 2.1, 0.0, 1.0) * smoothstep(0.02, 0.5, lv) * (0.5 + 0.5 * lv);
+        float light = 0.55 + 0.45 * max(dot(normalize(vNrm), uLightDir), 0.0);
+        vec3 col;
+        float alpha;
+        if (gas) {
+            col = mix(vec3(0.30, 0.62, 0.08), vec3(0.78, 0.95, 0.22), n) * light + vec3(0.10, 0.30, 0.02) * dens;
+            alpha = dens * 0.42;
+        } else {
+            col = mix(vec3(0.70, 0.76, 0.84), vec3(0.96, 0.97, 1.0), n) * light;
+            alpha = dens * 0.5;
+        }
+        outColor = vec4(finish(col, gl_FragCoord.xy), alpha * near);
+    }
+}
+"""
+
     /**
      * Falling rain as instanced screen-aligned streaks. Drops are spread through the camera's view frustum and fall
      * away from the camera, down and toward the maze, so they converge in perspective instead of dropping straight down.

@@ -38,6 +38,18 @@ class GlMesh(private val attribs: IntArray) {
         GLES30.glBindVertexArray(0)
     }
 
+    private var vcache: java.nio.FloatBuffer? = null
+    /** Replaces the vertex data in place (same layout and count as the last upload); cheap enough for 10 Hz updates. */
+    fun updateVertices(vertices: FloatArray) {
+        var fb = vcache
+        if (fb == null || fb.capacity() < vertices.size) {
+            fb = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer(); vcache = fb
+        }
+        fb!!.clear(); fb.put(vertices); fb.position(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf[0])
+        GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, vertices.size * 4, fb)
+    }
+
     fun draw() {
         if (indexCount == 0) return
         GLES30.glBindVertexArray(vao[0])

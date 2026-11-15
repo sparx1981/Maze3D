@@ -87,6 +87,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    private var mediumProg = 0
+    private var mediumMesh: GlMesh? = null
+    private var mediumGeo: MediumMesh? = null
+    private var field: com.maze3d.core.MediumField? = null
+    private var mediumAcc = 0f
+    private var poison = 0f
     private var trailProg = 0
     private val trail = TrailBuffer()
     private var terrain = Terrain.NONE
@@ -228,6 +234,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         trail.init()
         rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
         puddleMesh = GlMesh(GlMesh.SCENE)
+        mediumProg = Shaders.program(Shaders.SCENE_VS, Shaders.MEDIUM_FS)
+        mediumMesh = GlMesh(GlMesh.SCENE)
         run {
             val r = java.util.Random(99)
             val seeds = FloatArray(RAIN_DROPS * 4) { r.nextFloat() }
@@ -409,6 +417,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         rain = if (rainNow) Rain(m, rnd) else null
         marble!!.rain = rain
         marble!!.terrain = terrain
+        marble!!.simDetail = simQuality
+        poison = 0f
+        field = if (medium != Medium.NONE) com.maze3d.core.MediumField(m, medium, rnd, k.outerRadius).also { it.warmUp(if (medium == Medium.WATER) 8f else 5f) } else null
+        marble!!.field = field
+        mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight) }
+        mediumGeo?.let { g -> mediumMesh!!.upload(g.update(field!!.level), g.indices, true) }
+        mediumAcc = 0f
         rippleStart.fill(-100f); rainWet = 0f
         rain?.let { rn ->
             val mbp = b.puddles(rn.cells, rn.maxRadius * 0.9f)
@@ -574,7 +589,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     // marble is dropping into a hole; physics paused
                     fallTimer -= dt
                     if (fallTimer <= 0f) {
-                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase()
+                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase(); poison = 0f
                         val sc = m.centers[m.start]
                         sparks.burst(sc, mb.surface.normal(sc), 28, 0.9f, Vec3(0.4f, 0.8f, 1f))
                         audio.respawn(panOf(sc))
@@ -582,6 +597,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 } else {
                     mb.clock = time
                     mb.step(gLocal, dt)
+                    updateMedium(mb, m, dt)
                     rollMarble(mb, dt)
                     val spd = mb.velocity.length() / (m.cellSize * 4f)
                     if (spd > 0.3f && time - trailAt > 0.025f) {
@@ -730,28 +746,40 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Footprints, kicked-up dust or mud, flying grains and clumps, and the dirt that builds up on the marble. */
     private fun layTrail(mb: Marble, m: Maze, dt: Float) {
+        mb.simDetail = simQuality
+        val q = simQuality.coerceIn(0, 2)
         val n = mb.surface.normal(mb.position)
         val under = mb.position - n * mb.radius
         val size = mb.radius * (if (terrain == Terrain.MUD) 1.25f else 1.1f)
         val last = trail.last
         val spd = mb.velocity.length() / (m.cellSize * 4f)
         // stamp densely along the path so the groove is continuous; fast rolling digs a slightly wider track
-        if (last == null || (under - last).length() > size * 0.24f) trail.add(under, n, size * (1f + 0.25f * spd.coerceAtMost(1f)), time)
+        if (last == null || (under - last).length() > size * (if (q == 0) 0.4f else if (q == 1) 0.24f else 0.14f)) trail.add(under, n, size * (1f + 0.25f * spd.coerceAtMost(1f)), time)
         dirt = (dirt + spd * dt * (if (terrain == Terrain.MUD) 0.35f else 0.18f)).coerceAtMost(1f)
         val vdir = if (mb.velocity.lengthSq() > 1e-8f) mb.velocity.normalized() else Vec3.ZERO
+        if (q == 2 && spd > 0.15f && rnd.nextFloat() < 0.5f) {
+            // ultra: a spray of fine grains / droplets thrown from both sides of the wheel track
+            val side = (n cross vdir).normalized()
+            val col = if (terrain == Terrain.MUD) Vec3(0.13f, 0.08f, 0.05f) else Vec3(0.8f, 0.66f, 0.42f)
+            repeat(3) {
+                val sd = if (rnd.nextBoolean()) 1f else -1f
+                val v = (n * 0.8f + side * sd * 0.7f - vdir * 0.2f + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.4f).normalized() * (0.2f + 0.4f * spd * rnd.nextFloat())
+                sparks.emit(under, v, 0.4f, col, 0.0035f)
+            }
+        }
         if (spd > 0.12f && time - dustAt > 0.04f) {
             dustAt = time
             if (terrain == Terrain.SAND) {
                 // a soft plume behind the marble, plus grains thrown up and back
                 dust.puff(under - vdir * (mb.radius * 0.5f), n, 1, 0.05f + 0.03f * spd, Vec3(0.88f, 0.75f, 0.54f))
-                repeat(1 + (spd * 2f).toInt()) {
+                repeat(1 + (spd * 2f).toInt() * (if (q == 2) 3 else 1)) {
                     val v = (n * 0.9f - vdir * 0.5f + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.7f).normalized() * (0.18f + 0.3f * spd * rnd.nextFloat())
                     sparks.emit(under, v, 0.32f, Vec3(0.55f, 0.43f, 0.26f), 0.0045f)
                 }
             } else {
                 // heavy clumps flung to the sides; when fast, some land as splats beside the track
                 dust.puff(under, n, 1, 0.028f, Vec3(0.16f, 0.10f, 0.06f))
-                if (spd > 0.3f) {
+                if (spd > 0.3f && q >= 1) {
                     val side = (n cross vdir).normalized() * (if (rnd.nextBoolean()) 1f else -1f)
                     val v = (n * 0.7f + side * (0.6f + rnd.nextFloat() * 0.6f) - vdir * 0.3f).normalized() * (0.22f + 0.35f * spd)
                     dust.emit(under, v, 0.45f, Vec3(0.12f, 0.075f, 0.045f), 0.016f + 0.01f * rnd.nextFloat())
@@ -921,7 +949,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val wp = orient.rotate(mbL.position)
             GLES30.glUniform3f(loc(sceneProg, "uMarbleL"), wp.x, wp.y, wp.z)
             GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), mbL.radius)
-            GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), 0.45f + pal.accent.x * 0.3f, 0.6f + pal.accent.y * 0.25f, 0.9f)
+            GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
         GLES30.glUniform1f(loc(sceneProg, "uFog"), 0.55f * fogK)
@@ -943,6 +971,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         drawTrail(vpm, cam)
         drawHoles(vpm, cam)
         drawPuddles(vpm, cam)
+        drawMedium(vpm, cam)
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
         scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
@@ -1159,6 +1188,55 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         trail.draw(trailProg, loc(trailProg, "uPass"))
         GLES30.glDepthMask(true)
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(sceneProg)
+    }
+
+    /** Advances the flood / gas / fog and applies its effect on the ball. */
+    private fun updateMedium(mb: Marble, m: Maze, dt: Float) {
+        val f = field ?: return
+        f.update(dt)
+        mediumAcc += dt
+        if (mediumAcc >= 0.1f) {
+            mediumAcc = 0f
+            mediumGeo?.let { g -> mediumMesh?.updateVertices(g.update(f.level)) }
+        }
+        if (f.kind == Medium.GAS && fallTimer <= 0f) {
+            val lv = f.levelAt(mb.cell)
+            poison = (poison + (if (lv > 0.3f) lv * dt * 0.5f else -dt * 0.35f)).coerceIn(0f, 1f)
+            if (poison >= 1f) {
+                poison = 0f
+                fallTimer = 0.55f
+                fallFrom = mb.position; fallTo = mb.position
+                audio.fall(panOf(mb.position))
+                host.onToast("Poisoned by the gas - back to the start")
+            }
+        }
+    }
+
+    private fun drawMedium(vpm: FloatArray, cam: Vec3) {
+        val f = field ?: return
+        val mb = marble
+        GLES30.glUseProgram(mediumProg)
+        GLES30.glUniformMatrix4fv(loc(mediumProg, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(mediumProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(mediumProg, "uGrowT"), growT)
+        GLES30.glUniform1f(loc(mediumProg, "uTime"), time)
+        GLES30.glUniform1f(loc(mediumProg, "uDoorMode"), 0f)
+        GLES30.glUniform3f(loc(mediumProg, "uCam"), cam.x, cam.y, cam.z)
+        GLES30.glUniform3f(loc(mediumProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glUniform1f(loc(mediumProg, "uKind"), when (f.kind) { Medium.WATER -> 1f; Medium.GAS -> 2f; else -> 3f })
+        val cs = maze?.cellSize ?: 0.1f
+        GLES30.glUniform1f(loc(mediumProg, "uScale"), 1f / cs)
+        GLES30.glUniform1f(loc(mediumProg, "uNear"), cs * 1.6f)
+        val wp = mb?.position ?: Vec3.ZERO
+        GLES30.glUniform3f(loc(mediumProg, "uMarbleP"), wp.x, wp.y, wp.z)
+        GLES30.glUniform1f(loc(mediumProg, "uMarbleSp"), ((mb?.velocity?.length() ?: 0f) / (cs * 4f)).coerceIn(0f, 1f))
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        mediumMesh?.draw()
+        GLES30.glDepthMask(true)
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glUseProgram(sceneProg)
     }
