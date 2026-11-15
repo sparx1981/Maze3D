@@ -4,7 +4,7 @@ import com.maze3d.core.Vec3
 import java.util.Random
 
 /** Material ids understood by the scene shader. */
-object Mat { const val ENAMEL = 0; const val CARBON = 1; const val BRUSHED = 2; const val WOOD = 3; const val FLAT = 4 }
+object Mat { const val ENAMEL = 0; const val CARBON = 1; const val BRUSHED = 2; const val WOOD = 3; const val FLAT = 4; const val SAND = 5; const val MUD = 6 }
 
 /** A "finish": floor + wall materials and the studio backdrop. Colours are sRGB. */
 class Palette(
@@ -14,6 +14,10 @@ class Palette(
     val bgTop: Vec3, val bgBottom: Vec3, val accent: Vec3,
     val door: Vec3
 ) {
+    /** Same finish, but with a different floor (sand or mud). */
+    fun withFloor(color: Vec3, mat: Int, rough: Float) =
+        Palette(name, color, mat, rough, wall, wallMat, wallRough, bgTop, bgBottom, accent, door)
+
     companion object {
         private fun c(r: Int, g: Int, b: Int) = Vec3(r / 255f, g / 255f, b / 255f)
         val all = listOf(

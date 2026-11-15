@@ -129,19 +129,19 @@ float layer(vec2 p, vec2 wind, float scale, float t, float cut) {
 }
 void main() {
     vec2 p = vec2(vUv.x * uAspect, vUv.y);
-    float cut = mix(0.68, 0.42, uDensity);
+    float cut = mix(0.74, 0.36, uDensity);
     vec4 acc = vec4(0.0);
     vec2 L = vec2(-0.03, 0.045);                     // light direction in uv: shade by looking toward the light
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
         float scale = 1.6 + 1.5 * fi;                // far layers big and slow, near layers small and fast
         float speed = 0.45 + 0.9 * fi;
-        float t = uTime * 0.08 * speed;
+        float t = uTime * 0.30 * speed;
         float d = layer(p + fi * 3.7, uWind, scale, t, cut + 0.02 * fi);
         float dl = layer(p + fi * 3.7 + L * (1.0 + fi), uWind, scale, t, cut + 0.02 * fi);
         float lit = clamp(0.55 + (d - dl) * 3.2, 0.0, 1.0);
         vec3 col = mix(uShade, uTint, lit);
-        float a = d * (0.30 + 0.16 * fi) * (0.6 + 0.4 * uDensity);
+        float a = d * (0.28 + 0.17 * fi) * (0.55 + 0.45 * uDensity);
         // composite this layer over what we have (front layers come last)
         acc.rgb = acc.rgb * (1.0 - a) + col * a;
         acc.a = acc.a + a * (1.0 - acc.a);

@@ -71,9 +71,11 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         t = (System.nanoTime() - startNanos) / 1e9f
         if (running) postInvalidateOnAnimation()
         val w = width.toFloat(); val h = height.toFloat()
-        // background
+        // background (reset the paint first: a leftover colour alpha would make the whole screen translucent)
+        p.style = Paint.Style.FILL; p.color = Color.WHITE; p.alpha = 255; p.xfermode = null
         p.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(16, 26, 51), Color.rgb(4, 6, 12), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, p)
+        p.color = Color.WHITE; p.alpha = 255
         p.shader = RadialGradient(w / 2, h * 0.45f, h * 0.75f, intArrayOf(Color.TRANSPARENT, Color.argb(150, 0, 0, 0)), floatArrayOf(0.4f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, p)
         p.shader = null
@@ -84,6 +86,7 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         val grow = easeOut(t / 0.9f)
 
         // glow
+        p.color = Color.WHITE; p.alpha = 255
         p.shader = RadialGradient(cx, cy, R * 1.9f * grow + 1f, intArrayOf(Color.argb(60, 80, 160, 255), Color.TRANSPARENT), floatArrayOf(R * 0.8f / (R * 1.9f), 1f), Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, R * 1.9f * grow + 1f, p)
         p.shader = null
@@ -91,6 +94,7 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         c.save()
         c.translate(cx, cy); c.scale(grow, grow)
         // sphere body
+        p.color = Color.WHITE; p.alpha = 255
         p.shader = RadialGradient(-R * 0.35f, -R * 0.4f, R * 1.3f, intArrayOf(Color.rgb(61, 106, 138), Color.rgb(20, 40, 61), Color.rgb(6, 11, 20)), floatArrayOf(0.1f, 0.6f, 1f), Shader.TileMode.CLAMP)
         c.drawCircle(0f, 0f, R, p)
         p.shader = null
@@ -136,7 +140,7 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         // marble at the head of the thread
         if (haveHead && steps > 0) {
             val mr = R * 0.085f
-            p.alpha = if (hz > 0f) 255 else 80
+            p.color = Color.WHITE; p.alpha = if (hz > 0f) 255 else 80
             p.shader = RadialGradient(hx - mr * 0.35f, hy - mr * 0.4f, mr * 1.4f,
                 intArrayOf(Color.WHITE, Color.rgb(207, 220, 240), Color.rgb(58, 70, 96), Color.rgb(159, 180, 214)),
                 floatArrayOf(0f, 0.35f, 0.8f, 1f), Shader.TileMode.CLAMP)
@@ -166,9 +170,11 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         }
 
         // progress line
+        p.style = Paint.Style.FILL
         val pw = w * 0.42f; val px = (w - pw) / 2; val py = h * 0.9f
         p.color = Color.argb(40, 255, 255, 255)
         c.drawRect(px, py, px + pw, py + 3f * resources.displayMetrics.density, p)
+        p.color = Color.WHITE; p.alpha = 255
         p.shader = LinearGradient(px, 0f, px + pw, 0f, Color.rgb(88, 214, 255), Color.rgb(255, 211, 106), Shader.TileMode.CLAMP)
         c.drawRect(px, py, px + pw * (t / 2.9f).coerceIn(0f, 1f), py + 3f * resources.displayMetrics.density, p)
         p.shader = null

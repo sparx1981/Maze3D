@@ -155,4 +155,25 @@ class MazeTest {
         repeat(60 * 80) { rain.update(1f / 60f, false) }
         assertTrue(rain.level[0] < 0.3f)
     }
+
+    @Test
+    fun sandAndMudSlowTheMarble() {
+        fun topSpeed(t: Terrain): Float {
+            val maze = Maze(ShapeKind.SPHERE.createMesh(), 9)
+            val m = Marble(maze)
+            m.terrain = t
+            // constant pull along the surface for a few seconds
+            var best = 0f
+            repeat(60 * 4) {
+                val n = maze.mesh.surface.normal(m.position)
+                val g = (Vec3(0f, 1f, 0f) cross n).normalized() * 3.2f
+                m.step(g, 1f / 60f)
+                best = maxOf(best, m.velocity.length())
+            }
+            return best
+        }
+        val none = topSpeed(Terrain.NONE); val sand = topSpeed(Terrain.SAND); val mud = topSpeed(Terrain.MUD)
+        assertTrue("sand ($sand) slower than bare floor ($none)", sand < none)
+        assertTrue("mud ($mud) slower than sand ($sand)", mud < sand)
+    }
 }

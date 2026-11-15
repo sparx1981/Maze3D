@@ -5,8 +5,8 @@ interface Audio {
     /** Marble hit a wall: [strength] 0..1, [pan] -1 (left) .. 1 (right). */
     fun impact(strength: Float, pan: Float)
 
-    /** Called every frame. [speed] 0..1 of top speed; [wood] selects the floor's rolling sound. */
-    fun roll(speed: Float, wood: Boolean)
+    /** Called every frame. [speed] 0..1 of top speed; [kind] selects the floor's rolling sound: 0 hard, 1 wood, 2 sand, 3 mud. */
+    fun roll(speed: Float, kind: Int)
 
     fun doorOpen(volume: Float, pan: Float)
     fun doorClose(volume: Float, pan: Float)
@@ -30,7 +30,7 @@ interface Audio {
 
 object NoAudio : Audio {
     override fun impact(strength: Float, pan: Float) {}
-    override fun roll(speed: Float, wood: Boolean) {}
+    override fun roll(speed: Float, kind: Int) {}
     override fun doorOpen(volume: Float, pan: Float) {}
     override fun doorClose(volume: Float, pan: Float) {}
     override fun holeOpen(volume: Float, pan: Float) {}

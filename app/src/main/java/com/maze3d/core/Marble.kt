@@ -29,6 +29,9 @@ class Marble(private val maze: Maze) {
         set(v) { field = v; buildDoorLists() }
     var clock = 0f
 
+    /** What the floor is made of (sand and mud slow the marble). */
+    var terrain: Terrain = Terrain.NONE
+
     /** Puddles slow the marble when set. */
     var rain: Rain? = null
 
@@ -95,12 +98,12 @@ class Marble(private val maze: Maze) {
         val nrm = surface.normal(position)
         val gt = g - nrm * (g dot nrm)
         // 5/7 for a solid ball rolling without slipping.
-        velocity += gt * (0.714f * h)
+        velocity += gt * (0.714f * h * terrain.accel)
         velocity -= nrm * (velocity dot nrm)
         val rn = rain
         wet = 0f
-        var drag = 0.5f
-        var speedCap = 6f
+        var drag = 0.5f + terrain.drag
+        var speedCap = 6f * terrain.speedCap
         if (rn != null) {
             wet = rn.depthAt(cell, position - nrm * radius)
             drag += wet * 5.5f            // thick water: strong viscous drag

@@ -33,11 +33,10 @@ class SoundEngine(private val ctx: Context) : Audio {
     private val loaded = HashSet<Int>()
 
     // looping streams
-    private var rollHard = 0
-    private var rollWood = 0
+    private val rollNames = arrayOf("sfx_roll_hard", "sfx_roll_wood", "sfx_roll_sand", "sfx_roll_mud")
+    private val rollStreams = IntArray(4)
+    private val rollVols = FloatArray(4)
     private var windStream = 0
-    private var rollVolHard = 0f
-    private var rollVolWood = 0f
     private var windVol = 0f
     private var rainStream = 0
     private var rainVol = 0f
@@ -56,7 +55,7 @@ class SoundEngine(private val ctx: Context) : Audio {
         val names = listOf(
             "sfx_impact_s0", "sfx_impact_s1", "sfx_impact_s2", "sfx_impact_m0", "sfx_impact_m1", "sfx_impact_m2",
             "sfx_impact_h0", "sfx_impact_h1", "sfx_impact_h2", "sfx_spark_0", "sfx_spark_1",
-            "sfx_roll_hard", "sfx_roll_wood", "sfx_wind", "sfx_door_open", "sfx_door_close",
+            "sfx_roll_hard", "sfx_roll_wood", "sfx_roll_sand", "sfx_roll_mud", "sfx_wind", "sfx_door_open", "sfx_door_close",
             "sfx_hole_open", "sfx_hole_close", "sfx_hole_fall", "sfx_respawn", "sfx_goal",
             "sfx_level_grow", "sfx_level_sink", "sfx_ui_click", "sfx_ui_on", "sfx_ui_off", "sfx_rain", "sfx_splash_0", "sfx_splash_1"
         )
@@ -98,18 +97,18 @@ class SoundEngine(private val ctx: Context) : Audio {
         if (s > 0.4f) play("sfx_spark_${Random.nextInt(2)}", 0.25f + 0.4f * s, pan, jitter(0.1f))
     }
 
-    override fun roll(speed: Float, wood: Boolean) {
+    override fun roll(speed: Float, kind: Int) {
         if (!sfxOn || paused) { silenceRolls(); return }
-        if (rollHard == 0 && ready("sfx_roll_hard") != null) rollHard = loop("sfx_roll_hard")
-        if (rollWood == 0 && ready("sfx_roll_wood") != null) rollWood = loop("sfx_roll_wood")
+        for (k in rollNames.indices) if (rollStreams[k] == 0 && ready(rollNames[k]) != null) rollStreams[k] = loop(rollNames[k])
         val n = speed.coerceIn(0f, 1f)
         val vol = if (n < 0.02f) 0f else Math.pow(n.toDouble(), 0.6).toFloat() * 0.85f
         val rate = 0.55f + 1.15f * n
-        // smooth to avoid zipper noise
-        rollVolHard += ((if (wood) 0f else vol) - rollVolHard) * 0.25f
-        rollVolWood += ((if (wood) vol else 0f) - rollVolWood) * 0.25f
-        if (rollHard != 0) { pool.setVolume(rollHard, rollVolHard * 0.8f, rollVolHard * 0.8f); pool.setRate(rollHard, rate) }
-        if (rollWood != 0) { pool.setVolume(rollWood, rollVolWood * 0.8f, rollVolWood * 0.8f); pool.setRate(rollWood, rate) }
+        val sel = kind.coerceIn(0, rollNames.size - 1)
+        for (k in rollNames.indices) {
+            rollVols[k] += ((if (k == sel) vol else 0f) - rollVols[k]) * 0.25f
+            val s = rollStreams[k]
+            if (s != 0) { pool.setVolume(s, rollVols[k] * 0.8f, rollVols[k] * 0.8f); pool.setRate(s, rate) }
+        }
     }
 
     override fun doorOpen(volume: Float, pan: Float) { play("sfx_door_open", volume, pan, jitter()) }
@@ -149,9 +148,7 @@ class SoundEngine(private val ctx: Context) : Audio {
     }
 
     private fun silenceRolls() {
-        rollVolHard = 0f; rollVolWood = 0f
-        if (rollHard != 0) pool.setVolume(rollHard, 0f, 0f)
-        if (rollWood != 0) pool.setVolume(rollWood, 0f, 0f)
+        for (k in rollVols.indices) { rollVols[k] = 0f; if (rollStreams[k] != 0) pool.setVolume(rollStreams[k], 0f, 0f) }
     }
 
     // ---- UI sounds (called on the UI thread) -----------------------------------------------

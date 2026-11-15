@@ -185,7 +185,34 @@ def roll_wood():
     x += bp(noise(n / SR), 1500, 3500, 2) * 0.12 * am
     x = loopify(x, int(0.2 * SR))
     add("sfx_roll_wood", x, peak=0.6, loop=True)
-roll_hard(); roll_wood()
+def roll_sand():
+    d = 2.4; n = int(d * SR) + int(0.2 * SR)
+    t = np.arange(n) / SR
+    hiss = bp(noise(n / SR), 900, 7500, 2) * (0.55 + 0.45 * np.sin(2 * np.pi * 4.3 * t + 1.0))
+    grains = np.zeros(n)
+    r = np.random.default_rng(31)
+    for _ in range(int(d * 520)):                       # crunchy individual grains
+        at = r.uniform(0, d + 0.2); k = int(r.uniform(0.0007, 0.003) * SR)
+        f = r.uniform(1800, 6500)
+        place(grains, np.sin(2 * np.pi * f * np.arange(k) / SR) * edecay(k, k / SR / 2.5) * r.uniform(0.2, 1.0), at)
+    low = lp(noise(n / SR), 260, 2) * 0.35
+    x = hiss * 0.5 + grains * 0.9 + low
+    add("sfx_roll_sand", loopify(x, int(0.2 * SR)), peak=0.6, loop=True)
+def roll_mud():
+    d = 2.4; n = int(d * SR) + int(0.2 * SR)
+    t = np.arange(n) / SR
+    body = bp(noise(n / SR), 70, 650, 2) * (0.7 + 0.3 * np.sin(2 * np.pi * 2.7 * t + 0.4))
+    squelch = np.zeros(n)
+    r = np.random.default_rng(32)
+    for _ in range(int(d * 14)):                        # sticky bubbles popping
+        at = r.uniform(0, d + 0.2); f0 = r.uniform(180, 520); k = int(r.uniform(0.03, 0.09) * SR)
+        bub = glide(f0, f0 * r.uniform(1.6, 2.6), k / SR)
+        bub = bub * edecay(len(bub), k / SR / 3) * r.uniform(0.2, 0.7)
+        place(squelch, bub, at)
+    wet = bp(noise(n / SR), 600, 2200, 2) * 0.12 * (0.5 + 0.5 * np.sin(2 * np.pi * 5.1 * t))
+    x = body * 0.8 + squelch * 0.9 + wet + lp(noise(n / SR), 120, 2) * 0.5
+    add("sfx_roll_mud", loopify(x, int(0.2 * SR)), peak=0.6, loop=True)
+roll_hard(); roll_wood(); roll_sand(); roll_mud()
 
 def wind():
     d = 8.0; xf = int(1.0 * SR); n = int(d * SR) + xf

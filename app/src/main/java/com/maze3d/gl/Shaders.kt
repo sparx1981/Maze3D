@@ -213,6 +213,21 @@ void main() {
         hgt = (mix(g, ring, 0.45) - 0.5) * 0.0007;
         rough = 0.40 + 0.12 * g;
         coat = 0.6;
+    } else if (uMat == 5) {     // sand: fine grain, wind ripples
+        float fade = 1.0 - smoothstep(0.0012, 0.004, length(dFdx(P)));      // grain averages out at a distance
+        float grain = vnoise(vec2(dot(P, vec3(310.0, 170.0, 250.0)), dot(P, vec3(-190.0, 330.0, 120.0))));
+        float lump = vnoise(vec2(dot(P, vec3(14.0, 9.0, 11.0)), dot(P, vec3(-8.0, 15.0, 10.0))));
+        float rip = sin(dot(P, vec3(70.0, 20.0, 45.0)) + 3.0 * lump);
+        albedo *= 0.80 + 0.2 * lump + 0.22 * (grain - 0.5) * 2.0 * fade;
+        hgt = (rip * 0.0004 + (grain - 0.5) * 0.0004 * fade);
+        rough = 0.96;
+    } else if (uMat == 6) {     // mud: dark, lumpy, wet sheen
+        float lump = vnoise(vec2(dot(P, vec3(26.0, 14.0, 20.0)), dot(P, vec3(-12.0, 28.0, 16.0))));
+        float fine = vnoise(vec2(dot(P, vec3(150.0, 90.0, 120.0)), dot(P, vec3(-80.0, 160.0, 70.0))));
+        albedo *= 0.55 + 0.75 * lump;
+        hgt = (lump - 0.5) * 0.0014 + (fine - 0.5) * 0.0003;
+        rough = 0.22 + 0.4 * (1.0 - lump);
+        coat = 0.85;
     } else if (uMat == 0) {     // lacquer / enamel
         coat = 1.0;
     }
@@ -224,7 +239,7 @@ void main() {
         return;
     }
 
-    if (uMat >= 1 && uMat <= 3) N = bumpN(N, vWorld, hgt);
+    if ((uMat >= 1 && uMat <= 3) || uMat >= 5) N = bumpN(N, vWorld, hgt);
     if (uWet > 0.0 && uMat != 4) {                         // rain: darker, glossier surfaces
         albedo *= mix(1.0, 0.7, uWet);
         rough = mix(rough, rough * 0.45, uWet);
@@ -293,6 +308,8 @@ uniform mat3 uBody;
 uniform float uGhost;
 uniform samplerCube uCube;
 uniform float uCubeOn;
+uniform float uDirt;
+uniform vec3 uDirtCol;
 in vec3 vWorld;
 in vec3 vNrmW;
 in vec3 vNrmL;
@@ -331,6 +348,7 @@ void main() {
     refr = mix(refr, acc * 1.6 + refr * 0.25, band * 0.85);
     vec3 refl = surroundings(R, 0.03);
     vec3 col = refr * (1.0 - F) + refl * (0.18 + 0.82 * F);
+    col = mix(col, uDirtCol * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0) * 0.8 + 0.15), uDirt * 0.62);   // sand or mud caked on the marble
     vec3 H = normalize(uLightDir + V);
     col += pow(max(dot(N, H), 0.0), 500.0) * vec3(7.0);
     col += irradiance(N) * 0.03;
@@ -458,15 +476,15 @@ out vec2 vC;
 void main() {
     const vec2 CORNERS[6] = vec2[6](vec2(0.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(0.0, -1.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
     vec2 c = CORNERS[gl_VertexID];
-    vec3 D = normalize(vec3(0.0, -0.55, -1.0));            // away from the camera and downward
+    vec3 D = normalize(vec3(0.0, -1.0, -0.3));             // mostly down, leaning slightly away from the camera (always downward on screen)
     float depth = 0.9 + aSeed.w * (uCamZ + 1.1);          // distance from the camera
     vec3 base = vec3((aSeed.x * 2.0 - 1.0) * depth * uTan.x * 1.15,
-                     (aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + 0.35 * depth * 0.2,
+                     (aSeed.y * 2.0 - 1.0) * depth * uTan.y * 1.15 + 0.9,
                      uCamZ - depth);
     float ph = fract(aSeed.z - uTime * (0.55 + 0.25 * aSeed.w));
-    float travel = ph * 1.25;
+    float travel = ph * 1.9;
     vec3 head = base + D * travel;
-    vec3 tail = head - D * (0.09 + 0.12 * (1.0 - aSeed.w));
+    vec3 tail = head - D * (0.07 + 0.09 * (1.0 - aSeed.w));
     vec4 ch = uVP * vec4(head, 1.0);
     vec4 ct = uVP * vec4(tail, 1.0);
     vec2 sh = (ch.xy / ch.w) * uViewport * 0.5;
@@ -481,7 +499,7 @@ void main() {
     gl_Position = pos;
     float fadeIn = smoothstep(0.0, 0.12, ph) * smoothstep(1.0, 0.8, ph);
     float vis = step(aSeed.w * 0.9, uIntensity);
-    vA = (0.22 + 0.5 * (1.0 - aSeed.w)) * uIntensity * vis * fadeIn;
+    vA = (0.18 + 0.42 * (1.0 - aSeed.w)) * uIntensity * vis * fadeIn;
     vC = c;
 }
 """
@@ -495,6 +513,74 @@ void main() {
     float across = 1.0 - vC.y * vC.y;
     float along = smoothstep(0.0, 0.35, vC.x) * (0.5 + 0.5 * vC.x);
     outColor = vec4(vec3(0.74, 0.84, 1.0), across * across * along * vA * 1.0);
+}
+"""
+
+    /** Footprint decals: one instanced quad per recorded marble position, lying on the surface. */
+    const val TRAIL_VS = """#version 300 es
+uniform mat4 uVP;
+uniform mat4 uModel;
+uniform float uTime;
+layout(location=0) in vec4 aPA;     // xyz = local position, w = time it was laid down
+layout(location=1) in vec4 aNS;     // xyz = local surface normal, w = half size
+out vec2 vUv;
+out float vAge;
+out vec3 vNrm;
+out vec3 vWorld;
+void main() {
+    const vec2 C[6] = vec2[6](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
+    vec2 c = C[gl_VertexID];
+    vec3 n = normalize(aNS.xyz);
+    vec3 a = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 t1 = normalize(cross(a, n));
+    vec3 t2 = cross(n, t1);
+    vec3 p = aPA.xyz + (t1 * c.x + t2 * c.y) * aNS.w + n * 0.004;
+    vec4 w = uModel * vec4(p, 1.0);
+    vWorld = w.xyz;
+    vNrm = mat3(uModel) * n;
+    vUv = c;
+    vAge = uTime - aPA.w;
+    gl_Position = uVP * w;
+}
+"""
+
+    const val TRAIL_FS = """#version 300 es
+precision highp float;
+uniform float uKind;      // 0 sand, 1 mud
+uniform float uPass;      // 0 = raised ridges, 1 = grooves
+uniform vec3 uCam;
+uniform vec3 uLightDir;
+in vec2 vUv;
+in float vAge;
+in vec3 vNrm;
+in vec3 vWorld;
+out vec4 outColor;
+void main() {
+    float r = length(vUv);
+    if (r > 1.0 || vAge < 0.0) discard;
+    bool mud = uKind > 0.5;
+    float life = mud ? 150.0 : 50.0;                            // sand blows back in, mud stays
+    float fade = 1.0 - smoothstep(life * 0.3, life, vAge);
+    if (fade <= 0.01) discard;
+    vec3 N = normalize(vNrm);
+    float lit = 0.40 + 0.60 * max(dot(N, uLightDir), 0.0);
+    vec3 col; float a;
+    if (uPass < 0.5) {
+        float ridge = smoothstep(0.50, 0.82, r) * (1.0 - smoothstep(0.82, 1.0, r));
+        col = (mud ? vec3(0.22, 0.13, 0.08) : vec3(0.97, 0.83, 0.58)) * lit * (mud ? 0.9 : 1.0);
+        a = ridge * (mud ? 0.60 : 0.34) * fade;
+    } else {
+        float groove = 1.0 - smoothstep(0.30, 0.80, r);
+        col = (mud ? vec3(0.045, 0.028, 0.018) : vec3(0.60, 0.46, 0.29)) * lit;
+        if (mud) {                                               // wet sheen along the groove
+            vec3 V = normalize(uCam - vWorld);
+            vec3 H = normalize(uLightDir + V);
+            col += vec3(0.55, 0.5, 0.42) * pow(max(dot(N, H), 0.0), 60.0) * groove * 0.5;
+        }
+        a = groove * (mud ? 0.88 : 0.60) * fade;
+    }
+    if (a < 0.01) discard;
+    outColor = vec4(col, a);
 }
 """
 

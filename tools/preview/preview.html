@@ -32,6 +32,7 @@ async function main(){
     gl.bindVertexArray(null);return {vao,n:m.i.length}};
   const draw=m=>{gl.bindVertexArray(m.vao);gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_INT,0);gl.bindVertexArray(null)};
   const doorsM=mk(D.doors,[3,3,3,3,1]), holesM=mk(D.holes,[3,3,3,3,1]); const holeP=prog(sh.SCENE_VS, sh.HOLE_FS), cloudP=prog(sh.BG_VS, sh.CLOUD_FS);
+  const trailP=prog(sh.TRAIL_VS, sh.TRAIL_FS);
   const puddleP=prog(sh.SCENE_VS, q.get('dbg')==='1'?sh.PUDDLE_FS.replace('outColor = vec4(finish(col, gl_FragCoord.xy), alpha);','outColor = vec4(1.0,0.0,1.0,1.0);'):sh.PUDDLE_FS), rainP=prog(sh.RAIN_VS, sh.RAIN_FS); const puddlesM=mk(D.puddles,[3,3,3,3,1]);
   const floor=mk(D.floor,[3,3,3,3,1]), walls=mk(D.walls,[3,3,3,3,1]), markers=mk(D.markers,[3,3,3,3,1]), thread=mk(D.thread,[3,3,3,3,1]);
   // unit sphere
@@ -104,6 +105,11 @@ async function main(){
   gl.uniform1f(U(sp,'uShadowOn'),shadowOn?1:0);gl.uniform1f(U(sp,'uTexel'),1/SS);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(U(sp,'uShadow'),0);
   const sc=(m,r,me,em)=>{gl.uniform1i(U(sp,'uMat'),m);gl.uniform1f(U(sp,'uRough'),r);gl.uniform1f(U(sp,'uMetal'),me);gl.uniform1f(U(sp,'uEmissive'),em)};
   sc(pal.floorMat,pal.floorRough,0,0);draw(floor);sc(pal.wallMat,pal.wallRough,1,0);draw(walls);gl.uniform1f(U(sp,'uDoorMode'),1);draw(doorsM);gl.uniform1f(U(sp,'uDoorMode'),0);
+  if(q.get('trail')){const tp=trailP;gl.useProgram(tp);gl.uniformMatrix4fv(U(tp,'uVP'),false,vpm);gl.uniformMatrix4fv(U(tp,'uModel'),false,model);gl.uniform1f(U(tp,'uTime'),parseFloat(q.get('tnow')||'20'));gl.uniform1f(U(tp,'uKind'),q.get('trail')==='mud'?1:0);gl.uniform3f(U(tp,'uCam'),cam[0],cam[1],cam[2]);gl.uniform3fv(U(tp,'uLightDir'),L);
+    const tv=gl.createVertexArray();gl.bindVertexArray(tv);const tb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,tb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(D.trail),gl.STATIC_DRAW);for(let i=0;i<2;i++){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,4,gl.FLOAT,false,32,i*16);gl.vertexAttribDivisor(i,1)}
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1.2,-1.2);gl.depthMask(false);
+    for(const ps of [0,1]){gl.uniform1f(U(tp,'uPass'),ps);gl.drawArraysInstanced(gl.TRIANGLES,0,6,D.trail.length/8)}
+    gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);gl.disable(gl.BLEND);gl.vertexAttribDivisor(0,0);gl.vertexAttribDivisor(1,0);gl.bindVertexArray(null);gl.useProgram(sp)}
   if(q.get('rain')==='1'){const pp=puddleP;gl.useProgram(pp);gl.uniformMatrix4fv(U(pp,'uVP'),false,vpm);gl.uniformMatrix4fv(U(pp,'uModel'),false,model);gl.uniform1f(U(pp,'uGrowT'),growT);gl.uniform1f(U(pp,'uTime'),TIME);gl.uniform1f(U(pp,'uRain'),1);gl.uniform1f(U(pp,'uDoorMode'),0);gl.uniform3f(U(pp,'uCam'),cam[0],cam[1],cam[2]);gl.uniform3fv(U(pp,'uLightDir'),L);
     const lv=new Float32Array(24);D.levels.forEach((v,i)=>lv[i]=v);gl.uniform1fv(U(pp,'uLevel'),lv);
     const ru=new Float32Array(128),ra=new Float32Array(32);for(let i=0;i<32;i++){ru[i*4+3]=-1}

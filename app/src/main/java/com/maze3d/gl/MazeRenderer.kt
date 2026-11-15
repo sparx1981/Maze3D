@@ -10,6 +10,7 @@ import com.maze3d.core.Marble
 import com.maze3d.core.Maze
 import com.maze3d.core.Quat
 import com.maze3d.core.Rain
+import com.maze3d.core.Terrain
 import com.maze3d.core.ShapeKind
 import com.maze3d.core.Vec3
 import java.util.Random
@@ -60,6 +61,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    private var trailProg = 0
+    private val trail = TrailBuffer()
+    private var terrain = Terrain.NONE
+    private var dirt = 0f
+    private var dustAt = 0f
     private var rainProg = 0
     private var puddleMesh: GlMesh? = null
     private var rainVbo = IntArray(1)
@@ -67,6 +73,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var rain: Rain? = null
     private var rainWet = 0f
     private var dropAcc = 0f
+    private var splashAcc = 0f
     private var lastWakeAt = 0f
     private val rippleLocal = Array(32) { Vec3.ZERO }
     private val rippleStart = FloatArray(32) { -100f }
@@ -174,6 +181,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         dust.init()
         smokeProg = Shaders.program(Shaders.SPARK_VS, PostShaders.SMOKE_FS)
         puddleProg = Shaders.program(Shaders.SCENE_VS, Shaders.PUDDLE_FS)
+        trailProg = Shaders.program(Shaders.TRAIL_VS, Shaders.TRAIL_FS)
+        trail.init()
         rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
         puddleMesh = GlMesh(GlMesh.SCENE)
         run {
@@ -232,6 +241,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         maze = m
         marble = Marble(m)
         pal = Palette.random(rnd, pal)
+        val tr = rnd.nextFloat()
+        terrain = if (tr < 0.18f) Terrain.SAND else if (tr < 0.34f) Terrain.MUD else Terrain.NONE
+        pal = when (terrain) {
+            Terrain.SAND -> pal.withFloor(Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
+            Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
+            else -> pal
+        }
+        dirt = 0f
+        trail.clear()
         val b = SceneBuilder(m, pal)
         builder = b
         floorMesh!!.let { val mb = b.floor(); it.upload(mb.vertices(), mb.indices()) }
@@ -241,16 +259,17 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         useClouds = rnd.nextFloat() < 0.45f
         val wantRain = rnd.nextFloat() < 0.35f
         if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
-        if (!wantDoors && !wantHoles && !useClouds && !wantRain) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
-        val rainNow = wantRain || (!wantDoors && !wantHoles && !useClouds)
+        if (!wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
+        val rainNow = wantRain || (!wantDoors && !wantHoles && !useClouds && terrain == Terrain.NONE)
         val hz = Hazards(m, rnd, wantDoors, wantHoles)
         rain = if (rainNow) Rain(m, rnd) else null
         marble!!.rain = rain
+        marble!!.terrain = terrain
         rippleStart.fill(-100f); rainWet = 0f
         rain?.let { rn ->
             val mbp = b.puddles(rn.cells, rn.maxRadius * 0.9f)
             puddleMesh!!.upload(mbp.vertices(), mbp.indices())
-            if (useClouds) cloudDensity = max(cloudDensity, 0.8f)
+            if (useClouds) cloudDensity = max(cloudDensity, 0.7f)
         }
         hazards = hz
         marble!!.hazards = hz
@@ -262,13 +281,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         holeMesh!!.let { val mb = b.holes(hz.holeCells, hz.holePhase, hz.holeRadius); it.upload(mb.vertices(), mb.indices()) }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
-        cloudDensity = 0.62f + 0.3f * rnd.nextFloat()
+        cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         val wa = rnd.nextFloat() * 6.2831853f
-        windX = kotlin.math.cos(wa) * 0.07f; windY = kotlin.math.sin(wa) * 0.035f
+        val ws = 0.14f + 0.16f * rnd.nextFloat()
+        windX = kotlin.math.cos(wa) * ws; windY = kotlin.math.sin(wa) * ws * 0.5f
         fallTimer = 0f
         hintLeft = 0f; hintCool = 0f
         goalBursted = false
-        host.onFinish(pal.name + listOfNotNull(if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
+        host.onFinish(pal.name + listOfNotNull(terrain.label.ifEmpty { null }, if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
         rollQ = Quat.IDENTITY
         growT = 0f
@@ -393,7 +413,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         val under = mb.position - mb.surface.normal(mb.position) * (mb.radius * 0.8f)
                         sparks.emit(under, Vec3.ZERO, 0.38f, pal.accent, 0.012f + 0.01f * spd)
                     }
-                    audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f), pal.floorMat == Mat.WOOD)
+                    audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
+                        when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
+                    if (terrain != Terrain.NONE) layTrail(mb, m, dt)
                     if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
                         lastSparkAt = time
                         sparks.impact(mb.impactPos, mb.impactDir, min(mb.lastImpact / 3f, 1f), pal.wall * 1.2f)
@@ -439,7 +461,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
 
         updateRain(dt)
-        if (phase != Phase.PLAY || fallTimer > 0f) audio.roll(0f, false)
+        if (phase != Phase.PLAY || fallTimer > 0f) audio.roll(0f, 0)
         audio.wind(cloudAmt)
         val gl = orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY
         sparks.update(dt, gl)
@@ -508,6 +530,25 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
     }
 
+    /** Footprints, kicked-up dust or mud, and the dirt that builds up on the marble. */
+    private fun layTrail(mb: Marble, m: Maze, dt: Float) {
+        val n = mb.surface.normal(mb.position)
+        val under = mb.position - n * mb.radius
+        val size = mb.radius * 1.15f
+        val last = trail.last
+        if (last == null || (under - last).length() > size * 0.45f) trail.add(under, n, size, time)
+        val spd = mb.velocity.length() / (m.cellSize * 4f)
+        dirt = (dirt + spd * dt * (if (terrain == Terrain.MUD) 0.35f else 0.18f)).coerceAtMost(1f)
+        if (spd > 0.15f && time - dustAt > 0.05f) {
+            dustAt = time
+            if (terrain == Terrain.SAND) dust.puff(under, n, 1, 0.045f, Vec3(0.85f, 0.72f, 0.5f))
+            else {
+                dust.puff(under, n, 1, 0.03f, Vec3(0.22f, 0.14f, 0.09f))
+                if (spd > 0.4f) sparks.emit(under, (n + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)).normalized() * (0.25f * spd), 0.3f, Vec3(0.3f, 0.2f, 0.12f), 0.01f)
+            }
+        }
+    }
+
     private fun addRipple(local: Vec3, amp: Float) {
         rippleLocal[rippleNext] = local; rippleStart[rippleNext] = time; rippleAmp[rippleNext] = amp
         rippleNext = (rippleNext + 1) % rippleLocal.size
@@ -518,6 +559,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val rn = rain
         val m = maze ?: return
         val mb = marble ?: return
+        if (terrain == Terrain.NONE) dirt = max(0f, dirt - dt * 0.05f)
         if (rn == null) { rainWet = max(0f, rainWet - dt * 0.2f); audio.rain(0f); return }
         val target = if (phase == Phase.SINK) 0f else 1f
         rn.intensity += (target - rn.intensity) * min(1f, dt * 0.45f)
@@ -542,6 +584,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 if (rnd.nextFloat() < 0.5f) repeat(2) {
                     val v = (n + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 1.1f).normalized() * (0.12f + 0.12f * rnd.nextFloat())
                     sparks.emit(p, v, 0.22f, Vec3(0.55f, 0.7f, 0.9f), 0.006f)
+                }
+            }
+        }
+
+        // drops landing on the visible side of the maze: tiny splashes
+        if (rn.intensity > 0.15f && phase != Phase.SINK) {
+            splashAcc += dt * 55f * rn.intensity
+            var guard = 0
+            while (splashAcc >= 1f && guard++ < 12) {
+                splashAcc -= 1f
+                val lp = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+                val q = mb.surface.project(lp.normalized() * 1.2f)
+                val nl = mb.surface.normal(q)
+                if (orient.rotate(nl).z > 0.15f) {
+                    sparks.emit(q + nl * 0.003f, nl * (0.12f + 0.1f * rnd.nextFloat()) + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.1f,
+                        0.16f, Vec3(0.65f, 0.78f, 0.95f), 0.0055f)
                 }
             }
         }
@@ -651,6 +709,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
         doorMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
+        drawTrail(vpm, cam)
         drawHoles(vpm)
         drawPuddles(vpm, cam)
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
@@ -758,6 +817,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             drawPos = Vec3.lerp(fallFrom, fallTo, e)
             drawR = mb.radius * (1f - 0.85f * e)
         }
+        if (terrain != Terrain.NONE) drawPos -= mb.surface.normal(mb.position) * (mb.radius * (if (terrain == Terrain.MUD) 0.16f else 0.07f))
+        GLES30.glUniform1f(loc(marbleProg, "uDirt"), if (terrain == Terrain.NONE) dirt else dirt)
+        if (terrain == Terrain.MUD) GLES30.glUniform3f(loc(marbleProg, "uDirtCol"), 0.14f, 0.08f, 0.045f) else GLES30.glUniform3f(loc(marbleProg, "uDirtCol"), 0.62f, 0.46f, 0.26f)
         GLES30.glUniform3f(loc(marbleProg, "uCenter"), drawPos.x, drawPos.y, drawPos.z)
         GLES30.glUniform1f(loc(marbleProg, "uRadius"), drawR)
         GLES30.glUniform3f(loc(marbleProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
@@ -832,6 +894,27 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         } else if (cloudsOn) {
             post.blitClouds()
         }
+    }
+
+    private fun drawTrail(vpm: FloatArray, cam: Vec3) {
+        if (terrain == Terrain.NONE || trail.count == 0) return
+        GLES30.glUseProgram(trailProg)
+        GLES30.glUniformMatrix4fv(loc(trailProg, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(trailProg, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(trailProg, "uTime"), time)
+        GLES30.glUniform1f(loc(trailProg, "uKind"), if (terrain == Terrain.MUD) 1f else 0f)
+        GLES30.glUniform3f(loc(trailProg, "uCam"), cam.x, cam.y, cam.z)
+        GLES30.glUniform3f(loc(trailProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glPolygonOffset(-1.2f, -1.2f)
+        GLES30.glDepthMask(false)
+        trail.draw(trailProg, loc(trailProg, "uPass"))
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(sceneProg)
     }
 
     private fun drawPuddles(vpm: FloatArray, cam: Vec3) {
