@@ -88,6 +88,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    private val lampUniform = FloatArray(32)
+    private var lamps: List<Vec3> = emptyList()
     private var sandField: com.maze3d.core.SandField? = null
     private var sandTex = 0
     private var sandStampAt: Vec3? = null
@@ -416,6 +418,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         setupSand(m)
         wallMesh!!.let { val mb = b.walls(); it.upload(mb.vertices(), mb.indices()) }
         b.planProps(kind.outerRadius)
+        lamps = b.lamps.toList()
         propMesh!!.let { val mb = b.props(); if (mb.vertexCount > 0) it.upload(mb.vertices(), mb.indices()) else it.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0)) }
         marble?.setObstacles(b.obstacles.map { Triple(it.cell, it.pos, it.radius) })
         var wantDoors = rnd.nextFloat() < 0.5f
@@ -986,6 +989,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
+        GLES30.glUniform1f(loc(sceneProg, "uNight"), if (pal.themeId == 7) 1f else 0f)
+        lampUniform.fill(0f)
+        if (pal.themeId == 7) {
+            val from = marble?.position ?: Vec3.ZERO
+            val near = lamps.sortedBy { (it - from).lengthSq() }.take(8)
+            val reach = (maze?.cellSize ?: 0.1f) * 4.2f
+            near.forEachIndexed { i, p -> lampUniform[i * 4] = p.x; lampUniform[i * 4 + 1] = p.y; lampUniform[i * 4 + 2] = p.z; lampUniform[i * 4 + 3] = reach }
+        }
+        GLES30.glUniform4fv(loc(sceneProg, "uLamp"), 8, lampUniform, 0)
         run {
             val sf = sandField
             GLES30.glUniform1f(loc(sceneProg, "uSandOn"), if (sf != null) 1f else 0f)
@@ -1006,7 +1018,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
-        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) 0.55f * fogK else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) (if (pal.themeId == 7) 1.3f * fogK + 0.25f else 0.55f * fogK) else 0f)
         GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)

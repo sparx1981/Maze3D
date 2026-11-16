@@ -129,6 +129,7 @@ class DumpSceneTest {
             sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}$waveJson},")
         }
         if (sandJson != null) sb.append("\"sand\":$sandJson,")
+        sb.append("\"lamps\":${arr(b.lamps.flatMap { listOf(it.x, it.y, it.z, maze.cellSize * 4.2f) }.toFloatArray())},")
         sb.append("\"outer\":${kind.outerRadius},")
         sb.append("\"floor\":${mesh(b.floor(sandJson != null))},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")

@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21; const val PROP = 22
+    const val STONE = 21; const val PROP = 22; const val HEDGE = 23
 }
 
 /** Wall cross-sections. */
@@ -95,10 +95,10 @@ class Palette(
                 c(206, 228, 248), c(64, 84, 112), c(60, 200, 255), c(255, 90, 90),
                 wall2 = c(150, 255, 160), profile = Profile.TUBE, stripes = true, knobs = true,
                 backdrop = Backdrop.STUDIO, wallMetal = 0f, glow = 1.1f, themeId = 6),
-            // 7 Ice: frosted floor, crystal spires
-            Palette("Ice & winter", c(186, 224, 246), Mat.ICE, 0.08f, c(226, 246, 255), Mat.ENAMEL, 0.05f,
-                c(36, 72, 122), c(4, 10, 30), c(130, 232, 255), c(255, 140, 200),
-                wall2 = c(168, 214, 250), profile = Profile.TAPER, backdrop = Backdrop.AURORA, wallMetal = 0f, themeId = 7),
+            // 7 Winter night: powder snow, snow-capped hedges, blue fog and lamps (after the mrdoob labyrinth look)
+            Palette("Winter night", c(196, 214, 238), Mat.ICE, 0.08f, c(34, 70, 52), Mat.HEDGE, 0.9f,
+                c(18, 34, 72), c(3, 6, 18), c(130, 190, 255), c(255, 190, 120),
+                wall2 = c(30, 62, 48), wallTop = c(62, 112, 80), profile = Profile.TUBE, backdrop = Backdrop.STARS, wallMetal = 0f, themeId = 7),
             // 8 Egyptian temple: carved sandstone, gold-capped blocks
             Palette("Egyptian temple", c(216, 178, 120), Mat.SANDSTONE, 0.85f, c(206, 166, 106), Mat.STONE, 0.8f,
                 c(244, 156, 76), c(58, 28, 40), c(255, 206, 84), c(40, 170, 204),

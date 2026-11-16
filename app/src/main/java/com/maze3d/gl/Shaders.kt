@@ -131,6 +131,8 @@ uniform vec3 uMarbleL;      // marble position (world) for its glow and contact 
 uniform float uMarbleR;     // marble radius; 0 disables
 uniform vec3 uMarbleC;
 uniform float uFog;         // distance haze density (chase view)
+uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the lighting
+uniform vec4 uLamp[8];      // local-space lamp positions (xyz) and reach (w)
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uSandOn;     // 1 = sand / mud height field is bound
@@ -407,6 +409,15 @@ void main() {
         albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
         hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
         rough = 0.86;
+    } else if (uMat == 23) {    // snow-capped hedge: dense leaf clumps with powder on top
+        float leaf = vnoise(vec2(dot(P, vec3(190.0, 110.0, 150.0)), dot(P, vec3(-90.0, 170.0, 120.0))));
+        float clump = vnoise(vec2(dot(P, vec3(42.0, 24.0, 32.0)), dot(P, vec3(-20.0, 38.0, 28.0))));
+        float snowK = smoothstep(0.72, 0.86, clump * 0.55 + leaf * 0.25 + vCol.g * 0.6);
+        vec3 foliage = albedo * (0.45 + 1.0 * leaf) * (0.65 + 0.7 * clump);
+        vec3 powder = vec3(0.62, 0.68, 0.8) * (0.85 + 0.2 * leaf);
+        albedo = mix(foliage, powder, snowK);
+        hgt = mix((leaf - 0.5) * 0.0010 + (clump - 0.5) * 0.0016, (clump - 0.5) * 0.0010, snowK);
+        rough = mix(0.93, 0.8, snowK);
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
         albedo = pow(min(vCol, vec3(1.0)) * 0.8, vec3(2.2));
         emit = max(vCol - vec3(1.0), vec3(0.0)) * 1.4;
@@ -484,7 +495,7 @@ void main() {
     float NoL = max(dot(N, L), 0.0);
     float NoH = max(dot(N, H), 0.0);
     float VoH = max(dot(V, H), 0.0);
-    vec3 keyC = vec3(1.0, 0.94, 0.86) * 3.4;
+    vec3 keyC = mix(vec3(1.0, 0.94, 0.86) * 3.4, vec3(0.30, 0.42, 0.9) * 0.3, uNight);
     vec3 col = (diffC / PI + ggx(NoH, a) * visSmith(NoV, NoL, a) * fresnel(F0, VoH)) * keyC * NoL * sh * PI * 0.5;
     // clear coat: thin glossy layer on top
     if (coat > 0.0) col += coat * 0.04 * ggx(NoH, 0.06) * visSmith(NoV, NoL, 0.06) * (0.04 + 0.96 * pow(1.0 - VoH, 5.0)) * keyC * NoL * sh * PI * 0.5;
@@ -500,7 +511,17 @@ void main() {
     vec3 spec = env * envBRDF(F0, rough, NoV);
     if (coat > 0.0) spec += coat * envMap(R, 0.04) * (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * 0.9;
     float occ = mix(1.0, 0.55 + 0.45 * sh, 0.6);  // shadowed areas also lose some specular sky light
-    col += irradiance(N) * diffC * 1.0 + spec * occ;
+    col += irradiance(N) * diffC * mix(1.0, 0.28, uNight) * mix(vec3(1.0), vec3(0.4, 0.55, 1.1), uNight) + spec * occ * mix(1.0, 0.3, uNight);
+    if (uNight > 0.01) {                                      // lamps: soft blue pools of light around each post
+        for (int i = 0; i < 8; i++) {
+            if (uLamp[i].w <= 0.0) continue;
+            vec3 dl = uLamp[i].xyz - vLocal;
+            float dd = length(dl);
+            float att = 1.0 / (1.0 + 9.0 * (dd / uLamp[i].w) * (dd / uLamp[i].w)) * (1.0 - smoothstep(0.6, 1.0, dd / uLamp[i].w));
+            float nl = max(dot(N, normalize(dl)), 0.0) * 0.8 + 0.2;
+            col += (diffC * 2.0 + 0.02) * vec3(0.38, 0.62, 1.0) * att * nl * 0.55;
+        }
+    }
     // rim light
     col += pow(1.0 - NoV, 3.5) * vec3(0.10, 0.12, 0.16) * (0.4 + 0.6 * metal);
     col += emit;

@@ -27,7 +27,7 @@ object PropLibrary {
         4 -> ThemeProps(beacon(), dish(), canister(), rocket())
         5 -> ThemeProps(ketchup(), burger(), sodaCup(), friesBox())
         6 -> ThemeProps(flask(), beaker(), testTubes(), atom())
-        7 -> ThemeProps(iceCrystals(), snowman(), snowPine(), snowPine())
+        7 -> ThemeProps(lampPost(), snowman(), snowPine(), snowPine(), iceCrystals())
         8 -> ThemeProps(obelisk(), canopicJar(), sphinx(), pyramidProp())
         9 -> ThemeProps(neonStar(), arcadeStick(), neonRing(), neonPalm())
         else -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
@@ -347,6 +347,14 @@ object PropLibrary {
         col = c(210, 40, 50); at(z = 0.74f) { torus(0.12f, 0.035f, 16, 6) }
         col = c(40, 40, 46); at(z = 0.98f) { cylinder(0.14f, 0.02f, 14); cylinder(0.08f, 0.14f, 14) }
         col = c(120, 80, 40); for (s in intArrayOf(-1, 1)) tube(listOf(Vec3(s * 0.18f, 0f, 0.6f), Vec3(s * 0.34f, 0f, 0.68f), Vec3(s * 0.42f, 0f, 0.8f)), 0.012f, 6)
+    }.build()
+
+    private fun lampPost() = PM().apply {
+        col = c(26, 34, 46); cylinder(0.05f, 0.82f, 8, 0.035f); cylinder(0.14f, 0.05f, 10)
+        col = c(40, 52, 70); at(z = 0.82f) { cylinder(0.11f, 0.04f, 10, 0.09f) }
+        col = c(120, 190, 255) * 3.0f; at(z = 0.96f) { sphere(0.1f, 12, 8) }
+        col = c(40, 52, 70); at(z = 1.07f) { cone(0.12f, 0.08f, 10) }
+        col = c(240, 248, 255); at(z = 1.1f) { push(); scale(1f, 1f, 0.5f); sphere(0.1f, 10, 5); pop() }
     }.build()
 
     private fun snowPine() = PM().apply {

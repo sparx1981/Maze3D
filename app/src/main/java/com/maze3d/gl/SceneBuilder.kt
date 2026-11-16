@@ -409,10 +409,12 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     private val placed = ArrayList<Placed>()
     /** Dead-end props the marble can bump into. */
     val obstacles = ArrayList<Obstacle>()
+    /** Local-space positions of lamp posts (winter level) that light the floor around them. */
+    val lamps = ArrayList<Vec3>()
 
     /** Decides where theme props go. Called once per level; does nothing for classic finishes. */
     fun planProps(outerRadius: Float) {
-        placed.clear(); obstacles.clear()
+        placed.clear(); obstacles.clear(); lamps.clear()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return
         val prof = profileData(pal.profile)
         val topH = wallHeight * prof.hs
@@ -438,6 +440,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
                 placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
+                if (pal.themeId == 7) lamps.add(p + n * (topH + sizeJ * 0.95f))
                 junctions++
             }
         }
