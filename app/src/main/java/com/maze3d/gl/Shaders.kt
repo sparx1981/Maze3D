@@ -920,9 +920,9 @@ void main() {
             if (abs(det) > 1e-12) {
                 vec3 Tu = normalize((dpx * uy.y - dpy * ux.y) / det);
                 vec3 Tv = normalize((dpy * ux.x - dpx * uy.x) / det);
-                vec3 wg = (Tu * hu + Tv * hv) * 2.2;
+                vec3 wg = (Tu * hu + Tv * hv) * 0.9;
                 float wl = length(wg);
-                if (wl > 0.35) wg *= 0.35 / wl;
+                if (wl > 0.12) wg *= 0.12 / wl;
                 N = normalize(N - wg);
             }
         }
@@ -933,8 +933,8 @@ void main() {
         float shallow = 1.0 - smoothstep(0.1, 0.65, lv);
         vec3 deep = mix(vec3(0.020, 0.040, 0.058), vec3(0.075, 0.12, 0.15), shallow);
         vec3 col = deep * (1.0 - Fv) + envMap(reflect(-V, N), 0.012) * vec3(0.50, 0.56, 0.66) * Fv;
-        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 1100.0) * vec3(10.0, 9.4, 8.6);
-        float foam = smoothstep(0.22, 0.04, lv) * 0.25 * smoothstep(0.5, 0.8, vnoise(p * 7.0 + uTime * 0.2)) + smoothstep(0.02, 0.05, abs(crest)) * 0.35;
+        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 1100.0) * vec3(4.0, 3.8, 3.4);
+        float foam = smoothstep(0.22, 0.04, lv) * 0.25 * smoothstep(0.5, 0.8, vnoise(p * 7.0 + uTime * 0.2));
         col = mix(col, vec3(0.8, 0.88, 0.95), clamp(foam, 0.0, 0.5));
         float alpha = smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near);
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
