@@ -437,7 +437,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val p = maze.mesh.vertices[v]
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
-                placed.add(Placed(lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
+                placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
                 junctions++
             }
         }
@@ -452,7 +452,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val dir = (toward - n * (toward dot n)).normalized()
             val p = surface.project(centre - dir * (cs * 0.14f))
             val size = cs * 0.78f
-            val mesh = if (hash(c + 13) < 0.5f) lib.deadA else lib.deadB
+            val opts = listOfNotNull(lib.deadA, lib.deadB, lib.deadC)
+            val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
             placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
             obstacles.add(Obstacle(c, p, size * 0.4f))
             deads++
@@ -473,10 +474,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     fun gallery(): MeshBuilder {
         val mb = MeshBuilder()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return mb
-        val list = listOf(lib.junction, lib.deadA, lib.deadB, lib.landmark)
+        val list = listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2)
         for ((k, m) in list.withIndex()) {
             val base = mb.vertexCount
-            val ox = (k - 1.5f) * 1.15f
+            val ox = (k - (list.size - 1) / 2f) * 1.15f
             for (i in 0 until m.vertexCount)
                 mb.vertex(Vec3(m.pos[i * 3] + ox, m.pos[i * 3 + 1], m.pos[i * 3 + 2]), Vec3(m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]), Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]))
             var q = 0

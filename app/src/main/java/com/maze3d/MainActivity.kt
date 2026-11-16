@@ -43,6 +43,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var touchSens = 1f
     private var gyroSens = 1f
     private var qualityLevel = 2
+    private var profile = com.maze3d.gl.QualityProfile.HIGH
+    private lateinit var customPanel: LinearLayout
     private var simLevel = 1
     private lateinit var menuSettings: LinearLayout
     private var camPill: TextView? = null
@@ -58,6 +60,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var selSurface = 0    // 0 random, 1 standard, 2 sand, 3 mud
     private var selDifficulty = 1    // 0 easy, 1 medium, 2 hard
     private lateinit var menuDiff: LinearLayout
+    private var settingsHolder: View? = null
     private var selHazards = 0    // 0 random, 1 none
     @Volatile private var rendererReady = false
     override val audio: Audio get() = engine
@@ -95,7 +98,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         renderer.setCameraMode(cameraMode)
         renderer.touchSens = touchSens
         renderer.gyroSens = gyroSens
-        renderer.setQualityLevel(qualityLevel)
+        profile = com.maze3d.gl.QualityProfile.decode(ui.getString("qprofile", null)) ?: com.maze3d.gl.QualityProfile.PRESETS[qualityLevel.coerceIn(0, 2)]
+        renderer.applyProfileSetting(profile)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(MsaaChooser())
@@ -381,6 +385,41 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         setOnClickListener { engine.uiClick(); onClick() }
     }
 
+    private fun presetIndex(): Int { val i = com.maze3d.gl.QualityProfile.PRESETS.indexOf(profile); return if (i >= 0) i else 3 }
+
+    private fun applyProfile(p: com.maze3d.gl.QualityProfile) {
+        profile = p
+        getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putString("qprofile", p.encode()).apply()
+        glView.queueEvent { renderer.applyProfileSetting(p) }
+    }
+
+    /** The "tweak anything" list under the quality presets; rebuilt whenever the preset changes so the chips match. */
+    private fun rebuildCustom() {
+        customPanel.removeAllViews()
+        fun onOff(label: String, get: () -> Boolean, set: (Boolean) -> com.maze3d.gl.QualityProfile) {
+            customPanel.addView(sectionLabel(label).apply { setPadding(dp(4f), dp(10f), 0, dp(4f)); textSize = 10f })
+            customPanel.addView(settingsChips(listOf("On", "Off"), { if (get()) 0 else 1 }) { applyProfile(set(it == 0)) })
+        }
+        fun levels(label: String, opts: List<String>, get: () -> Int, set: (Int) -> com.maze3d.gl.QualityProfile) {
+            customPanel.addView(sectionLabel(label).apply { setPadding(dp(4f), dp(10f), 0, dp(4f)); textSize = 10f })
+            customPanel.addView(settingsChips(opts, get) { applyProfile(set(it)) })
+        }
+        customPanel.addView(sectionLabel("Tweak the details").apply { setTextColor(Color.argb(120, 255, 255, 255)) })
+        levels("Shadows", listOf("Off", "Low", "High"), { profile.shadows }) { profile.copy(shadows = it) }
+        levels("Ball reflections", listOf("Off", "Low", "High"), { profile.reflections }) { profile.copy(reflections = it) }
+        onOff("Distance fog", { profile.fog }) { profile.copy(fog = it) }
+        onOff("Motion blur", { profile.motion }) { profile.copy(motion = it) }
+        onOff("Clouds", { profile.clouds }) { profile.copy(clouds = it) }
+        onOff("Bloom glow", { profile.bloom }) { profile.copy(bloom = it) }
+        onOff("Depth of field", { profile.dof }) { profile.copy(dof = it) }
+        onOff("Ambient occlusion", { profile.ssao }) { profile.copy(ssao = it) }
+        onOff("Edge smoothing", { profile.fxaa }) { profile.copy(fxaa = it) }
+        onOff("Film grain", { profile.grain }) { profile.copy(grain = it) }
+        levels("Particles & rain", listOf("Fewer", "Normal"), { profile.particles }) { profile.copy(particles = it) }
+        levels("Resolution", listOf("Auto", "75%", "Full"), { profile.resolution }) { profile.copy(resolution = it) }
+        levels("Frame rate", listOf("30", "60", "Max"), { profile.fps }) { profile.copy(fps = it) }
+    }
+
     private fun sectionLabel(text: String) = TextView(this).apply {
         this.text = text.uppercase()
         setTextColor(Color.argb(170, 255, 255, 255))
@@ -521,6 +560,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         // ---- settings screen (the only place these options live)
         menuSettings = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuSettings.setPadding(0, dp(40f), 0, dp(40f))
         menuSettings.addView(header("settings"))
         val sp = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sp.addView(sectionLabel("Gyro sensitivity"))
@@ -532,11 +572,13 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         sp.addView(sectionLabel("Sound effects"))
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.sfxOn) 0 else 1 }) { engine.setSfx(it == 0) })
         sp.addView(sectionLabel("Quality"))
-        sp.addView(settingsChips(listOf("Low", "Medium", "High"), { qualityLevel }) {
-            qualityLevel = it
-            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("quality", it).apply()
-            glView.queueEvent { renderer.setQualityLevel(it) }
+        sp.addView(settingsChips(listOf("Low", "Medium", "High", "Custom"), { presetIndex() }) { i ->
+            if (i < 3) applyProfile(com.maze3d.gl.QualityProfile.PRESETS[i])
+            rebuildCustom()
         })
+        customPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sp.addView(customPanel)
+        rebuildCustom()
         sp.addView(sectionLabel("Simulation detail (sand, mud, water, gas)"))
         sp.addView(settingsChips(listOf("Basic", "Detailed", "Ultra"), { simLevel }) {
             simLevel = it
@@ -550,7 +592,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         holder.addView(menuMain, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuLevels, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuDiff, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-        holder.addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        val settingsScroll = android.widget.ScrollView(this).apply { isVerticalScrollBarEnabled = false; isFillViewport = true; addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL)) }
+        holder.addView(settingsScroll, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER_HORIZONTAL))
+        settingsHolder = settingsScroll
         menuLayer.addView(holder, FrameLayout.LayoutParams(-1, -1))
         return menuLayer
     }

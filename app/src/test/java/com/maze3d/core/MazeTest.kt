@@ -222,4 +222,19 @@ class MazeTest {
         repeat(200) { f.update(0.05f) }
         assertTrue("slumped bank still finite", (0 until f.tile * f.tile).all { f.h[c * f.tile * f.tile + it].isFinite() })
     }
+
+    @Test
+    fun wavesSpreadThroughPassagesAndDieAway() {
+        val maze = Maze(ShapeKind.SPHERE.createMesh(), 6)
+        val w = WaveField(maze)
+        val c = maze.start
+        w.disturb(c, maze.centers[c], maze.cellSize * 0.3f, -0.05f)
+        repeat(120) { w.update(1f / 60f) }
+        val other = maze.links[c][0]
+        val reached = (0 until w.tile * w.tile).maxOf { Math.abs(w.h[other * w.tile * w.tile + it]) }
+        assertTrue("wave reached the next cell ($reached)", reached > 1e-4f)
+        assertTrue(w.h.all { it.isFinite() && Math.abs(it) < 1f })
+        repeat(60 * 6) { w.update(1f / 60f) }
+        assertTrue("waves fade", w.energy() < 0.01f)
+    }
 }

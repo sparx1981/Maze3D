@@ -705,12 +705,12 @@ void main() {
     if (uGhost > 0.5) {
         // see-through silhouette when the labyrinth hides the marble
         float rim = pow(1.0 - NoV, 1.5);
-        outColor = vec4(uAccent * (0.5 + 0.8 * rim), 0.28 + 0.4 * rim);
+        outColor = vec4(mix(vec3(0.9), uAccent, 0.35) * (0.5 + 0.6 * rim), 0.06 + 0.22 * rim);
         return;
     }
     if (uSkin > 0) {
         vec3 sc = skinColor(normalize(uBody * vNrmL), N, V);
-        sc = mix(sc, uDirtCol * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0) * 0.8 + 0.15), uDirt * 0.62);
+        sc = mix(sc, uDirtCol * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0) * 0.8 + 0.15), uDirt * 0.4);
         outColor = vec4(finish(sc, gl_FragCoord.xy), 1.0);
         return;
     }
@@ -722,7 +722,7 @@ void main() {
     float s = sin(b.x * 7.0 + sin(b.y * 5.0 + b.z * 3.0) * 1.6);
     float band = smoothstep(0.55, 0.8, s) * (1.0 - smoothstep(0.88, 0.97, s));
     vec3 acc = pow(uAccent, vec3(2.2));
-    vec3 refr = surroundings(T, 0.12) * mix(vec3(0.5, 0.62, 0.86), acc, 0.12) * 0.85;
+    vec3 refr = surroundings(T, 0.12) * mix(vec3(0.78, 0.82, 0.9), acc, 0.08) * 0.85;
     refr *= mix(1.0, 0.3, pow(1.0 - NoV, 1.6));                 // thicker glass toward the rim
     refr = mix(refr, acc * 1.6 + refr * 0.25, band * 0.85);
     vec3 refl = surroundings(R, 0.03);
@@ -847,12 +847,22 @@ uniform float uScale;       // 1 / cell size
 uniform float uNear;        // sheets fade out close to the camera so the ball stays visible
 uniform vec3 uMarbleP;
 uniform float uMarbleSp;
+uniform float uWaveOn;
+uniform sampler2D uWaveTex;
+uniform vec4 uWaveP;        // x = texels per cell, y = tile size with gutter, z = tiles per row
+uniform vec2 uWaveAtlas;
 in vec3 vWorld;
 in vec3 vNrm;
 in vec3 vCol;
 in vec3 vLocal;
+in vec3 vTile;
 out vec4 outColor;
 """ + COMMON + """
+float waveH(vec2 uv, float cell) {
+    vec2 org = vec2(mod(cell, uWaveP.z), floor(cell / uWaveP.z)) * uWaveP.y;
+    float hl = 0.5 / uWaveP.x;
+    return texture(uWaveTex, (org + 1.0 + clamp(uv, -hl, 1.0 + hl) * uWaveP.x) / uWaveAtlas).r;
+}
 float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 7.3) + 0.15 * vnoise(p * 4.3 + 1.9); }
 void main() {
     float lv = vCol.x;
@@ -872,18 +882,32 @@ void main() {
         float h0 = vnoise(a) + 0.5 * vnoise(b);
         vec2 grad = vec2(vnoise(a + vec2(e, 0.0)) + 0.5 * vnoise(b + vec2(e, 0.0)) - h0,
                          vnoise(a + vec2(0.0, e)) + 0.5 * vnoise(b + vec2(0.0, e)) - h0) / e;
-        // wake and ripples around the ball
-        vec3 dm = vLocal - uMarbleP;
-        float d = length(dm) * uScale;
-        float ring = sin(d * 38.0 - uTime * 7.0) * exp(-d * 3.2) * smoothstep(0.0, 0.25, uMarbleSp);
-        grad += normalize(dm.xy + 1e-5) * ring * 0.8;
-        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.11 * (0.4 + lv));
+        float d = length(vLocal - uMarbleP) * uScale;
+        float ring = 0.0;
+        float crest = 0.0;
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.05 * (0.4 + lv));
+        if (uWaveOn > 0.5) {
+            // simulated surface: gradient of the wave height field, in cell units, mapped to the world
+            float cellId = vTile.z; vec2 uv = vTile.xy;
+            float e = 1.0 / uWaveP.x;
+            float hu = (waveH(uv + vec2(e, 0.0), cellId) - waveH(uv - vec2(e, 0.0), cellId)) / (2.0 * e);
+            float hv = (waveH(uv + vec2(0.0, e), cellId) - waveH(uv - vec2(0.0, e), cellId)) / (2.0 * e);
+            crest = waveH(uv, cellId);
+            vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
+            vec2 ux = dFdx(uv), uy = dFdy(uv);
+            float det = ux.x * uy.y - ux.y * uy.x;
+            if (abs(det) > 1e-12) {
+                vec3 Tu = normalize((dpx * uy.y - dpy * ux.y) / det);
+                vec3 Tv = normalize((dpy * ux.x - dpx * uy.x) / det);
+                N = normalize(N - (Tu * hu + Tv * hv) * 9.0);
+            }
+        }
         float NoV = max(dot(N, V), 1e-3);
         float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
         vec3 deep = mix(vec3(0.06, 0.34, 0.38), vec3(0.008, 0.07, 0.13), smoothstep(0.1, 0.8, lv));
         vec3 col = deep * (0.7 + 0.3 * max(dot(N, uLightDir), 0.0)) + envMap(reflect(-V, N), 0.02) * vec3(0.5, 0.58, 0.7) * (0.12 + 0.88 * F);
         col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 900.0) * vec3(10.0, 9.4, 8.6);
-        float foam = smoothstep(0.30, 0.05, lv) * smoothstep(0.5, 0.8, vnoise(p * 9.0 + t * 0.5)) + max(ring, 0.0) * 0.35 * smoothstep(0.35, 0.0, d);
+        float foam = smoothstep(0.30, 0.05, lv) * smoothstep(0.5, 0.8, vnoise(p * 9.0 + t * 0.5)) + smoothstep(0.012, 0.035, abs(crest)) * 0.5;
         col = mix(col, vec3(0.9, 0.97, 1.0), clamp(foam, 0.0, 0.8));
         float alpha = smoothstep(0.02, 0.16, lv) * (0.30 + 0.38 * smoothstep(0.1, 0.7, lv) + 0.35 * F) * (0.55 + 0.45 * near);
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));

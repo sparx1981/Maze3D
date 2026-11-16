@@ -110,8 +110,23 @@ class DumpSceneTest {
             val mk = com.maze3d.core.Medium.valueOf(med)
             val fld = com.maze3d.core.MediumField(maze, mk, java.util.Random(3), kind.outerRadius)
             fld.warmUp(20f)
+            if (System.getenv("MAZE_FLOOD") != null) for (k in 0 until 14) fld.level[maze.solution[k]] = 0.8f
+            var waveJson = ""
+            if (mk == com.maze3d.core.Medium.WATER) {
+                val wf = com.maze3d.core.WaveField(maze, 12)
+                val rr = java.util.Random(9)
+                repeat(220) {
+                    val c = rr.nextInt(maze.cellCount)
+                    wf.disturb(c, maze.centers[c], maze.cellSize * 0.07f, -0.012f)
+                    wf.update(1f / 60f)
+                }
+                for (k in 0 until 40) { wf.disturb(maze.solution[k], maze.centers[maze.solution[k]], maze.marbleRadius * 1.2f, -0.02f); wf.update(1f / 30f) }
+                val data = FloatArray(wf.atlasW * wf.atlasH)
+                for (c in 0 until maze.cellCount) { val (ox, oy) = wf.tileOrigin(c); for (j in 0 until wf.tile) for (i in 0 until wf.tile) data[(oy + j) * wf.atlasW + ox + i] = wf.h[wf.idx(c, i, j)] }
+                waveJson = ",\"wave\":{\"t\":${wf.t},\"tile\":${wf.tile},\"perRow\":${wf.perRow},\"w\":${wf.atlasW},\"h\":${wf.atlasH},\"data\":${arr(data)}}"
+            }
             val mm = MediumMesh(maze, mk, b.wallHeight)
-            sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}},")
+            sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}$waveJson},")
         }
         if (sandJson != null) sb.append("\"sand\":$sandJson,")
         sb.append("\"outer\":${kind.outerRadius},")

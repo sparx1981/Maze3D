@@ -99,6 +99,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var mediumGeo: MediumMesh? = null
     private var field: com.maze3d.core.MediumField? = null
     private var mediumAcc = 0f
+    private var waves: com.maze3d.core.WaveField? = null
+    private var waveTex = 0
+    private var waveBuf: java.nio.FloatBuffer? = null
+    private var waveDropAcc = 0f
     private var poison = 0f
     private var trailProg = 0
     private val trail = TrailBuffer()
@@ -147,7 +151,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var holePrevOpen = FloatArray(0)
     private var shadowMarbleProg = 0
     private var shadow: ShadowMap? = null
-    @Volatile var quality = 2
+    @Volatile var profile = QualityProfile.HIGH
+    private var appliedProfile: QualityProfile? = null
     private var appliedQuality = -1
     private val lightDir = Vec3(0.45f, 0.82f, 0.55f).normalized()
     private val lightVP = FloatArray(16)
@@ -242,7 +247,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
         puddleMesh = GlMesh(GlMesh.SCENE)
         mediumProg = Shaders.program(Shaders.SCENE_VS, Shaders.MEDIUM_FS)
-        mediumMesh = GlMesh(GlMesh.SCENE)
+        mediumMesh = GlMesh(GlMesh.SCENE_TILE)
         run {
             val r = java.util.Random(99)
             val seeds = FloatArray(RAIN_DROPS * 4) { r.nextFloat() }
@@ -397,8 +402,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             forcedTheme < 0 -> Palette.random(rnd, pal)
             else -> Palette.themes[forcedTheme.coerceIn(0, Palette.themes.size - 1)]
         }
+        if (terrain == Terrain.NONE && medium == Medium.NONE && pal.themeId == 8) terrain = Terrain.SAND     // the temple floor is real sand
         pal = when (terrain) {
-            Terrain.SAND -> pal.withFloor(Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
+            Terrain.SAND -> pal.withFloor(if (pal.themeId == 8) Vec3(0.88f, 0.70f, 0.44f) else Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
             Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
             else -> pal
         }
@@ -415,7 +421,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = rnd.nextFloat() < 0.45f
-        val wantRain = !plain && rnd.nextFloat() < 0.12f
+        val wantRain = !plain && rnd.nextFloat() < (if (forcedMedium == Medium.WATER) 0.5f else 0.12f)
         if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
         cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
@@ -432,6 +438,19 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight) }
         mediumGeo?.let { g -> mediumMesh!!.upload(g.update(field!!.level), g.indices, true) }
         mediumAcc = 0f
+        waves = null
+        if (medium == Medium.WATER) {
+            val wf = com.maze3d.core.WaveField(m, if (simQuality >= 2) 16 else 12)
+            waves = wf
+            if (waveTex == 0) { val id = IntArray(1); GLES30.glGenTextures(1, id, 0); waveTex = id[0] }
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R16F, wf.atlasW, wf.atlasH, 0, GLES30.GL_RED, GLES30.GL_FLOAT, null)
+            for ((pn, pv) in listOf(GLES30.GL_TEXTURE_MIN_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_MAG_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_WRAP_S to GLES30.GL_CLAMP_TO_EDGE, GLES30.GL_TEXTURE_WRAP_T to GLES30.GL_CLAMP_TO_EDGE)) GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, pn, pv)
+            val zero = java.nio.ByteBuffer.allocateDirect(wf.atlasW * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+            for (row in 0 until wf.atlasH) { zero.position(0); GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, row, wf.atlasW, 1, GLES30.GL_RED, GLES30.GL_FLOAT, zero) }
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+            waveBuf = java.nio.ByteBuffer.allocateDirect(wf.tile * wf.tile * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+        }
         rippleStart.fill(-100f); rainWet = 0f
         rain?.let { rn ->
             val mbp = b.puddles(rn.cells, rn.maxRadius * 0.9f)
@@ -503,7 +522,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         threadCell = -1
     }
 
-    fun setQualityLevel(q: Int) { quality = q.coerceIn(0, 2) }
+    fun applyProfileSetting(p: QualityProfile) { profile = p }
 
     /** [v] in 0..1: 1 is closest. */
     fun setZoomLevel(v: Float) { zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
@@ -539,6 +558,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         computeCamera(dt)
         draw()
         if (++framesDrawn == 4) host.onReady()
+        val capNs = when (profile.fps) { 0 -> 33_000_000L; 1 -> 16_000_000L; else -> 0L }
+        if (capNs > 0) { val spent = System.nanoTime() - now; if (spent < capNs) try { Thread.sleep((capNs - spent) / 1_000_000L) } catch (_: InterruptedException) { } }
     }
 
     private fun update(dt: Float) {
@@ -898,17 +919,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     private fun applyQuality() {
-        if (appliedQuality == quality) return
-        appliedQuality = quality
+        val p = profile
+        if (appliedProfile == p) return
+        appliedProfile = p
         shadow?.release()
-        shadow = when (quality) { 2 -> ShadowMap(2048); 1 -> ShadowMap(1024); else -> null }
+        shadow = when (p.shadows) { 2 -> ShadowMap(2048); 1 -> ShadowMap(1024); else -> null }
         if (shadow?.ok == false) { shadow?.release(); shadow = null }
         cube?.release()
-        cube = when (quality) { 2 -> ReflectionCube(128); 1 -> ReflectionCube(64); else -> null }
+        cube = when (p.reflections) { 2 -> ReflectionCube(128); 1 -> ReflectionCube(64); else -> null }
         if (cube?.ok == false) { cube?.release(); cube = null }
         cubeFresh = 6
-        if (quality >= 1) {
-            renderScale = 1f
+        if (p.usePost) {
+            renderScale = if (p.resolution == 1) 0.75f else 1f
             postOn = post.resize(width, height, renderScale)
         } else {
             post.dropScene(); postOn = false
@@ -919,8 +941,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Keeps the frame rate at the display's refresh rate by trading render resolution when the GPU is struggling. */
     private fun adaptResolution(dt: Float) {
-        if (!postOn || quality < 1) return
-        val target = 1f / refreshHz.coerceIn(30f, 144f)
+        if (!postOn || profile.resolution != 0) return
+        val cap = when (profile.fps) { 0 -> 30f; 1 -> 60f; else -> 144f }
+        val target = 1f / minOf(refreshHz, cap).coerceIn(30f, 144f)
         if (dt > target * 1.3f) { slowFrames += dt; fastFrames = 0f } else { fastFrames += dt; slowFrames = max(0f, slowFrames - dt * 0.5f) }
         var next = renderScale
         if (slowFrames > 1.2f && renderScale > 0.61f) { next = max(0.6f, renderScale - 0.1f); slowFrames = 0f }
@@ -982,7 +1005,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
-        GLES30.glUniform1f(loc(sceneProg, "uFog"), 0.55f * fogK)
+        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) 0.55f * fogK else 0f)
         GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
@@ -1066,7 +1089,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
 
         // clouds render into their own small texture first
-        val cloudsOn = cloudAmt > 0.01f
+        val cloudsOn = cloudAmt > 0.01f && profile.clouds
         if (cloudsOn) {
             val storm = rain != null
             val tint = if (storm) floatArrayOf(0.50f, 0.55f, 0.64f) else floatArrayOf(0.78f + pal.bgTop.x * 0.35f, 0.82f + pal.bgTop.y * 0.3f, 0.9f + pal.bgTop.z * 0.2f)
@@ -1177,7 +1200,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform1f(loc(rainProg, "uScaleW"), 1f + (0.1f - 1f) * k)
             GLES30.glUniform2f(loc(rainProg, "uTan"), tanHalf * aspect, tanHalf)
             GLES30.glBindVertexArray(rainVao[0])
-            GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, RAIN_DROPS)
+            GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, if (profile.particles == 0) (RAIN_DROPS * 0.45f).toInt() else RAIN_DROPS)
             GLES30.glBindVertexArray(0)
         }
         GLES30.glDepthMask(true)
@@ -1192,11 +1215,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             pp.focusRange = kind.outerRadius * 1.1f + (0.9f - kind.outerRadius * 1.1f) * kk
             pp.time = time
             pp.cloudOn = cloudsOn
-            pp.ssao = quality >= 2; pp.dof = quality >= 2
+            val qp = profile
+            pp.ssao = qp.ssao; pp.dof = qp.dof
             pp.aoAmt = 0.85f; pp.dofAmt = 0.85f
-            pp.bloomAmt = if (quality >= 2) 0.34f else 0.26f
-            pp.fxaa = true
-            pp.motion = ease01(chaseBlend) * chaseSpeed * 0.9f
+            pp.bloomAmt = if (!qp.bloom) 0f else if (qp.shadows >= 2) 0.34f else 0.26f
+            pp.fxaa = qp.fxaa
+            pp.grain = if (qp.grain) 0.035f else 0f
+            pp.motion = if (qp.motion) ease01(chaseBlend) * chaseSpeed * 0.9f else 0f
             post.finish(pp)
         } else if (cloudsOn) {
             post.blitClouds()
@@ -1287,6 +1312,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             mediumAcc = 0f
             mediumGeo?.let { g -> mediumMesh?.updateVertices(g.update(f.level)) }
         }
+        waves?.let { stepWaves(it, f, mb, m, dt) }
         if (f.kind == Medium.GAS && fallTimer <= 0f) {
             val lv = f.levelAt(mb.cell)
             poison = (poison + (if (lv > 0.3f) lv * dt * 0.5f else -dt * 0.35f)).coerceIn(0f, 1f)
@@ -1298,6 +1324,47 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 host.onToast("Poisoned by the gas - back to the start")
             }
         }
+    }
+
+    /** Rain drops and the ball stir the water; the wave field is stepped and its changed tiles uploaded. */
+    private fun stepWaves(wf: com.maze3d.core.WaveField, f: com.maze3d.core.MediumField, mb: Marble, m: Maze, dt: Float) {
+        val rn = rain
+        if (rn != null && rn.intensity > 0.05f) {
+            waveDropAcc += dt * 70f * rn.intensity
+            var guard = 0
+            while (waveDropAcc >= 1f && guard++ < 10) {
+                waveDropAcc -= 1f
+                val c = rnd.nextInt(m.cellCount)
+                if (f.levelAt(c) < 0.15f) continue
+                val p = m.mesh.surface.project(m.centers[c] + (m.mesh.vertices[m.mesh.cellVertex(c, 1)] - m.mesh.vertices[m.mesh.cellVertex(c, 0)]) * (rnd.nextFloat() - 0.5f) * 0.7f + (m.mesh.vertices[m.mesh.cellVertex(c, 3)] - m.mesh.vertices[m.mesh.cellVertex(c, 0)]) * (rnd.nextFloat() - 0.5f) * 0.7f)
+                wf.disturb(c, p, m.cellSize * 0.07f, -0.010f * (0.5f + rnd.nextFloat()))
+            }
+        }
+        val lv = f.levelAt(mb.cell)
+        if (lv > 0.12f && fallTimer <= 0f) {
+            val n = mb.surface.normal(mb.position)
+            val under = mb.position - n * mb.radius
+            val spd = (mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1.5f)
+            // a ball displaces water: a dent where it is, a bow wave pushed ahead of it
+            wf.disturb(mb.cell, under, mb.radius * 1.2f, -0.018f * (0.3f + spd) * lv * dt * 60f)
+            if (spd > 0.08f) {
+                val ahead = mb.surface.project(under + mb.velocity.normalized() * (mb.radius * 1.5f))
+                wf.disturb(mb.cell, ahead, mb.radius * 0.9f, 0.012f * spd * lv * dt * 60f)
+            }
+        }
+        wf.update(dt)
+        val buf = waveBuf ?: return
+        if (wf.dirty.isEmpty()) return
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
+        var cnt = 0
+        val it = wf.dirty.iterator()
+        while (it.hasNext() && cnt < 64) {
+            val c = it.next(); it.remove(); cnt++
+            val (ox, oy) = wf.tileOrigin(c)
+            buf.clear(); buf.put(wf.h, c * wf.tile * wf.tile, wf.tile * wf.tile); buf.position(0)
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, ox, oy, wf.tile, wf.tile, GLES30.GL_RED, GLES30.GL_FLOAT, buf)
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
     }
 
     private fun drawMedium(vpm: FloatArray, cam: Vec3) {
@@ -1318,6 +1385,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val wp = mb?.position ?: Vec3.ZERO
         GLES30.glUniform3f(loc(mediumProg, "uMarbleP"), wp.x, wp.y, wp.z)
         GLES30.glUniform1f(loc(mediumProg, "uMarbleSp"), ((mb?.velocity?.length() ?: 0f) / (cs * 4f)).coerceIn(0f, 1f))
+        val wf = waves
+        GLES30.glUniform1f(loc(mediumProg, "uWaveOn"), if (wf != null) 1f else 0f)
+        if (wf != null) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE5)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5)
+            GLES30.glUniform4f(loc(mediumProg, "uWaveP"), wf.t.toFloat(), wf.tile.toFloat(), wf.perRow.toFloat(), 0f)
+            GLES30.glUniform2f(loc(mediumProg, "uWaveAtlas"), wf.atlasW.toFloat(), wf.atlasH.toFloat())
+        } else GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         GLES30.glDepthMask(false)

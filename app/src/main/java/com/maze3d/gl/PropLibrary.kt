@@ -13,13 +13,14 @@ object PropLibrary {
     private fun c(r: Int, g: Int, b: Int) = PM.rgb(r, g, b)
     private fun glow(v: Vec3, k: Float) = v * k
 
-    class ThemeProps(val junction: PropMesh, val deadA: PropMesh, val deadB: PropMesh, val landmark: PropMesh)
+    class ThemeProps(val junction: PropMesh, val deadA: PropMesh, val deadB: PropMesh, val landmark: PropMesh,
+                     val deadC: PropMesh? = null, val junction2: PropMesh? = null)
 
     private val cache = HashMap<Int, ThemeProps>()
     fun forTheme(id: Int): ThemeProps? = if (id < 0) null else cache.getOrPut(id) { build(id) }
 
     private fun build(id: Int): ThemeProps = when (id) {
-        0 -> ThemeProps(gumdrop(), cupcake(), lollipop(), candyCane())
+        0 -> ThemeProps(gumdrop(), cupcake(), lollipop(), candyCane(), allsortsPile(), allsortLayered(0.5f))
         1 -> ThemeProps(marigold(), sugarSkull(), candleVotive(), candelabra())
         2 -> ThemeProps(trafficCone(), tyreStack(), trophy(), flagPole())
         3 -> ThemeProps(cornerFlag(), football(), trophy(), floodlight())
@@ -74,6 +75,39 @@ object PropLibrary {
         for (i in 0..8) path.add(Vec3(0f, 0f, i * 0.09f))
         for (i in 1..14) { val a = PI.toFloat() * i / 14f; path.add(Vec3(0.2f - 0.2f * cos(a), 0f, 0.72f + 0.2f * sin(a))) }
         tube(path, 0.065f, 10, false, { t -> if ((t * 22f).toInt() % 2 == 0) c(235, 40, 60) else c(255, 250, 250) })
+    }.build()
+
+    // ---------------------------------------------------------------- liquorice allsorts
+    private val LIQ = c(22, 16, 20)
+    private fun PM.layerBox(w: Float, d: Float, layers: List<Vec3>, lh: Float, z0: Float = 0f) {
+        for ((i, lc) in layers.withIndex()) { col = lc; push(); translate(0f, 0f, z0 + lh * (i + 0.5f)); scale(1f - 0.012f * (i % 2), 1f - 0.012f * (i % 2), 1f); box(w, d, lh * 0.97f); pop() }
+    }
+    private fun allsortLayered(scale: Float) = PM().apply {
+        // the classic sandwich: liquorice and coloured coconut/aniseed layers
+        scale(1f / 0.9f * scale * 1.6f)
+        layerBox(0.5f, 0.3f, listOf(LIQ, c(250, 120, 170), LIQ, c(245, 245, 238), LIQ, c(250, 120, 170), LIQ), 0.12f)
+    }.build()
+
+    private fun allsortsPile() = PM().apply {
+        // layered cuboid
+        push(); translate(-0.14f, 0.06f, 0f); rotZ(0.35f); layerBox(0.34f, 0.22f, listOf(LIQ, c(255, 220, 70), LIQ, c(245, 245, 238), LIQ, c(250, 120, 170), LIQ), 0.1f); pop()
+        // Catherine wheel: spiral of liquorice and sugar, standing on edge
+        push(); translate(0.2f, -0.12f, 0.2f); rotX((PI / 2).toFloat()); rotZ(0.4f)
+        val spiral = listOf(LIQ, c(255, 140, 190), LIQ, c(245, 245, 238), LIQ, c(255, 140, 190), LIQ)
+        for ((i, sc) in spiral.withIndex()) { col = sc; push(); translate(0f, 0f, 0f); scale(1f, 1f, 1f); torus(0.025f + i * 0.026f, 0.015f, 20, 6); pop() }
+        col = LIQ; cylinder(0.205f, 0.09f, 28); pop()
+        // bobble: liquorice core rolled in blue sugar beads
+        push(); translate(-0.02f, -0.24f, 0f)
+        col = LIQ; cylinder(0.11f, 0.26f, 14)
+        for (k in 0 until 40) { val a = k * 2.399f; val z = 0.02f + 0.22f * ((k * 7) % 11) / 11f
+            col = if (k % 3 == 0) c(250, 120, 170) else c(90, 170, 255); push(); translate(cos(a) * 0.115f, sin(a) * 0.115f, z); sphere(0.026f, 6, 4); pop() }
+        pop()
+        // pink coconut roll with liquorice centre
+        push(); translate(0.12f, 0.2f, 0.11f); rotY((PI / 2).toFloat()); rotZ(0.5f)
+        col = c(250, 125, 175); cylinder(0.11f, 0.3f, 18); col = LIQ; cylinder(0.05f, 0.302f, 12); pop()
+        // a loose blue-and-pink jelly bead or two
+        col = c(90, 170, 255); push(); translate(-0.26f, -0.18f, 0.04f); sphere(0.045f, 8, 6); pop()
+        col = c(255, 120, 180); push(); translate(0.3f, 0.04f, 0.04f); sphere(0.04f, 8, 6); pop()
     }.build()
 
     // ---------------------------------------------------------------- day of the dead

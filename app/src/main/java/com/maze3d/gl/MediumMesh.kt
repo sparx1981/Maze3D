@@ -12,7 +12,7 @@ class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeigh
     val layers = if (kind == Medium.WATER) 1 else 3
     private val cells = maze.cellCount
     val indices: IntArray
-    private val verts = FloatArray(cells * 4 * layers * MeshBuilder.STRIDE)
+    private val verts = FloatArray(cells * 4 * layers * (MeshBuilder.STRIDE + 3))
     private val cornerCells: Array<IntArray>             // per cell corner: other cells touching that vertex
     private val surface = maze.mesh.surface
     private val corner = Array(cells * 4) { maze.mesh.vertices[maze.mesh.cellVertex(it / 4, it % 4)] }
@@ -52,6 +52,7 @@ class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeigh
             verts[o++] = lv; verts[o++] = l / 3f; verts[o++] = 0f
             verts[o++] = 0f; verts[o++] = 0f; verts[o++] = 0f
             verts[o++] = -1f
+            verts[o++] = if (k == 1 || k == 2) 1f else 0f; verts[o++] = if (k >= 2) 1f else 0f; verts[o++] = c.toFloat()
         }
         return verts
     }
