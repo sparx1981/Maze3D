@@ -351,6 +351,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     // ---- tilt control -------------------------------------------------------------------
     private fun setTilt(on: Boolean) {
         renderer.tiltMode = on
+        // Tilting must not rotate the screen: hold whatever orientation we are in when tilt is switched on.
+        requestedOrientation = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         sensors.unregisterListener(this)
         if (on) {
             baseline = null
