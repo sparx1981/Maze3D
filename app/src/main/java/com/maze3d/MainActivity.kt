@@ -90,6 +90,13 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         renderer = MazeRenderer(this)
         val ui = getSharedPreferences("maze3d_ui", MODE_PRIVATE)
+        val progPrefs = getSharedPreferences("maze3d_progress", MODE_PRIVATE)
+        progress = com.maze3d.core.Progress(object : com.maze3d.core.ProgressStore {
+            override fun get(key: String) = progPrefs.getString(key, null)
+            override fun put(key: String, value: String) { progPrefs.edit().putString(key, value).apply() }
+        })
+        renderer.progress = progress
+        renderer.ballChoice = ui.getInt("ball", -1).let { if (it >= 0 && !progress.ballUnlocked(it)) -1 else it }
         cameraMode = ui.getInt("camera2", 2).let { if (it == 0) 2 else it }                     // chase is the default view
         touchSens = ui.getFloat("touchSens2", 0.5f)
         gyroSens = ui.getFloat("gyroSens2", 0.5f)
@@ -254,7 +261,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             toastText(if (m == 1) "Follow camera: the view tracks the ball" else "Chase camera: drag to steer, twist to look around")
         }
         camPill = follow
-        val ball = pill("Restart") { glView.queueEvent { renderer.resetMarble() } }
+        val ball = pill("Restart") { confirmRestart() }
         for (b in listOf(tilt, hint, follow, ball)) {
             bar.addView(b, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(3f), 0, dp(3f), 0) })
         }
@@ -386,6 +393,25 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     // ---- game pads (USB-C or Bluetooth) ---------------------------------------------------------
     private var padActive = false
 
+    /** Asks before putting the ball back: last checkpoint, the start of the maze, or cancel. */
+    private fun confirmRestart() {
+        if (restartDialog?.isShowing == true) return
+        glView.queueEvent { renderer.paused = true }
+        val d = android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Restart the ball?")
+            .setItems(arrayOf("Last checkpoint", "Start of maze", "Cancel")) { _, which ->
+                when (which) {
+                    0 -> glView.queueEvent { renderer.resetMarble(true) }
+                    1 -> glView.queueEvent { renderer.resetMarble(false) }
+                }
+            }
+            .setOnDismissListener { glView.queueEvent { renderer.paused = false } }
+            .create()
+        restartDialog = d
+        d.show()
+    }
+    private var restartDialog: android.app.AlertDialog? = null
+
     private fun axis(ev: MotionEvent, a: Int): Float {
         val v = ev.getAxisValue(a)
         return if (kotlin.math.abs(v) < 0.14f) 0f else v
@@ -395,7 +421,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         if (ev.source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK && ev.action == MotionEvent.ACTION_MOVE) {
             var x = axis(ev, MotionEvent.AXIS_X); var y = axis(ev, MotionEvent.AXIS_Y)
             if (x == 0f && y == 0f) { x = axis(ev, MotionEvent.AXIS_HAT_X); y = axis(ev, MotionEvent.AXIS_HAT_Y) }
+            var rx = axis(ev, MotionEvent.AXIS_Z); if (rx == 0f) rx = axis(ev, MotionEvent.AXIS_RX)
             val menuUp = menuLayer.visibility == View.VISIBLE
+            glView.queueEvent { renderer.padLook(if (menuUp) 0f else rx) }
             if (!menuUp) {
                 val on = x != 0f || y != 0f
                 if (on || padActive) {
@@ -414,7 +442,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             if (ev.action == android.view.KeyEvent.ACTION_DOWN && ev.repeatCount == 0) {
                 when (ev.keyCode) {
                     android.view.KeyEvent.KEYCODE_BUTTON_A -> { glView.queueEvent { renderer.requestHint() }; return true }
-                    android.view.KeyEvent.KEYCODE_BUTTON_B -> { glView.queueEvent { renderer.resetMarble() }; return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_B -> { runOnUiThread { confirmRestart() }; return true }
                     android.view.KeyEvent.KEYCODE_BUTTON_X -> { camPill?.performClick(); return true }
                     android.view.KeyEvent.KEYCODE_BUTTON_Y, android.view.KeyEvent.KEYCODE_BUTTON_START -> { showMenu(); return true }
                     android.view.KeyEvent.KEYCODE_BUTTON_L1 -> { glView.queueEvent { renderer.nudgeZoom(-0.1f) }; return true }
@@ -527,9 +555,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         return row
     }
 
-    private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit): LinearLayout = chipGrid(options, options.size.coerceAtLeast(1), get, set)
+    private fun chipRow(options: List<String>, get: () -> Int, set: (Int) -> Unit, locked: ((Int) -> String?)? = null): LinearLayout = chipGrid(options, options.size.coerceAtLeast(1), get, set, locked)
 
-    private fun chipGrid(options: List<String>, columns: Int, get: () -> Int, set: (Int) -> Unit): LinearLayout {
+    private fun chipGrid(options: List<String>, columns: Int, get: () -> Int, set: (Int) -> Unit, locked: ((Int) -> String?)? = null): LinearLayout {
         val usePreview = !noPreview
         noPreview = false
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -539,14 +567,20 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         options.forEachIndexed { i, label ->
             if (i > 0 && i % columns == 0) { grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(6f)) }); row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL } }
             val c = TextView(this).apply {
-                text = label.uppercase(); setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.1f
+                val lockMsg = locked?.invoke(i)
+                text = (if (lockMsg != null) "\uD83D\uDD12 " else "") + label.uppercase(); setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.1f
+                if (lockMsg != null) alpha = 0.5f
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 gravity = Gravity.CENTER
                 setPadding(dp(4f), dp(12f), dp(4f), dp(12f))
                 background = glass(get() == i)
                 isFocusable = true
                 setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
-                setOnClickListener { set(i); refresh(); engine.uiClick(); if (usePreview) previewSelection() }
+                setOnClickListener {
+                    val msg = locked?.invoke(i)
+                    if (msg != null) { engine.uiToggle(false); onToast(msg) }
+                    else { set(i); refresh(); engine.uiClick(); if (usePreview) previewSelection() }
+                }
             }
             chips.add(c)
             row.addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(3f), 0, dp(3f), 0) })
@@ -605,16 +639,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         // ---- level select screen
         menuLevels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
         menuLevels.addView(header("select level"))
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        panel.addView(sectionLabel("Shape"))
-        panel.addView(chipGrid(listOf("Random") + ShapeKind.values().map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }, 4, { selShape }, { selShape = it }))
-        panel.addView(sectionLabel("Surface"))
-        panel.addView(chipGrid(listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle"), 4, { selSurface }, { selSurface = it }))
-        panel.addView(sectionLabel("Difficulty"))
-        panel.addView(chipRow(listOf("Easy", "Medium", "Hard"), { selDifficulty }) { selDifficulty = it; previewSelection() })
-        panel.addView(sectionLabel("Hazards"))
-        panel.addView(chipRow(listOf("Random", "None"), { selHazards }) { selHazards = it })
-        menuLevels.addView(panel, LinearLayout.LayoutParams(maxW, -2))
+        levelPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        rebuildLevelPanel()
+        menuLevels.addView(levelPanel, LinearLayout.LayoutParams(maxW, -2))
         menuLevels.addView(bigButton("Start", primary = true) { startGame(selectedShape(), selectedTerrain(), selHazards == 1, selectedTheme(), selectedMedium()) },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(28f), 0, dp(12f)) })
         menuLevels.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2))
@@ -623,7 +650,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuDiff = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
         menuDiff.addView(header("choose difficulty"))
         for (d in com.maze3d.core.Difficulty.values()) {
-            menuDiff.addView(bigButton(d.label, primary = d == com.maze3d.core.Difficulty.MEDIUM) { selDifficulty = d.ordinal; startGame(null, null, false) },
+            menuDiff.addView(bigButton(d.label, primary = d == com.maze3d.core.Difficulty.MEDIUM) {
+                val lock = difficultyLock(d)
+                if (lock != null) onToast(lock) else { selDifficulty = d.ordinal; startGame(null, null, false) }
+            }.also { diffButtons.add(it to d) },
                 LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(4f)) })
             menuDiff.addView(TextView(this).apply { text = d.blurb; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 11f; gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(12f)) },
                 LinearLayout.LayoutParams(maxW, -2))
@@ -643,6 +673,10 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.musicOn) 0 else 1 }) { engine.setMusic(it == 0) })
         sp.addView(sectionLabel("Sound effects"))
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.sfxOn) 0 else 1 }) { engine.setSfx(it == 0) })
+        sp.addView(sectionLabel("Ball"))
+        ballBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sp.addView(ballBox)
+        rebuildBallPicker()
         sp.addView(sectionLabel("Impact sounds"))
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.impactOn) 0 else 1 }) { engine.setImpact(it == 0) })
         sp.addView(sectionLabel("Haptic feedback on impacts"))
@@ -685,17 +719,64 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuMain.post { for (k in 0 until menuMain.childCount) { val v = menuMain.getChildAt(k); if (v.isFocusable && v.visibility == View.VISIBLE) { v.requestFocus(); break } } }
     }
 
+    private fun rebuildBallPicker() {
+        val box = ballBox ?: return
+        box.removeAllViews()
+        val names = listOf("Automatic") + com.maze3d.core.Progress.SKIN_NAMES
+        noPreview = true
+        box.addView(chipGrid(names, 3, { renderer.ballChoice + 1 }, { i ->
+            renderer.ballChoice = i - 1
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("ball", i - 1).apply()
+        }, { i ->
+            if (i == 0 || progress.ballUnlocked(i - 1)) null else "Finish a maze on this surface to unlock this ball"
+        }))
+    }
+
     private fun showSettings() {
+        rebuildBallPicker()
         menuMain.visibility = View.GONE
         menuSettings.visibility = View.VISIBLE
     }
 
+    private val diffButtons = ArrayList<Pair<TextView, com.maze3d.core.Difficulty>>()
+
     private fun showDifficulty() {
+        for ((b, d) in diffButtons) { val lock = difficultyLock(d) != null; b.alpha = if (lock) 0.5f else 1f; b.text = (if (lock) "\uD83D\uDD12 " else "") + d.label.uppercase() }
         menuMain.visibility = View.GONE
         menuDiff.visibility = View.VISIBLE
     }
 
+    private lateinit var levelPanel: LinearLayout
+    private lateinit var progress: com.maze3d.core.Progress
+    private var ballBox: LinearLayout? = null
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle")
+
+    private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
+
+    /** The shape / surface / difficulty chips, with padlocks on whatever has not been earned yet. */
+    private fun rebuildLevelPanel() {
+        levelPanel.removeAllViews()
+        val shapes = ShapeKind.values()
+        levelPanel.addView(sectionLabel("Shape"))
+        levelPanel.addView(chipGrid(listOf("Random") + shapes.map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }, 4, { selShape }, { selShape = it }, { i ->
+            if (i == 0 || progress.shapeUnlocked(shapes[i - 1])) null else mazesText(progress.shapeMazesToGo(shapes[i - 1])) + " to unlock this shape"
+        }))
+        levelPanel.addView(sectionLabel("Surface"))
+        levelPanel.addView(chipGrid(surfaceNames, 4, { selSurface }, { selSurface = it }, { i ->
+            val key = com.maze3d.core.Progress.MENU_KEYS[i]
+            if (key == "random" || progress.surfaceUnlocked(key)) null else mazesText(progress.surfaceMazesToGo(key)) + " to unlock this surface"
+        }))
+        levelPanel.addView(sectionLabel("Difficulty"))
+        levelPanel.addView(chipRow(listOf("Easy", "Medium", "Hard"), { selDifficulty }, { selDifficulty = it; previewSelection() }, { i -> difficultyLock(com.maze3d.core.Difficulty.values()[i]) }))
+        levelPanel.addView(sectionLabel("Hazards"))
+        levelPanel.addView(chipRow(listOf("Random", "None"), { selHazards }, { selHazards = it }))
+    }
+
+    private fun difficultyLock(d: com.maze3d.core.Difficulty): String? =
+        if (progress.difficultyUnlocked(d)) null else if (d == com.maze3d.core.Difficulty.MEDIUM) "Finish a maze to unlock Medium" else "Finish a Medium maze to unlock Hard"
+
     private fun showLevelSelect() {
+        rebuildLevelPanel()
         menuMain.visibility = View.GONE
         menuLevels.visibility = View.VISIBLE
         previewSelection()
@@ -787,12 +868,25 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private fun toastText(message: String) = onToast(message)
 
-    override fun onToast(message: String) {
+    override fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty) {
+        val u = progress.record(surfaceKey, shape, difficulty)
+        if (!u.any) return
+        val parts = ArrayList<String>()
+        u.surface?.let { k -> val i = com.maze3d.core.Progress.MENU_KEYS.indexOf(k); if (i > 0) parts.add("surface ${surfaceNames[i]}") }
+        u.shape?.let { parts.add("shape ${it.label}") }
+        u.difficulty?.let { parts.add("${it.label} difficulty") }
+        u.ball?.let { k -> parts.add("ball: ${com.maze3d.core.Progress.SKIN_NAMES[com.maze3d.core.Progress.skinForKey(k)]}") }
+        onToast("Unlocked  " + parts.joinToString("  ·  "), 4200)
+    }
+
+    override fun onToast(message: String) = onToast(message, 1400)
+
+    private fun onToast(message: String, holdMs: Long) {
         runOnUiThread {
             toast.text = message
             toast.animate().cancel()
             toast.alpha = 1f
-            toast.animate().alpha(0f).setStartDelay(1400).setDuration(500).start()
+            toast.animate().alpha(0f).setStartDelay(holdMs).setDuration(500).start()
         }
     }
 

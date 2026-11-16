@@ -870,6 +870,7 @@ uniform vec3 uMarbleP;
 uniform float uMarbleSp;
 uniform float uWaveOn;
 uniform sampler2D uWaveTex;
+uniform sampler2D uFoamTex;
 uniform vec4 uWaveP;        // x = texels per cell, y = tile size with gutter, z = tiles per row
 uniform vec2 uWaveAtlas;
 in vec3 vWorld;
@@ -884,6 +885,11 @@ float waveH(vec2 uv, float cell) {
     float hl = 0.5 / uWaveP.x;
     return texture(uWaveTex, (org + 1.0 + clamp(uv, -hl, 1.0 + hl) * uWaveP.x) / uWaveAtlas).r;
 }
+float foamH(vec2 uv, float cell) {
+    vec2 org = vec2(mod(cell, uWaveP.z), floor(cell / uWaveP.z)) * uWaveP.y;
+    float hl = 0.5 / uWaveP.x;
+    return texture(uFoamTex, (org + 1.0 + clamp(uv, -hl, 1.0 + hl) * uWaveP.x) / uWaveAtlas).r;
+}
 float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 7.3) + 0.15 * vnoise(p * 4.3 + 1.9); }
 void main() {
     float lv = vCol.x;
@@ -897,8 +903,8 @@ void main() {
     float near = smoothstep(uNear * 0.4, uNear * 2.4, distance(uCam, vWorld));
     if (uKind < 1.5) {                                          // ---- water
         float t = uTime;
-        vec2 a = p * 2.6 + vec2(t * 0.35, t * 0.22);
-        vec2 b = p * 5.3 - vec2(t * 0.28, -t * 0.4);
+        vec2 a = p * 1.2 + vec2(t * 0.30, t * 0.18);
+        vec2 b = p * 2.5 - vec2(t * 0.22, -t * 0.32);
         float e = 0.06;
         float h0 = vnoise(a) + 0.5 * vnoise(b);
         vec2 grad = vec2(vnoise(a + vec2(e, 0.0)) + 0.5 * vnoise(b + vec2(e, 0.0)) - h0,
@@ -906,7 +912,7 @@ void main() {
         float d = length(vLocal - uMarbleP) * uScale;
         float ring = 0.0;
         float crest = 0.0;
-        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.012 * (0.4 + lv));
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.045 * (0.4 + lv));
         if (uWaveOn > 0.5) {
             // simulated surface: gradient of the wave height field, in cell units, mapped to the world
             float cellId = vTile.z; vec2 uv = vTile.xy;
@@ -920,23 +926,30 @@ void main() {
             if (abs(det) > 1e-12) {
                 vec3 Tu = normalize((dpx * uy.y - dpy * ux.y) / det);
                 vec3 Tv = normalize((dpy * ux.x - dpx * uy.x) / det);
-                vec3 wg = (Tu * hu + Tv * hv) * 0.9;
+                vec3 wg = (Tu * hu + Tv * hv) * 2.0;
                 float wl = length(wg);
-                if (wl > 0.12) wg *= 0.12 / wl;
+                if (wl > 0.24) wg *= 0.24 / wl;
                 N = normalize(N - wg);
             }
         }
         N = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.3));          // water lies flat: soften the slope of the floor beneath it
         float NoV = max(dot(N, V), 1e-3);
         float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-        float Fv = 0.10 + 0.90 * F;
+        float Fv = 0.03 + 0.40 * F;
         float shallow = 1.0 - smoothstep(0.1, 0.65, lv);
         vec3 deep = mix(vec3(0.020, 0.040, 0.058), vec3(0.075, 0.12, 0.15), shallow);
-        vec3 col = deep * (1.0 - Fv) + envMap(reflect(-V, N), 0.012) * vec3(0.50, 0.56, 0.66) * Fv;
+        vec3 col = deep * (1.0 - Fv) + envMap(reflect(-V, N), 0.03) * vec3(0.32, 0.38, 0.46) * Fv;
         col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 1100.0) * vec3(4.0, 3.8, 3.4);
         float foam = smoothstep(0.22, 0.04, lv) * 0.25 * smoothstep(0.5, 0.8, vnoise(p * 7.0 + uTime * 0.2));
+        float wake = 0.0;
+        if (uWaveOn > 0.5) {
+            float fv = foamH(vTile.xy, vTile.z);
+            float lace = 0.55 + 0.45 * vnoise(p * 9.0 + vec2(uTime * 0.3, -uTime * 0.2));
+            wake = smoothstep(0.08, 0.6, fv * lace) * (0.35 + 0.65 * smoothstep(0.1, 0.4, lv));
+        }
         col = mix(col, vec3(0.8, 0.88, 0.95), clamp(foam, 0.0, 0.5));
-        float alpha = smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near);
+        col = mix(col, vec3(0.96, 0.99, 1.0), wake * 0.92);
+        float alpha = max(smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near), wake * 0.95);
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
     } else {                                                    // ---- gas and fog
         bool gas = uKind < 2.5;

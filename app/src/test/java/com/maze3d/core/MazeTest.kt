@@ -237,4 +237,22 @@ class MazeTest {
         repeat(60 * 6) { w.update(1f / 60f) }
         assertTrue("waves fade", w.energy() < 0.01f)
     }
+
+    @Test
+    fun progressUnlocksInOrderAndPersists() {
+        val mem = HashMap<String, String>()
+        val store = object : ProgressStore { override fun get(key: String) = mem[key]; override fun put(key: String, value: String) { mem[key] = value } }
+        val p = Progress(store)
+        assertTrue(p.surfaceUnlocked("classic") && p.surfaceUnlocked("sand") && !p.surfaceUnlocked("mud"))
+        assertTrue(p.shapeUnlocked(ShapeKind.SPHERE) && !p.shapeUnlocked(ShapeKind.CAPSULE))
+        assertTrue(p.difficultyUnlocked(Difficulty.EASY) && !p.difficultyUnlocked(Difficulty.MEDIUM))
+        val u = p.record("sand", ShapeKind.SPHERE, Difficulty.EASY)
+        assertEquals("mud", u.surface); assertEquals("sand", u.ball); assertEquals(Difficulty.MEDIUM, u.difficulty)
+        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(12) && !p.difficultyUnlocked(Difficulty.HARD))
+        p.record("classic", ShapeKind.SPHERE, Difficulty.MEDIUM)
+        assertTrue(p.difficultyUnlocked(Difficulty.HARD) && p.shapeUnlocked(ShapeKind.CAPSULE))
+        assertEquals(2, Progress(store).completed)                 // survives a restart
+        repeat(20) { p.record("t0", ShapeKind.SPHERE, Difficulty.EASY) }
+        assertTrue(Progress.SURFACE_CHAIN.all { p.surfaceUnlocked(it) } && ShapeKind.values().all { p.shapeUnlocked(it) })
+    }
 }

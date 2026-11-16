@@ -36,6 +36,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         fun onFinish(name: String, accent: Vec3)
         fun onToast(message: String)
         fun onReady()
+        /** A maze was completed: [surfaceKey] is the surface it was played on. */
+        fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty)
         /** [cooldown] seconds until the next hint (0 = ready); [active] while the thread is showing. */
         fun onHint(cooldown: Int, active: Boolean)
         val audio: Audio
@@ -88,6 +90,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    @Volatile var progress: com.maze3d.core.Progress? = null
+    /** -1 = the ball that matches the level, 0.. = a chosen (unlocked) skin. */
+    @Volatile var ballChoice = -1
+    private var surfaceKey = "classic"
+    private var checkpoints = IntArray(0)
+    private var cpReached = -1
+    private var solvedReported = false
+    @Volatile private var padLookX = 0f
     private val lampUniform = FloatArray(32)
     private var lamps: List<Vec3> = emptyList()
     private var sandField: com.maze3d.core.SandField? = null
@@ -104,6 +114,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var waves: com.maze3d.core.WaveField? = null
     private var waveTex = 0
     private var waveBuf: java.nio.FloatBuffer? = null
+    private var foamTex = 0
     private var waveDropAcc = 0f
     private var poison = 0f
     private var trailProg = 0
@@ -392,6 +403,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (cameraMode == 2) { chaseIx = x; chaseIy = -y; joyActive = on }
     }
 
+    fun padLook(x: Float) { padLookX = x }
+
     fun nudgeZoom(d: Float) { zoom = (zoom - d).coerceIn(0.55f, 1.6f); updateCamera() }
 
     fun setChaseInput(ix: Float, iy: Float, active: Boolean) { chaseIx = ix; chaseIy = iy; joyActive = active }
@@ -408,14 +421,19 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         marble = Marble(m)
         val tr = rnd.nextFloat()
         val mr = rnd.nextFloat()
+        val pg = progress
+        fun open(key: String) = pg == null || pg.surfaceUnlocked(key)
         medium = forcedMedium ?: (if (plain) Medium.NONE else if (mr < 0.10f) Medium.WATER else if (mr < 0.18f) Medium.FOG else if (mr < 0.26f) Medium.GAS else Medium.NONE)
+        if (forcedMedium == null && medium != Medium.NONE && !open(medium.name.lowercase())) medium = Medium.NONE
         terrain = forcedTerrain ?: (if (medium != Medium.NONE) Terrain.NONE else if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
+        if (forcedTerrain == null && terrain != Terrain.NONE && !open(terrain.name.lowercase())) terrain = Terrain.NONE
         pal = when {
             terrain != Terrain.NONE -> Palette.random(rnd, pal)                           // sand/mud floors keep a classic wall finish
             forcedTheme == null -> Palette.randomAny(rnd, pal)
             forcedTheme < 0 -> Palette.random(rnd, pal)
             else -> Palette.themes[forcedTheme.coerceIn(0, Palette.themes.size - 1)]
         }
+        if (forcedTheme == null && pal.themeId >= 0 && !open("t${pal.themeId}")) pal = Palette.random(rnd, pal)
         if (terrain == Terrain.NONE && medium == Medium.NONE && (pal.themeId == 8 || pal.themeId == 7)) terrain = Terrain.SAND     // temple sand / powder snow
         pal = when (terrain) {
             Terrain.SAND -> pal.withFloor(when (pal.themeId) { 8 -> Vec3(0.88f, 0.70f, 0.44f); 7 -> Vec3(0.76f, 0.84f, 0.95f); else -> Vec3(0.84f, 0.72f, 0.50f) }, Mat.SAND, 0.96f)
@@ -452,16 +470,23 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         marble!!.field = field
         mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight) }
         mediumGeo?.let { g -> mediumMesh!!.upload(g.update(field!!.level), g.indices, true) }
+        surfaceKey = when { pal.themeId >= 0 -> "t${pal.themeId}"; medium != Medium.NONE -> medium.name.lowercase(); terrain == Terrain.SAND -> "sand"; terrain == Terrain.MUD -> "mud"; else -> "classic" }
+        solvedReported = false
         mediumAcc = 0f
         waves = null
         if (medium == Medium.WATER) {
             val wf = com.maze3d.core.WaveField(m, if (simQuality >= 2) 16 else 12)
             waves = wf
+            if (foamTex == 0) { val id2 = IntArray(1); GLES30.glGenTextures(1, id2, 0); foamTex = id2[0] }
             if (waveTex == 0) { val id = IntArray(1); GLES30.glGenTextures(1, id, 0); waveTex = id[0] }
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
             GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R16F, wf.atlasW, wf.atlasH, 0, GLES30.GL_RED, GLES30.GL_FLOAT, null)
             for ((pn, pv) in listOf(GLES30.GL_TEXTURE_MIN_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_MAG_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_WRAP_S to GLES30.GL_CLAMP_TO_EDGE, GLES30.GL_TEXTURE_WRAP_T to GLES30.GL_CLAMP_TO_EDGE)) GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, pn, pv)
             val zero = java.nio.ByteBuffer.allocateDirect(wf.atlasW * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+            for (row in 0 until wf.atlasH) { zero.position(0); GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, row, wf.atlasW, 1, GLES30.GL_RED, GLES30.GL_FLOAT, zero) }
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, foamTex)
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R16F, wf.atlasW, wf.atlasH, 0, GLES30.GL_RED, GLES30.GL_FLOAT, null)
+            for ((pn, pv) in listOf(GLES30.GL_TEXTURE_MIN_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_MAG_FILTER to GLES30.GL_LINEAR, GLES30.GL_TEXTURE_WRAP_S to GLES30.GL_CLAMP_TO_EDGE, GLES30.GL_TEXTURE_WRAP_T to GLES30.GL_CLAMP_TO_EDGE)) GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, pn, pv)
             for (row in 0 until wf.atlasH) { zero.position(0); GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, row, wf.atlasW, 1, GLES30.GL_RED, GLES30.GL_FLOAT, zero) }
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
             waveBuf = java.nio.ByteBuffer.allocateDirect(wf.tile * wf.tile * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
@@ -487,7 +512,19 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val c = m.centers[hz.holeCells[i]]
             holeUniform[i * 4] = c.x; holeUniform[i * 4 + 1] = c.y; holeUniform[i * 4 + 2] = c.z; holeUniform[i * 4 + 3] = hz.holeRadius * 1.03f
         }
-        markerMesh!!.let { val mb = b.markers(hz.doorEdges); it.upload(mb.vertices(), mb.indices()) }
+        run {
+            val path = m.solution
+            val avoid = HashSet<Int>().apply { add(m.start); add(m.goal); hz.holeCells.forEach { add(it) } }
+            val picks = ArrayList<Int>()
+            for (f in floatArrayOf(0.25f, 0.5f, 0.75f)) {
+                val base = (path.size * f).toInt().coerceIn(1, path.size - 2)
+                val cell = (0..4).flatMap { d -> listOf(base + d, base - d) }.map { it.coerceIn(1, path.size - 2) }.map { path[it] }.firstOrNull { it !in avoid && it !in picks }
+                if (cell != null && path.size > 12) picks.add(cell)
+            }
+            checkpoints = picks.sortedBy { c -> path.indexOf(c) }.toIntArray()
+            cpReached = -1
+        }
+        markerMesh!!.let { val mb = b.markers(hz.doorEdges, checkpoints, cpReached); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
         val wa = rnd.nextFloat() * 6.2831853f
         val ws = 0.14f + 0.16f * rnd.nextFloat()
@@ -510,7 +547,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Request a fresh labyrinth; walls sink first. */
     fun requestNew(k: ShapeKind? = null, terrain: Terrain? = null, plain: Boolean = false, theme: Int? = null, medium: Medium? = null) {
-        nextKind = k ?: ShapeKind.values().filter { it != kind }.let { it[rnd.nextInt(it.size)] }
+        nextKind = k ?: pickNext()
         pendingTerrain = terrain; pendingPlain = plain; pendingTheme = theme; pendingMedium = medium
         if (phase != Phase.SINK) { phase = Phase.SINK; audio.levelSink() }
     }
@@ -524,10 +561,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Menu backdrop: build the chosen level right away so the player can see what they picked. */
     fun previewLevel(shape: ShapeKind?, terrain: Terrain?, plain: Boolean, theme: Int? = null, medium: Medium? = null) {
         menuMode = true; paused = false
-        newLabyrinth(shape ?: ShapeKind.values()[rnd.nextInt(ShapeKind.values().size)], terrain, plain, theme, medium)
+        newLabyrinth(shape ?: ShapeKind.values().filter { progress?.shapeUnlocked(it) != false }.ifEmpty { listOf(ShapeKind.SPHERE) }.let { it[rnd.nextInt(it.size)] }, terrain, plain, theme, medium)
     }
 
-    fun resetMarble() { marble?.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase() }
+    private fun respawnCell() = if (cpReached >= 0) checkpoints[cpReached] else (maze?.start ?: 0)
+
+    /** Puts the ball back at the last checkpoint or the start of the maze. */
+    fun resetMarble(toCheckpoint: Boolean = false) {
+        marble?.reset(if (toCheckpoint) respawnCell() else (maze?.start ?: 0)); rollQ = Quat.IDENTITY; threadCell = -1; initChase()
+        if (!toCheckpoint) { cpReached = -1; refreshMarkers() }
+    }
+
+    private fun refreshMarkers() {
+        val b = builder ?: return
+        val hz = hazards ?: return
+        markerMesh?.let { val mb = b.markers(hz.doorEdges, checkpoints, cpReached); it.upload(mb.vertices(), mb.indices()) }
+    }
 
     /** Timed hint: shows the golden thread for [HINT_SECONDS], then it fades; usable again after [HINT_COOLDOWN]. */
     fun requestHint() {
@@ -569,6 +618,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         lastNanos = now
         time += dt
         adaptResolution(raw.coerceIn(0.001f, 0.2f))
+        if (padLookX != 0f && cameraMode == 2) pendingYaw += padLookX * dt * 2.2f
         if (padOn && cameraMode != 2 && phase == Phase.PLAY && !paused) drag(padX * dt * 700f, padY * dt * 700f, dt)
         update(dt)
         computeCamera(dt)
@@ -635,8 +685,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     // marble is dropping into a hole; physics paused
                     fallTimer -= dt
                     if (fallTimer <= 0f) {
-                        mb.reset(); rollQ = Quat.IDENTITY; threadCell = -1; initChase(); poison = 0f
-                        val sc = m.centers[m.start]
+                        mb.reset(respawnCell()); rollQ = Quat.IDENTITY; threadCell = -1; initChase(); poison = 0f
+                        val sc = m.centers[respawnCell()]
                         sparks.burst(sc, mb.surface.normal(sc), 28, 0.9f, Vec3(0.4f, 0.8f, 1f))
                         audio.respawn(panOf(sc))
                     }
@@ -680,7 +730,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                             sparks.burst(m.centers[hz.holeCells[h]], mb.surface.normal(m.centers[hz.holeCells[h]]), 10, 0.5f, pal.accent)
                         }
                     }
-                    if (mb.atGoal) { phase = Phase.SOLVED; solvedTimer = 0f }
+                    if (cpReached + 1 < checkpoints.size && mb.cell == checkpoints[cpReached + 1]) {
+                        cpReached++
+                        refreshMarkers()
+                        val c = m.centers[mb.cell]
+                        sparks.burst(c, mb.surface.normal(c), 18, 0.7f, Vec3(0.4f, 1f, 0.55f))
+                        audio.respawn(panOf(c))
+                        host.onToast("Checkpoint ${cpReached + 1} of ${checkpoints.size}")
+                    }
+                    if (mb.atGoal) {
+                        phase = Phase.SOLVED; solvedTimer = 0f
+                        if (!solvedReported) { solvedReported = true; host.onSolved(surfaceKey, kind, difficulty) }
+                    }
                 }
                 updateDoors(m)
             }
@@ -924,7 +985,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     private fun pickNext(): ShapeKind {
-        val options = ShapeKind.values().filter { it != kind }
+        val options = ShapeKind.values().filter { it != kind && (progress?.shapeUnlocked(it) != false) }.ifEmpty { listOf(ShapeKind.SPHERE) }
         return options[rnd.nextInt(options.size)]
     }
 
@@ -1276,7 +1337,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Ball skin for the current level: themed surfaces get a matching ball, sand and water levels a beach ball. */
-    private fun ballSkin(): Int = when {
+    private fun ballSkin(): Int = if (ballChoice >= 0) ballChoice else when {
         pal.themeId in 0..10 -> pal.themeId + 1
         terrain == Terrain.SAND || medium == Medium.WATER -> 12
         else -> 0
@@ -1389,6 +1450,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val spd = (mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1.5f)
             // a ball displaces water: a dent where it is, a bow wave pushed ahead of it
             wf.disturb(mb.cell, under, mb.radius * 1.2f, -0.006f * (0.3f + spd) * lv * dt * 60f)
+            if (spd > 0.05f) wf.foam(mb.cell, under, mb.radius * 1.05f, (0.25f + 0.9f * spd) * lv * dt * 60f)
             if (spd > 0.08f) {
                 val ahead = mb.surface.project(under + mb.velocity.normalized() * (mb.radius * 1.5f))
                 wf.disturb(mb.cell, ahead, mb.radius * 0.9f, 0.004f * spd * lv * dt * 60f)
@@ -1405,9 +1467,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val (ox, oy) = wf.tileOrigin(c)
             buf.clear(); buf.put(wf.h, c * wf.tile * wf.tile, wf.tile * wf.tile); buf.position(0)
             GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, ox, oy, wf.tile, wf.tile, GLES30.GL_RED, GLES30.GL_FLOAT, buf)
+            foamUpload.add(c)
         }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, foamTex)
+        for (c in foamUpload) {
+            val (ox, oy) = wf.tileOrigin(c)
+            buf.clear(); buf.put(wf.f, c * wf.tile * wf.tile, wf.tile * wf.tile); buf.position(0)
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, ox, oy, wf.tile, wf.tile, GLES30.GL_RED, GLES30.GL_FLOAT, buf)
+        }
+        foamUpload.clear()
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
     }
+    private val foamUpload = ArrayList<Int>()
 
     private fun drawMedium(vpm: FloatArray, cam: Vec3) {
         val f = field ?: return
@@ -1434,6 +1505,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE6)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, foamTex)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glUniform1i(loc(mediumProg, "uFoamTex"), 6)
             GLES30.glUniform4f(loc(mediumProg, "uWaveP"), wf.t.toFloat(), wf.tile.toFloat(), wf.perRow.toFloat(), 0f)
             GLES30.glUniform2f(loc(mediumProg, "uWaveAtlas"), wf.atlasW.toFloat(), wf.atlasH.toFloat())
         } else GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5)

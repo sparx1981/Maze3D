@@ -308,9 +308,36 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
-    fun markers(doorEdges: IntArray = IntArray(0)): MeshBuilder {
+    /** A glowing ring on the floor with a pole and pennant above it. */
+    private fun flag(mb: MeshBuilder, cell: Int, color: Vec3) {
+        val c = maze.centers[cell]
+        val n = surface.normal(c)
+        var t1 = maze.mesh.vertices[maze.mesh.cellVertex(cell, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(cell, 0)]
+        t1 = (t1 - n * (t1 dot n)).normalized()
+        val t2 = n cross t1
+        disc(mb, cell, cs * 0.46f, cs * 0.34f, color)
+        val h = cs * 1.15f; val r = cs * 0.025f
+        val pole = Vec3(0.92f, 0.94f, 1f)
+        val ring = Array(4) { k -> val a = k * (PI / 2).toFloat(); (t1 * cos(a) + t2 * sin(a)) * r }
+        for (k in 0..3) {
+            val k2 = (k + 1) % 4
+            val nrm = ((ring[k] + ring[k2]) * 0.5f).normalized()
+            val a = mb.vertex(c + ring[k] + n * (cs * 0.01f), nrm, pole); val b = mb.vertex(c + ring[k2] + n * (cs * 0.01f), nrm, pole)
+            val d = mb.vertex(c + ring[k2] + n * h, nrm, pole); val e = mb.vertex(c + ring[k] + n * h, nrm, pole)
+            mb.quad(a, b, d, e)
+        }
+        val top = c + n * h; val low = c + n * (h * 0.72f)
+        for (side in 0..1) {
+            val nn = if (side == 0) t1 else -t1
+            val v0 = mb.vertex(top, nn, color); val v1 = mb.vertex(top + t2 * (cs * 0.34f) - n * (cs * 0.10f), nn, color * 1.15f); val v2 = mb.vertex(low, nn, color)
+            if (side == 0) mb.tri(v0, v1, v2) else mb.tri(v0, v2, v1)
+        }
+    }
+
+    fun markers(doorEdges: IntArray = IntArray(0), checkpoints: IntArray = IntArray(0), reached: Int = -1): MeshBuilder {
         val mb = MeshBuilder()
         for (e in doorEdges) track(mb, e)
+        for ((i, cp) in checkpoints.withIndex()) flag(mb, cp, if (i <= reached) Vec3(0.35f, 1f, 0.5f) else Vec3(1f, 0.72f, 0.2f))
         disc(mb, maze.start, cs * 0.42f, cs * 0.30f, Vec3(0.35f, 0.75f, 1f))
         disc(mb, maze.goal, cs * 0.64f, cs * 0.40f, Vec3(0.55f, 0.42f, 0.12f), 0.0004f)
         disc(mb, maze.goal, cs * 0.40f, 0f, Vec3(1f, 0.86f, 0.30f))

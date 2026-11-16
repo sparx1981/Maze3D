@@ -85,8 +85,8 @@ class Marble(private val maze: Maze) {
         }
     }
 
-    fun reset() {
-        cell = maze.start
+    fun reset(at: Int = maze.start) {
+        cell = at
         position = maze.centers[cell] + surface.normal(maze.centers[cell]) * radius
         velocity = Vec3.ZERO
     }
