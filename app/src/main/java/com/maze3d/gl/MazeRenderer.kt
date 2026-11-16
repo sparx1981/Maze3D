@@ -1424,7 +1424,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             pp.time = time
             pp.cloudOn = cloudsOn
             val qp = profile
-            pp.ssao = qp.ssao; pp.dof = qp.dof
+            pp.ssao = false; pp.dof = qp.dof                 // screen-space AO was dropped: it darkened edges more than it helped
             pp.aoAmt = 0.85f; pp.dofAmt = 0.85f
             pp.bloomAmt = if (!qp.bloom) 0f else if (qp.shadows >= 2) 0.34f else 0.26f
             pp.fxaa = qp.fxaa

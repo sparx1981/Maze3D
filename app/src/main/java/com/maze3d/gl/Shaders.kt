@@ -617,6 +617,110 @@ vec3 shadeBall(vec3 alb, float rough, float metal, vec3 emit, float coat, vec3 N
     return col + emit;
 }
 
+vec3 over(vec3 base, vec4 l) { return mix(base, l.rgb, l.a); }
+
+// a flower seen from above: [n] petals out to radius [r], gradient from [ca] (centre) to [cb] (tips), disc [cc] in the middle
+vec4 petalFlower(vec2 q, float n, float r, vec3 ca, vec3 cb, vec3 cc) {
+    float d = length(q);
+    float a = atan(q.y, q.x);
+    float edge = r * (0.64 + 0.36 * pow(abs(cos(a * n * 0.5)), 0.7));
+    float m = smoothstep(edge, edge - 0.012, d);
+    vec3 c = mix(ca, cb, smoothstep(0.1 * r, r, d));
+    float mid = smoothstep(0.07, 0.0, abs(sin(a * n * 0.5))) * smoothstep(0.2 * r, 0.55 * r, d);
+    c *= 1.0 - 0.45 * mid;
+    c = mix(c, cc, smoothstep(0.2 * r, 0.16 * r, d));
+    return vec4(c, m);
+}
+
+vec4 leafShape(vec2 q, vec2 ctr, float ang, float len, float wid, vec3 col) {
+    vec2 d = q - ctr;
+    vec2 r = vec2(d.x * cos(ang) + d.y * sin(ang), -d.x * sin(ang) + d.y * cos(ang));
+    float e = length(r / vec2(len, wid));
+    float m = smoothstep(1.0, 0.9, e);
+    vec3 c = mix(col, col * 0.55, smoothstep(0.05, 0.0, abs(r.y)) * 0.8);
+    return vec4(c, m);
+}
+
+vec3 sugarSkull(vec3 p) {
+    const vec3 NAVY = vec3(0.04, 0.04, 0.14), MAG = vec3(0.88, 0.10, 0.45), ORG = vec3(1.0, 0.45, 0.05), YEL = vec3(1.0, 0.74, 0.10);
+    const vec3 CYAN = vec3(0.05, 0.68, 0.82), GRN = vec3(0.20, 0.58, 0.20), PINK = vec3(0.93, 0.16, 0.55);
+    vec3 c = vec3(0.97, 0.96, 0.93);
+    vec2 q = p.xy;
+    if (p.z < 0.0) {                                       // back: marigold rosette ringed with dots
+        vec2 b = vec2(-p.x, p.y);
+        vec2 g = b * 12.0; vec2 ip = floor(g); vec2 fp = fract(g) - 0.5;
+        float h = hash21(ip);
+        vec3 dc = h < 0.25 ? CYAN : h < 0.5 ? ORG : h < 0.75 ? PINK : GRN;
+        c = mix(c, dc, smoothstep(0.2, 0.12, length(fp)) * step(0.35, hash21(ip + 5.0)));
+        c = over(c, petalFlower(b, 16.0, 0.62, ORG, YEL, PINK));
+        c = over(c, petalFlower(b, 8.0, 0.3, MAG, PINK, YEL));
+        return c;
+    }
+    // scattered coloured dots over the white skull
+    vec2 g = q * 15.0; vec2 ip = floor(g); vec2 fp = fract(g) - 0.5;
+    float h = hash21(ip);
+    vec3 dc = h < 0.25 ? CYAN : h < 0.5 ? ORG : h < 0.75 ? PINK : GRN;
+    float dotM = smoothstep(0.17, 0.1, length(fp - (vec2(hash21(ip + 1.0), hash21(ip + 2.0)) - 0.5) * 0.4)) * step(0.45, hash21(ip + 7.0));
+    c = mix(c, dc, dotM);
+    // cyan scrolls beside the brow, green leaves, side flowers
+    for (int s = 0; s < 2; s++) {
+        float sg = s == 0 ? -1.0 : 1.0;
+        vec2 qs = vec2(q.x * sg, q.y);
+        c = mix(c, CYAN, smoothstep(0.016, 0.0, abs(length(qs - vec2(0.42, 0.42)) - 0.085)) * step(0.0, qs.x - 0.34));
+        c = mix(c, CYAN, smoothstep(0.014, 0.0, abs(length(qs - vec2(0.55, 0.22)) - 0.06)) * step(qs.y, 0.26));
+        c = over(c, leafShape(qs, vec2(0.30, 0.55), 0.35, 0.13, 0.045, GRN));
+        c = over(c, leafShape(qs, vec2(0.62, 0.5), 1.1, 0.11, 0.04, GRN));
+        c = over(c, petalFlower(qs - vec2(0.74, 0.28), 7.0, 0.17, PINK, MAG, YEL));
+        c = over(c, petalFlower(qs - vec2(0.66, -0.3), 6.0, 0.13, MAG, PINK, YEL));
+        c = over(c, leafShape(qs, vec2(0.5, -0.48), -0.9, 0.12, 0.04, GRN));
+    }
+    // forehead marigold
+    c = over(c, petalFlower(q - vec2(0.0, 0.58), 14.0, 0.2, YEL, ORG, PINK));
+    // eye sockets: dotted marigold rim, magenta ring, dark centre with a little mandala
+    for (int s = 0; s < 2; s++) {
+        float sg = s == 0 ? -1.0 : 1.0;
+        vec2 e = q - vec2(0.34 * sg, 0.04);
+        float d = length(e);
+        float a = atan(e.y, e.x);
+        float rim = smoothstep(0.34, 0.33, d) * smoothstep(0.255, 0.265, d);
+        vec3 rimC = mix(ORG, YEL, step(0.5, fract(a * 11.0 / 6.2832)));
+        c = mix(c, rimC, rim * (0.55 + 0.45 * smoothstep(0.0, 0.5, abs(sin(a * 11.0)))));
+        c = mix(c, MAG, smoothstep(0.012, 0.0, abs(d - 0.25)));
+        c = mix(c, NAVY, smoothstep(0.236, 0.226, d));
+        c = over(c, petalFlower(e, 10.0, 0.17, ORG, ORG * 1.1, CYAN) * vec4(1.0, 1.0, 1.0, step(d, 0.2)));
+        c = mix(c, CYAN, smoothstep(0.012, 0.0, abs(d - 0.205)) * step(d, 0.226));
+        c = over(c, petalFlower(e, 8.0, 0.09, CYAN, vec3(0.3, 0.85, 0.9), YEL) * vec4(1.0, 1.0, 1.0, step(d, 0.2)));
+    }
+    // nose: a dark upturned heart with a small flower
+    {
+        vec2 n = q - vec2(0.0, -0.13);
+        float hw = 0.12 * (1.0 - (n.y + 0.12) / 0.27) * step(-0.12, n.y) * step(n.y, 0.15) + 0.12 * step(n.y, -0.12) * step(-0.17, n.y) * (1.0 - smoothstep(-0.17, -0.12, n.y) * 0.0);
+        float inside = step(abs(n.x), hw) * step(-0.17, n.y) * step(n.y, 0.15);
+        float rimN = step(abs(n.x), hw + 0.022) * step(-0.19, n.y) * step(n.y, 0.17);
+        c = mix(c, ORG, rimN * (1.0 - inside));
+        c = mix(c, NAVY, inside);
+        c = over(c, petalFlower(n - vec2(0.0, -0.02), 7.0, 0.065, ORG, YEL, YEL));
+    }
+    // grin: magenta lips and two rows of teeth
+    {
+        float sd = max(abs(q.x) - 0.31, abs(q.y + 0.46) - 0.1);
+        float lip = smoothstep(0.03, 0.01, abs(sd - 0.0)) ;
+        c = mix(c, MAG, smoothstep(0.036, 0.02, abs(sd + 0.004)));
+        float teeth = step(sd, -0.016);
+        float gap = smoothstep(0.012, 0.0, abs(fract(q.x / 0.052 + 0.5) - 0.5) * 0.052 - 0.0) * 0.0 + smoothstep(0.0075, 0.0, abs(fract(q.x / 0.052) - 0.5) * 0.052 - 0.0245);
+        float row = smoothstep(0.008, 0.0, abs(q.y + 0.46));
+        c = mix(c, vec3(0.99), teeth);
+        c = mix(c, NAVY * 2.0, teeth * max(smoothstep(0.42, 0.48, abs(fract(q.x / 0.052) - 0.5)), row));
+    }
+    // bottom flower and cheek scrolls
+    c = over(c, petalFlower(q - vec2(0.0, -0.78), 9.0, 0.16, ORG, MAG, YEL));
+    c = mix(c, CYAN, smoothstep(0.016, 0.0, abs(length(q - vec2(0.2, -0.7)) - 0.07)) * step(0.14, q.x));
+    c = mix(c, CYAN, smoothstep(0.016, 0.0, abs(length(q - vec2(-0.2, -0.7)) - 0.07)) * step(q.x, -0.14));
+    // thin dark outline near the limb
+    c = mix(c, NAVY, smoothstep(0.93, 0.985, length(q)) * 0.9);
+    return c;
+}
+
 vec3 skinColor(vec3 p, vec3 N, vec3 V) {
     float lat = p.z, lon = atan(p.y, p.x);
     if (uSkin == 1) {            // gobstopper: layered candy shells
@@ -625,17 +729,8 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         vec3 c = band < 1.0 ? vec3(1.0, 0.2, 0.45) : band < 2.0 ? vec3(1.0, 0.95, 0.9) : band < 3.0 ? vec3(0.2, 0.75, 1.0) : band < 4.0 ? vec3(1.0, 0.85, 0.2) : band < 5.0 ? vec3(0.55, 0.9, 0.35) : vec3(0.75, 0.4, 1.0);
         return shadeBall(pow(c, vec3(2.2)), 0.18, 0.0, vec3(0.0), 1.0, N, V);
     }
-    if (uSkin == 2) {            // sugar skull: white ceramic, marigold rosette, painted dots
-        float a = atan(p.y, p.x), r = acos(clamp(p.z, -1.0, 1.0));
-        float pet = 0.5 + 0.5 * cos(a * 8.0);
-        float flower = 1.0 - smoothstep(0.0, 0.85 + 0.25 * pet, r);
-        vec3 c = mix(vec3(0.96, 0.94, 0.88), mix(vec3(1.0, 0.45, 0.05), vec3(1.0, 0.72, 0.12), pet), flower);
-        float dots = smoothstep(0.9, 0.96, fract(r * 9.0)) * smoothstep(0.2, 0.0, abs(fract(a * 3.0) - 0.5) - 0.3);
-        c = mix(c, vec3(0.9, 0.2, 0.5), dots * 0.9 * (1.0 - flower));
-        float ring = smoothstep(0.03, 0.0, abs(r - 1.55));
-        c = mix(c, vec3(0.15, 0.85, 0.8), ring);
-        c = mix(c, vec3(0.1, 0.05, 0.15), smoothstep(0.1, 0.0, r - 0.12) * 0.0);
-        return shadeBall(pow(c, vec3(2.2)), 0.3, 0.0, vec3(0.0), 0.8, N, V);
+    if (uSkin == 2) {            // sugar skull: a painted calavera face on one side, marigold rosette and dots on the other
+        return shadeBall(pow(sugarSkull(p), vec3(2.2)), 0.3, 0.0, vec3(0.0), 0.85, N, V);
     }
     if (uSkin == 3) {            // tyre: black rubber, zig-zag tread around the equator, sidewall lettering ring
         float lt = abs(lat);

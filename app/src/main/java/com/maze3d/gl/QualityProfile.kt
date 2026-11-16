@@ -25,7 +25,7 @@ data class QualityProfile(
         private fun b(v: Boolean) = if (v) 1 else 0
         val LOW = QualityProfile(0, 0, false, false, false, false, false, false, true, false, 0, 2, 2)
         val MEDIUM = QualityProfile(1, 1, false, false, true, true, true, true, true, true, 1, 0, 2)
-        val HIGH = QualityProfile(2, 2, true, true, true, true, true, true, true, true, 1, 0, 2)
+        val HIGH = QualityProfile(2, 2, false, true, true, true, true, true, true, true, 1, 0, 2)
         val PRESETS = listOf(LOW, MEDIUM, HIGH)
 
         fun decode(s: String?): QualityProfile? {

@@ -518,7 +518,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         onOff("Motion blur", { profile.motion }) { profile.copy(motion = it) }
         onOff("Bloom glow", { profile.bloom }) { profile.copy(bloom = it) }
         onOff("Depth of field", { profile.dof }) { profile.copy(dof = it) }
-        onOff("Ambient occlusion", { profile.ssao }) { profile.copy(ssao = it) }
         onOff("Edge smoothing", { profile.fxaa }) { profile.copy(fxaa = it) }
         onOff("Film grain", { profile.grain }) { profile.copy(grain = it) }
         levels("Particles & rain", listOf("Fewer", "Normal"), { profile.particles }) { profile.copy(particles = it) }
