@@ -703,7 +703,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         box.removeAllViews()
         val names = listOf("Automatic") + com.maze3d.core.Progress.SKIN_NAMES
         noPreview = true
-        box.addView(chipGrid(names, 3, { renderer.ballChoice + 1 }, { i ->
+        box.addView(chipGrid(names, if (settingsNarrow) 2 else 3, { renderer.ballChoice + 1 }, { i ->
             renderer.ballChoice = i - 1
             getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("ball", i - 1).apply()
         }, { i ->
@@ -732,7 +732,20 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         return row
     }
 
+    private var settingsNarrow = false
+
     private fun settingRow(label: String, control: View, hint: String? = null): LinearLayout {
+        // On a narrow (portrait) screen a switch with three or more options cannot sit beside its label: stack them and let the chips share the width.
+        val stack = settingsNarrow && control is LinearLayout && control.childCount >= 3
+        if (stack) {
+            val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14f })
+            if (hint != null) col.addView(TextView(this).apply { text = hint; setTextColor(Color.argb(140, 255, 255, 255)); textSize = 11f; setPadding(0, dp(2f), 0, 0) })
+            val lc = control as LinearLayout
+            for (i in 0 until lc.childCount) lc.getChildAt(i).layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(if (i == 0) 0 else dp(4f), 0, 0, 0) }
+            col.addView(control, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8f) })
+            return col
+        }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14f; typeface = Typeface.create("sans-serif", Typeface.NORMAL) })
@@ -768,6 +781,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val dm = resources.displayMetrics
         val widthDp = dm.widthPixels / dm.density
         val wide = widthDp >= 600f
+        settingsNarrow = !wide
         val panelW = if (wide) minOf(dp(760f), dm.widthPixels - dp(48f)) else minOf(dp(420f), dm.widthPixels - dp(32f))
         val prefs = getSharedPreferences("maze3d_ui", MODE_PRIVATE)
 
