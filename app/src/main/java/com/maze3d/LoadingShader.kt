@@ -192,7 +192,7 @@ half4 main(float2 fc) {
                 inner = shade(p, rin, 24);
             }
             // rolling ribbons inside the glass, in body space so they turn with the ball
-            float ang = scrollAt() / R;
+            float ang = -scrollAt() / R;
             float cs = cos(ang); float sn = sin(ang);
             float3 bp = float3(n.x, n.y * cs - n.z * sn, n.y * sn + n.z * cs);
             float band = sin(bp.x * 6.0 + sin(bp.y * 4.0 + bp.z * 3.0) * 1.6);

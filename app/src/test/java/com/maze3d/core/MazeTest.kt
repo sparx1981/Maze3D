@@ -255,4 +255,35 @@ class MazeTest {
         repeat(20) { p.record("t0", ShapeKind.SPHERE, Difficulty.EASY) }
         assertTrue(Progress.SURFACE_CHAIN.all { p.surfaceUnlocked(it) } && ShapeKind.values().all { p.shapeUnlocked(it) })
     }
+
+    @Test
+    fun bridgesAndHammersSitOnStraightCorridors() {
+        var total = 0
+        for (kind in ShapeKind.values()) {
+            val maze = Maze(kind.createMesh(), 3)
+            val hz = Hazards(maze, Random(8), false, false, true, true)
+            total += hz.bridgeCells.size + hz.hammerCells.size
+            for (c in hz.bridgeCells.toList() + hz.hammerCells.toList()) {
+                assertTrue("${kind.label}: corridor cell", maze.links[c].size == 2 && c != maze.start && c != maze.goal)
+            }
+            assertTrue("${kind.label}: all distinct", (hz.bridgeCells.toList() + hz.hammerCells.toList()).let { it.size == it.toSet().size })
+            for (d in hz.bridgeDir + hz.hammerDir) assertTrue(d.length() > 0.99f)
+        }
+        assertTrue("some bridges/hammers were placed ($total)", total >= 20)
+    }
+
+    @Test
+    fun bestTimesKeepTheFastest() {
+        val mem = HashMap<String, String>()
+        val store = object : ProgressStore { override fun get(key: String) = mem[key]; override fun put(key: String, value: String) { mem[key] = value } }
+        val b = BestTimes(store)
+        assertEquals(null, b.record("sand", ShapeKind.SPHERE, Difficulty.EASY, 90f))
+        assertEquals(-1f, b.record("sand", ShapeKind.SPHERE, Difficulty.EASY, 100f))
+        assertEquals(90f, b.record("sand", ShapeKind.SPHERE, Difficulty.EASY, 75f))
+        b.record("t0", ShapeKind.CUBE, Difficulty.HARD, 300f)
+        val all = BestTimes(store).all()
+        assertEquals(2, all.size)
+        assertEquals(75f, all.first { it.surface == "sand" }.seconds)
+        assertEquals("1:15", BestTimes.format(75f))
+    }
 }

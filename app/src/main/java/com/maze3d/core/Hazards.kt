@@ -8,12 +8,21 @@ import kotlin.math.sin
  * Per-level moving hazards: sliding doors on open passages and floor holes that open and close.
  * The timing formulas are mirrored in the shaders (SCENE_VS for doors, HOLE_FS for holes).
  */
-class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean) {
+class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f) {
     val doorEdges: IntArray
     val doorPhase: FloatArray
     val holeCells: IntArray
     val holePhase: FloatArray
     private val holeIndex = IntArray(maze.cellCount) { -1 }
+    /** Wobbling plank bridges over open pits on straight stretches of the route. */
+    val bridgeCells: IntArray
+    val bridgeDir: Array<Vec3>
+    val bridgePhase: FloatArray
+    /** Pendulum hammers hanging over straight stretches; they swing along the corridor. */
+    val hammerCells: IntArray
+    val hammerDir: Array<Vec3>
+    val hammerPhase: FloatArray
+    private val bridgeIndex = IntArray(maze.cellCount) { -1 }
     val doorSet = HashSet<Int>()
     val holeRadius = maze.cellSize * 0.40f
 
@@ -62,7 +71,49 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         holeCells = holes.toIntArray()
         holePhase = FloatArray(holeCells.size) { rnd.nextFloat() }
         holeCells.forEachIndexed { i, c -> holeIndex[c] = i }
+
+        // bridges and hammers sit in straight cells of the route, well apart from every other hazard and from each other
+        val taken = HashSet<Int>(protectedCells)
+        for (e in doors) { taken.add(maze.edgeCellL[e]); taken.add(maze.edgeCellR[e]) }
+        holes.forEach { taken.add(it) }
+        val straight = ArrayList<Int>()
+        for (k in 1 until path.size - 1) {
+            val a = maze.centers[path[k - 1]]; val c = maze.centers[path[k]]; val b = maze.centers[path[k + 1]]
+            if (((c - a).normalized() dot (b - c).normalized()) > 0.93f && path[k] !in taken && maze.links[path[k]].size == 2) straight.add(k)
+        }
+        fun pick(count: Int, usedIdx: MutableList<Int>): List<Int> {
+            val out = ArrayList<Int>()
+            for (k in straight.shuffled(rnd)) {
+                if (out.size >= count) break
+                if (usedIdx.any { kotlin.math.abs(it - k) < 4 }) continue
+                out.add(k); usedIdx.add(k)
+            }
+            return out
+        }
+        val used = ArrayList<Int>()
+        for (k in 0 until path.size step 1) if (path[k] in holes) used.add(k)
+        val bks = if (withBridges) pick(((maze.cellCount / 90f) * scale).toInt().coerceIn(2, 7), used) else emptyList()
+        val hks = if (withHammers) pick(((maze.cellCount / 110f) * scale).toInt().coerceIn(2, 6), used) else emptyList()
+        fun dirAt(k: Int) = (maze.centers[path[k + 1]] - maze.centers[path[k - 1]]).normalized()
+        bridgeCells = IntArray(bks.size) { path[bks[it]] }
+        bridgeDir = Array(bks.size) { dirAt(bks[it]) }
+        bridgePhase = FloatArray(bks.size) { rnd.nextFloat() }
+        hammerCells = IntArray(hks.size) { path[hks[it]] }
+        hammerDir = Array(hks.size) { dirAt(hks[it]) }
+        hammerPhase = FloatArray(hks.size) { rnd.nextFloat() }
+        bridgeCells.forEachIndexed { i, c -> bridgeIndex[c] = i }
     }
+
+    val hasBridges get() = bridgeCells.isNotEmpty()
+    val hasHammers get() = hammerCells.isNotEmpty()
+    fun bridgeAt(cell: Int) = bridgeIndex[cell]
+
+    /** Sideways offset of the plank of bridge [i] at time [t], in cell widths. */
+    fun bridgeOffset(i: Int, t: Float) = BRIDGE_AMP * sin(BRIDGE_W * t + bridgePhase[i] * 2 * PI.toFloat())
+
+    /** Swing angle of hammer [i] in radians (0 = hanging straight down). */
+    fun hammerAngle(i: Int, t: Float) = HAMMER_MAX * sin(HAMMER_W * t + hammerPhase[i] * 2 * PI.toFloat())
+    fun hammerRate(i: Int, t: Float) = HAMMER_MAX * HAMMER_W * kotlin.math.cos(HAMMER_W * t + hammerPhase[i] * 2 * PI.toFloat())
 
     val hasDoors get() = doorEdges.isNotEmpty()
     val hasHoles get() = holeCells.isNotEmpty()
@@ -85,6 +136,8 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     companion object {
         const val DOOR_W = 1.15f
         const val HOLE_W = 0.9f
+        const val BRIDGE_W = 1.1f; const val BRIDGE_AMP = 0.07f
+        const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)
             return t * t * (3 - 2 * t)

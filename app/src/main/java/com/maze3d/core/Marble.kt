@@ -85,6 +85,9 @@ class Marble(private val maze: Maze) {
         }
     }
 
+    /** Adds an outside push (a hammer blow). */
+    fun kick(v: Vec3) { velocity += v }
+
     fun reset(at: Int = maze.start) {
         cell = at
         position = maze.centers[cell] + surface.normal(maze.centers[cell]) * radius

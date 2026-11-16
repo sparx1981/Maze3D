@@ -104,7 +104,27 @@ class DumpSceneTest {
         }
         b.planProps(kind.outerRadius)
         val gal = System.getenv("MAZE_GALLERY") != null
-        sb.append("\"props\":${mesh(if (gal) b.gallery() else b.props())},")
+        val hazGal = System.getenv("MAZE_HAZGAL") != null
+        val propsMesh: MeshBuilder = if (hazGal) MeshBuilder().also { mb ->
+            fun add(pm: PropMesh, ox: Float, rotY: Float) {
+                val base = mb.vertexCount; val ca = kotlin.math.cos(rotY); val sa = kotlin.math.sin(rotY)
+                for (i in 0 until pm.vertexCount) {
+                    val x = pm.pos[i * 3]; val y = pm.pos[i * 3 + 1]; val z = pm.pos[i * 3 + 2]
+                    val nx = pm.nrm[i * 3]; val nz = pm.nrm[i * 3 + 2]
+                    mb.vertex(com.maze3d.core.Vec3(x * ca + z * sa + ox, y, -x * sa + z * ca + HazardModels.HAMMER_PIVOT * 0f), com.maze3d.core.Vec3(nx * ca + nz * sa, pm.nrm[i * 3 + 1], -nx * sa + nz * ca), com.maze3d.core.Vec3(pm.col[i * 3], pm.col[i * 3 + 1], pm.col[i * 3 + 2]))
+                }
+                var q = 0; while (q < pm.idx.size) { mb.tri(base + pm.idx[q], base + pm.idx[q + 1], base + pm.idx[q + 2]); q += 3 }
+            }
+            add(HazardModels.bridge(0.36f), -1.4f, 0f)
+            add(HazardModels.gantry(0.5f), 0f, 0f)
+            val hm = HazardModels.hammer()
+            // hang the hammer from the gantry pivot
+            val moved = PropMesh(FloatArray(hm.pos.size) { if (it % 3 == 2) hm.pos[it] + HazardModels.HAMMER_PIVOT else hm.pos[it] }, hm.nrm, hm.col, hm.idx)
+            add(moved, 0f, 0.0f)
+            add(HazardModels.gantry(0.5f), 1.6f, 0f)
+            add(PropMesh(FloatArray(hm.pos.size) { if (it % 3 == 2) hm.pos[it] + HazardModels.HAMMER_PIVOT else hm.pos[it] }, hm.nrm, hm.col, hm.idx), 1.6f, 0.9f)
+        } else if (gal) b.gallery() else b.props()
+        sb.append("\"props\":${mesh(propsMesh)},")
         val med = System.getenv("MAZE_MEDIUM")
         if (med != null) {
             val mk = com.maze3d.core.Medium.valueOf(med)
