@@ -62,7 +62,7 @@ class DumpSceneTest {
     private fun dumpOne(kind: ShapeKind, palIndex: Int, out: String) {
         var pal = Palette.all[palIndex]
         val terrain = System.getenv("MAZE_TERRAIN") ?: ""
-        if (terrain == "SAND") pal = pal.withFloor(com.maze3d.core.Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
+        if (terrain == "SAND") pal = pal.withFloor(if (pal.themeId == 7) com.maze3d.core.Vec3(0.86f, 0.92f, 1f) else com.maze3d.core.Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
         if (terrain == "MUD") pal = pal.withFloor(com.maze3d.core.Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
         val maze = Maze(kind.createMesh(), 11)
         val marble = Marble(maze)

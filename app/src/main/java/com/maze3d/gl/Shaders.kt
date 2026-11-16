@@ -459,7 +459,7 @@ void main() {
         float bank = smoothstep(0.004, 0.03, h0);
         float cavity = 1.0 - 0.18 * groove;
         albedo *= (uMat == 5 ? mix(1.0, 0.9, groove) : mix(1.0, 0.65, groove)) * mix(1.0, 1.1, bank) * cavity;
-        if (uMat == 5) { albedo = mix(albedo, albedo * vec3(1.08, 0.9, 0.7), groove * 0.7); rough = 0.96; coat = 0.0; }
+        if (uMat == 5) { float cold = smoothstep(0.55, 0.75, dot(albedo, vec3(0.333))); albedo = mix(albedo, albedo * mix(vec3(1.08, 0.9, 0.7), vec3(0.8, 0.92, 1.08), cold), groove * 0.7); rough = 0.96; coat = 0.0; }
         else { rough = mix(rough, 0.18, groove); coat = max(coat, groove); }
     }
     if (uWet > 0.0 && uMat != 4) {                         // rain: darker, glossier surfaces

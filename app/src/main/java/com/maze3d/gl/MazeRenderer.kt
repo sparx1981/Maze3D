@@ -402,9 +402,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             forcedTheme < 0 -> Palette.random(rnd, pal)
             else -> Palette.themes[forcedTheme.coerceIn(0, Palette.themes.size - 1)]
         }
-        if (terrain == Terrain.NONE && medium == Medium.NONE && pal.themeId == 8) terrain = Terrain.SAND     // the temple floor is real sand
+        if (terrain == Terrain.NONE && medium == Medium.NONE && (pal.themeId == 8 || pal.themeId == 7)) terrain = Terrain.SAND     // temple sand / powder snow
         pal = when (terrain) {
-            Terrain.SAND -> pal.withFloor(if (pal.themeId == 8) Vec3(0.88f, 0.70f, 0.44f) else Vec3(0.84f, 0.72f, 0.50f), Mat.SAND, 0.96f)
+            Terrain.SAND -> pal.withFloor(when (pal.themeId) { 8 -> Vec3(0.88f, 0.70f, 0.44f); 7 -> Vec3(0.76f, 0.84f, 0.95f); else -> Vec3(0.84f, 0.72f, 0.50f) }, Mat.SAND, 0.96f)
             Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
             else -> pal
         }
@@ -635,6 +635,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         val under = mb.position - mb.surface.normal(mb.position) * (mb.radius * 0.8f)
                         sparks.emit(under, Vec3.ZERO, 0.38f, pal.accent, 0.012f + 0.01f * spd)
                     }
+                    if (pal.themeId == 7) snowfall(mb, m)
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
                     if (terrain != Terrain.NONE) layTrail(mb, m, dt)
@@ -799,7 +800,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (q == 2 && spd > 0.15f && rnd.nextFloat() < 0.5f) {
             // ultra: a spray of fine grains / droplets thrown from both sides of the wheel track
             val side = (n cross vdir).normalized()
-            val col = if (terrain == Terrain.MUD) Vec3(0.13f, 0.08f, 0.05f) else Vec3(0.8f, 0.66f, 0.42f)
+            val col = if (terrain == Terrain.MUD) Vec3(0.13f, 0.08f, 0.05f) else if (pal.themeId == 7) Vec3(0.85f, 0.92f, 1f) else Vec3(0.8f, 0.66f, 0.42f)
             repeat(3) {
                 val sd = if (rnd.nextBoolean()) 1f else -1f
                 val v = (n * 0.8f + side * sd * 0.7f - vdir * 0.2f + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.4f).normalized() * (0.2f + 0.4f * spd * rnd.nextFloat())
@@ -810,10 +811,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             dustAt = time
             if (terrain == Terrain.SAND) {
                 // a soft plume behind the marble, plus grains thrown up and back
-                dust.puff(under - vdir * (mb.radius * 0.5f), n, 1, 0.05f + 0.03f * spd, Vec3(0.88f, 0.75f, 0.54f))
+                dust.puff(under - vdir * (mb.radius * 0.5f), n, 1, 0.05f + 0.03f * spd, (if (pal.themeId == 7) Vec3(0.9f, 0.95f, 1f) else Vec3(0.88f, 0.75f, 0.54f)))
                 repeat(1 + (spd * 2f).toInt() * (if (q == 2) 3 else 1)) {
                     val v = (n * 0.9f - vdir * 0.5f + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * 0.7f).normalized() * (0.18f + 0.3f * spd * rnd.nextFloat())
-                    sparks.emit(under, v, 0.32f, Vec3(0.55f, 0.43f, 0.26f), 0.0045f)
+                    sparks.emit(under, v, 0.32f, if (pal.themeId == 7) Vec3(0.75f, 0.85f, 1f) else Vec3(0.55f, 0.43f, 0.26f), 0.0045f)
                 }
             } else {
                 // heavy clumps flung to the sides; when fast, some land as splats beside the track
@@ -1254,6 +1255,20 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         pal.themeId in 0..10 -> pal.themeId + 1
         terrain == Terrain.SAND || medium == Medium.WATER -> 12
         else -> 0
+    }
+
+    /** Soft powder drifting through the air around the ball on the ice level (after the example's windblown snow). */
+    private fun snowfall(mb: Marble, m: Maze) {
+        if (profile.particles == 0 && rnd.nextBoolean()) return
+        if (rnd.nextFloat() > 0.6f) return
+        val n = mb.surface.normal(mb.position)
+        repeat(1) {
+            val a = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+            val off = (a - n * (a dot n)) * (m.cellSize * 7f)
+            val p = mb.surface.project(mb.position + off) + n * (m.cellSize * (0.1f + 0.9f * rnd.nextFloat()))
+            val drift = Vec3(windX, windY, 0f) * 0.25f - n * (m.cellSize * (0.12f + 0.2f * rnd.nextFloat()))
+            dust.emit(p, drift, 3.2f, Vec3(0.57f, 0.68f, 0.84f), 0.0035f + 0.003f * rnd.nextFloat())
+        }
     }
 
     /** Creates (or drops) the sand / mud height field for the new level; Basic simulation keeps the cheap decal tracks. */

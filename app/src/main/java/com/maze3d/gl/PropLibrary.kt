@@ -335,7 +335,7 @@ object PropLibrary {
     private fun iceCrystals() = PM().apply {
         for (i in 0 until 5) { val a = i * 1.26f; val h = 0.5f + 0.5f * ((i * 3) % 5) / 4f
             push(); translate(cos(a) * 0.12f * (i > 0).compareTo(false), sin(a) * 0.12f * (i > 0).compareTo(false), 0f); rotZ(a); rotX(0.18f * (i % 3 - 1) * 1.5f)
-            col = Vec3.lerp(c(220, 246, 255), c(120, 190, 240), 0.5f); cylinder(0.1f, h * 0.7f, 6, 0.09f); at(z = h * 0.7f) { cone(0.09f, h * 0.35f, 6) }; pop() }
+            col = Vec3.lerp(c(220, 246, 255), c(120, 190, 240), 0.5f) * (if (i % 2 == 0) 1.0f else 1.25f); cylinder(0.1f, h * 0.7f, 6, 0.09f); at(z = h * 0.7f) { cone(0.09f, h * 0.35f, 6) }; pop() }
     }.build()
 
     private fun snowman() = PM().apply {
