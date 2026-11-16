@@ -31,7 +31,7 @@ import kotlin.math.tan
 class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     interface Host {
-        fun onHud(shape: String, seconds: Int, solved: Boolean)
+        fun onHud(shape: String, seconds: Int, solved: Boolean, percent: Int)
         fun onImpact(strength: Float)
         fun onFinish(name: String, accent: Vec3)
         fun onToast(message: String)
@@ -57,6 +57,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var pendingMedium: Medium? = null
     /** Simulation detail for sand and mud: 0 basic stamped trails, 1 detailed height field, 2 ultra (height field + particles). */
     @Volatile var simQuality = 1
+    @Volatile var difficulty = com.maze3d.core.Difficulty.MEDIUM
     private var medium = Medium.NONE
     private var pendingPlain = false
     @Volatile var followOn = false
@@ -64,7 +65,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     @Volatile var touchSens = 1f
     @Volatile var gyroSens = 1f
     /** 0 = orbit (turn the piece by hand), 1 = orbit that follows the marble, 2 = third-person chase camera. */
-    @Volatile var cameraMode = 0
+    @Volatile var cameraMode = 2
         private set
     @Volatile private var chaseIx = 0f
     @Volatile private var chaseIy = 0f
@@ -87,6 +88,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    private var pctCell = -1
+    private var pct = 0
     private var mediumProg = 0
     private var mediumMesh: GlMesh? = null
     private var mediumGeo: MediumMesh? = null
@@ -362,7 +365,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     // ---- camera / chase controls (any thread) ---------------------------------------------
     fun setCameraMode(mode: Int) {
-        cameraMode = mode.coerceIn(0, 2)
+        cameraMode = mode.coerceIn(1, 2)
         followOn = cameraMode == 1
         if (cameraMode == 2) chaseInit = false
     }
@@ -377,7 +380,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false, forcedTheme: Int? = null, forcedMedium: Medium? = null) {
         kind = k
         val seed = rnd.nextLong()
-        val m = Maze(k.createMesh(), seed)
+        val m = Maze(k.createMesh(difficulty.scale), seed)
         maze = m
         marble = Marble(m)
         val tr = rnd.nextFloat()
@@ -407,12 +410,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = rnd.nextFloat() < 0.45f
-        val wantRain = !plain && rnd.nextFloat() < 0.35f
+        val wantRain = !plain && rnd.nextFloat() < 0.12f
         if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
         cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
         if (!plain && !wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
-        val rainNow = wantRain || (!plain && !wantDoors && !wantHoles && !useClouds && terrain == Terrain.NONE)
+        val rainNow = wantRain
         val hz = Hazards(m, rnd, wantDoors, wantHoles)
         rain = if (rainNow) Rain(m, rnd) else null
         marble!!.rain = rain
@@ -452,6 +455,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         windX = kotlin.math.cos(wa) * ws; windY = kotlin.math.sin(wa) * ws * 0.5f
         fallTimer = 0f
         hintLeft = 0f; hintCool = 0f
+        pctCell = -1; pct = 0; lastHud = -1
         goalBursted = false
         host.onFinish(pal.name + listOfNotNull(terrain.label.ifEmpty { null }, medium.label.ifEmpty { null }, if (hz.hasDoors) "Doors" else null, if (hz.hasHoles) "Holes" else null, if (useClouds) "Clouds" else null, if (rain != null) "Rain" else null).joinToString("") { " · $it" }, pal.accent)
         threadCell = -1
@@ -663,10 +667,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         cloudAmt += (cloudTarget - cloudAmt) * min(1f, dt * 0.8f)
 
         val sec = playSeconds.toInt()
-        val code = sec * 4 + (if (phase == Phase.SOLVED) 1 else 0)
+        val mbP = marble
+        if (mbP != null && maze != null && mbP.cell != pctCell) {
+            pctCell = mbP.cell
+            val total = maze!!.solution.size.coerceAtLeast(2)
+            val left = maze!!.pathFrom(mbP.cell).size
+            pct = (100f * (1f - (left - 1f) / (total - 1f))).toInt().coerceIn(0, 100)
+        }
+        if (phase == Phase.SOLVED) pct = 100
+        val code = (sec * 4 + (if (phase == Phase.SOLVED) 1 else 0)) * 128 + pct
         if (code != lastHud) {
             lastHud = code
-            host.onHud(kind.label, sec, phase == Phase.SOLVED)
+            host.onHud(kind.label, sec, phase == Phase.SOLVED, pct)
         }
         if (hintLeft > 0f) hintLeft = max(0f, hintLeft - dt)
         if (hintCool > 0f) hintCool = max(0f, hintCool - dt)

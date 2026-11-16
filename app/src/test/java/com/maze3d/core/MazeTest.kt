@@ -36,8 +36,8 @@ class MazeTest {
     @Test
     fun marbleCanSolveEveryShape() {
         for (kind in ShapeKind.values()) {
-            for (seed in 1L..3L) {
-                val maze = Maze(kind.createMesh(), seed)
+            for ((seed, diff) in listOf(1L to Difficulty.EASY, 2L to Difficulty.MEDIUM, 3L to Difficulty.MEDIUM, 4L to Difficulty.HARD, 5L to Difficulty.EASY)) {
+                val maze = Maze(kind.createMesh(diff.scale), seed)
                 val marble = Marble(maze)
                 // theme props stand in dead ends; the ball must still get round them
                 val sb = com.maze3d.gl.SceneBuilder(maze, com.maze3d.gl.Palette.themes[(seed.toInt() * 3) % 11])
