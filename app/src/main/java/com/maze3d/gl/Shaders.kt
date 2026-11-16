@@ -16,11 +16,13 @@ layout(location=1) in vec3 aNrm;
 layout(location=2) in vec3 aCol;
 layout(location=3) in vec3 aLift;
 layout(location=4) in float aDelay;
+layout(location=5) in vec3 aTile;
 out vec3 vWorld;
 out vec3 vNrm;
 out vec3 vCol;
 out vec3 vLocal;
 out vec3 vNL;
+out vec3 vTile;
 void main() {
     float g = clamp((uGrowT - aDelay) / 0.35, 0.0, 1.0);
     g = g * g * (3.0 - 2.0 * g);
@@ -34,6 +36,7 @@ void main() {
     vWorld = w.xyz;
     vNrm = mat3(uModel) * aNrm;
     vNL = aNrm;
+    vTile = aTile;
     vLocal = p;
     vCol = aCol;
     gl_Position = uVP * w;
@@ -130,6 +133,10 @@ uniform vec3 uMarbleC;
 uniform float uFog;         // distance haze density (chase view)
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
+uniform float uSandOn;     // 1 = sand / mud height field is bound
+uniform sampler2D uSandTex;
+uniform vec4 uSandP;       // x = texels per cell, y = tile size in texels (with gutter), z = tiles per atlas row
+uniform vec2 uSandAtlas;
 uniform float uAlpha;
 uniform float uTexel;
 uniform mat4 uLightVP;
@@ -139,6 +146,7 @@ in vec3 vNrm;
 in vec3 vCol;
 in vec3 vLocal;
 in vec3 vNL;
+in vec3 vTile;
 out vec4 outColor;
 """ + COMMON + """
 float shadowAt(vec3 wp, vec3 N) {
@@ -252,6 +260,12 @@ vec3 bumpN(vec3 N, vec3 p, float h) {
     float det = dot(dpx, r1);
     vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
     return normalize(abs(det) * N - grad);
+}
+
+float sandH(vec2 uv, float cell) {
+    vec2 org = vec2(mod(cell, uSandP.z), floor(cell / uSandP.z)) * uSandP.y;
+    float hl = 0.5 / uSandP.x;
+    return texture(uSandTex, (org + 1.0 + clamp(uv, -hl, 1.0 + hl) * uSandP.x) / uSandAtlas).r;
 }
 
 void main() {
@@ -409,6 +423,45 @@ void main() {
     }
 
     if ((uMat >= 1 && uMat <= 3) || uMat >= 5) N = bumpN(N, vWorld, hgt);
+    float sandSh = 1.0;
+    if (uSandOn > 0.5 && vTile.z >= 0.0 && (uMat == 5 || uMat == 6)) {
+        // dug grooves and pushed-up banks from the simulated height field
+        float cellId = vTile.z;
+        vec2 uv = vTile.xy;
+        float e = 1.0 / uSandP.x;
+        float h0 = sandH(uv, cellId);
+        float hu = (sandH(uv + vec2(e, 0.0), cellId) - sandH(uv - vec2(e, 0.0), cellId)) / (2.0 * e);
+        float hv = (sandH(uv + vec2(0.0, e), cellId) - sandH(uv - vec2(0.0, e), cellId)) / (2.0 * e);
+        vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
+        vec2 ux = dFdx(uv), uy = dFdy(uv);
+        float det = ux.x * uy.y - ux.y * uy.x;
+        if (abs(det) > 1e-12) {
+            vec3 Pu = (dpx * uy.y - dpy * ux.y) / det;
+            vec3 Pv = (dpy * ux.x - dpx * uy.x) / det;
+            vec3 Tu = normalize(Pu), Tv = normalize(Pv);
+            N = normalize(N - (Tu * hu + Tv * hv) * (uMat == 5 ? 3.6 : 3.0));
+            // banks throw soft shadows: march toward the light across the height field
+            vec3 Lp = uLightDir - N * dot(uLightDir, N);
+            float lz = max(dot(uLightDir, N), 0.05);
+            float lpl = max(length(Lp), 0.05);
+            vec3 Ln = Lp / lpl;
+            vec2 dirUV = normalize(vec2(dot(Ln, Tu) / max(length(Pu), 1e-5), dot(Ln, Tv) / max(length(Pv), 1e-5)) + 1e-6);
+            float tanE = lz / lpl;
+            float occl = 0.0;
+            for (int k = 1; k <= 6; k++) {
+                float dist = 0.05 * float(k);
+                float hs = sandH(uv + dirUV * dist, cellId);
+                occl = max(occl, smoothstep(0.0, 0.012, hs - h0 - dist * tanE));
+            }
+            sandSh = 1.0 - 0.35 * occl;
+        }
+        float groove = smoothstep(0.0, -0.045, h0);
+        float bank = smoothstep(0.004, 0.03, h0);
+        float cavity = 1.0 - 0.18 * groove;
+        albedo *= (uMat == 5 ? mix(1.0, 0.9, groove) : mix(1.0, 0.65, groove)) * mix(1.0, 1.1, bank) * cavity;
+        if (uMat == 5) { albedo = mix(albedo, albedo * vec3(1.08, 0.9, 0.7), groove * 0.7); rough = 0.96; coat = 0.0; }
+        else { rough = mix(rough, 0.18, groove); coat = max(coat, groove); }
+    }
     if (uWet > 0.0 && uMat != 4) {                         // rain: darker, glossier surfaces
         albedo *= mix(1.0, 0.7, uWet);
         rough = mix(rough, rough * 0.45, uWet);
@@ -423,7 +476,7 @@ void main() {
     float a = max(rough * rough, 0.015);
     vec3 F0 = mix(vec3(0.04), albedo, metal);
     vec3 diffC = albedo * (1.0 - metal);
-    float sh = shadowAt(vWorld, N);
+    float sh = shadowAt(vWorld, N) * sandSh;
 
     // key light
     vec3 L = uLightDir;
@@ -1092,7 +1145,7 @@ void main() {
     vec2 dir = r > 1e-4 ? vUv / r : vec2(0.0);
     vec3 Np = normalize(N - (vT1 * dir.x + vT2 * dir.y) * dhdr * (mud ? 0.55 : 0.45));
     float lit = 0.34 + 0.72 * max(dot(Np, uLightDir), 0.0);
-    float cavity = 1.0 - 0.35 * groove;                          // ambient occlusion inside the groove
+    float cavity = 1.0 - 0.18 * groove;                          // ambient occlusion inside the groove
     vec3 col; float a;
     if (uPass < 0.5) {
         col = (mud ? vec3(0.30, 0.18, 0.10) : vec3(0.93, 0.78, 0.53)) * lit;

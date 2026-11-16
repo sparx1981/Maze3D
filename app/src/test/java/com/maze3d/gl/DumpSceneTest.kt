@@ -72,6 +72,29 @@ class DumpSceneTest {
         val rn = com.maze3d.core.Rain(maze, java.util.Random(4))
         for (i in rn.level.indices) rn.level[i] = 0.35f + 0.65f * ((i * 37) % 10) / 10f
         val hz = com.maze3d.core.Hazards(maze, java.util.Random(5), true, true)
+        var sandJson: String? = null
+        if (System.getenv("MAZE_FIELD") != null && terrain != "") {
+            val f = com.maze3d.core.SandField(maze, terrain == "MUD", 22)
+            val path = maze.solution
+            val surf = maze.mesh.surface
+            for (k in 0 until minOf(path.size - 1, 70)) {
+                val a = maze.centers[path[k]]; val bb = maze.centers[path[k + 1]]
+                val dir = (bb - a).normalized()
+                for (j in 0 until 12) {
+                    val pt = surf.project(com.maze3d.core.Vec3.lerp(a, bb, j / 12f))
+                    val cell = if (j < 7) path[k] else path[k + 1]
+                    f.stamp(cell, pt, dir, maze.marbleRadius * 1.1f, 1f)
+                }
+                if (k % 6 == 0) f.update(0.05f)
+            }
+            repeat(40) { f.update(0.05f) }
+            val data = FloatArray(f.atlasW * f.atlasH)
+            for (c in 0 until maze.cellCount) {
+                val (ox, oy) = f.tileOrigin(c)
+                for (j in 0 until f.tile) for (i in 0 until f.tile) data[(oy + j) * f.atlasW + ox + i] = f.h[f.idx(c, i, j)]
+            }
+            sandJson = "{\"t\":${f.t},\"tile\":${f.tile},\"perRow\":${f.perRow},\"w\":${f.atlasW},\"h\":${f.atlasH},\"data\":${arr(data)}}"
+        }
         val sb = StringBuilder("{")
         run {
             val n0 = maze.mesh.surface.normal(marble.position)
@@ -90,8 +113,9 @@ class DumpSceneTest {
             val mm = MediumMesh(maze, mk, b.wallHeight)
             sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}},")
         }
+        if (sandJson != null) sb.append("\"sand\":$sandJson,")
         sb.append("\"outer\":${kind.outerRadius},")
-        sb.append("\"floor\":${mesh(b.floor())},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
+        sb.append("\"floor\":${mesh(b.floor(sandJson != null))},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")
         fun v(c: com.maze3d.core.Vec3) = arr(floatArrayOf(c.x, c.y, c.z))
         sb.append("\"pal\":{\"floor\":${v(pal.floor)},\"floor2\":${v(pal.floor2)},\"wallMetal\":${pal.wallMetal},\"backdrop\":${pal.backdrop},\"floorMat\":${pal.floorMat},\"floorRough\":${pal.floorRough},\"wall\":${v(pal.wall)},\"wallMat\":${pal.wallMat},\"wallRough\":${pal.wallRough},\"bgTop\":${v(pal.bgTop)},\"bgBottom\":${v(pal.bgBottom)},\"accent\":${v(pal.accent)}},")

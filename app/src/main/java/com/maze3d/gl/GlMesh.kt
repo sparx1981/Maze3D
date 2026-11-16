@@ -64,6 +64,8 @@ class GlMesh(private val attribs: IntArray) {
 
     companion object {
         val SCENE = intArrayOf(3, 3, 3, 3, 1)
+        /** Scene vertices plus a per-vertex sand-tile coordinate (u, v, cell). */
+        val SCENE_TILE = intArrayOf(3, 3, 3, 3, 1, 3)
 
         fun unitSphere(): GlMesh {
             val rings = 28; val segs = 48

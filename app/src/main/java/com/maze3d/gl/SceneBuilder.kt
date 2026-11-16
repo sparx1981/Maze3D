@@ -16,8 +16,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     val wallHeight = maze.marbleRadius * 1.6f
     val wallHalfThickness = maze.wallHalfThickness
 
-    fun floor(): MeshBuilder {
-        val mb = MeshBuilder()
+    fun floor(tiles: Boolean = false): MeshBuilder {
+        val mb = MeshBuilder(if (tiles) MeshBuilder.STRIDE + 3 else MeshBuilder.STRIDE)
         val sub = 4
         for (c in 0 until maze.cellCount) {
             val p = Array(4) { maze.mesh.vertices[maze.mesh.cellVertex(c, it)] }
@@ -32,7 +32,9 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 for (e in wallEdges) d = min(d, distToSegment(pt, maze.mesh.vertices[maze.edgeA[e]], maze.mesh.vertices[maze.edgeB[e]]))
                 d = max(0f, d - wallHalfThickness)
                 val ao = 1f - 0.7f * exp(-d / (cs * 0.2f))
-                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)))
+                var tile: Vec3? = null
+                if (tiles) { val dd = pt - maze.centers[c]; tile = Vec3((dd dot maze.axisU[c]) + 0.5f, (dd dot maze.axisV[c]) + 0.5f, c.toFloat()) }
+                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)), Vec3.ZERO, -1f, tile)
             }
             for (a in 0 until sub) for (b in 0 until sub) {
                 mb.quad(base[a * (sub + 1) + b], base[(a + 1) * (sub + 1) + b], base[(a + 1) * (sub + 1) + b + 1], base[a * (sub + 1) + b + 1])

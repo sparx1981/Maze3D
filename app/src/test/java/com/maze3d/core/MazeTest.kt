@@ -206,4 +206,20 @@ class MazeTest {
             if (kind != Medium.FOG) assertTrue("$kind keeps the start clear", f.levelAt(maze.start) < 0.5f)
         }
     }
+
+    @Test
+    fun ballPloughsAGrooveWithBanks() {
+        val maze = Maze(ShapeKind.SPHERE.createMesh(), 4)
+        val f = SandField(maze, false, 14)
+        val c = maze.start
+        val n = maze.mesh.surface.normal(maze.centers[c])
+        val dir = (maze.centers[maze.links[c][0]] - maze.centers[c]).let { (it - n * (it dot n)).normalized() }
+        for (k in -8..8) f.stamp(c, maze.mesh.surface.project(maze.centers[c] + dir * (k * maze.cellSize * 0.05f)), dir, maze.marbleRadius * 1.1f, 1f)
+        val lo = (0 until f.tile * f.tile).minOf { f.h[c * f.tile * f.tile + it] }
+        val hi = (0 until f.tile * f.tile).maxOf { f.h[c * f.tile * f.tile + it] }
+        assertTrue("groove dug ($lo)", lo < -0.02f)
+        assertTrue("banks raised ($hi)", hi > 0.004f)
+        repeat(200) { f.update(0.05f) }
+        assertTrue("slumped bank still finite", (0 until f.tile * f.tile).all { f.h[c * f.tile * f.tile + it].isFinite() })
+    }
 }

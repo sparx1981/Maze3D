@@ -88,6 +88,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val dust = Sparks()
     private var trailAt = 0f
     private var puddleProg = 0
+    private var sandField: com.maze3d.core.SandField? = null
+    private var sandTex = 0
+    private var sandStampAt: Vec3? = null
+    private var sandBuf: java.nio.FloatBuffer? = null
     private var pctCell = -1
     private var pct = 0
     private var mediumProg = 0
@@ -257,7 +261,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
         sphere = GlMesh.unitSphere()
-        floorMesh = GlMesh(GlMesh.SCENE)
+        floorMesh = GlMesh(GlMesh.SCENE_TILE)
         wallMesh = GlMesh(GlMesh.SCENE)
         propMesh = GlMesh(GlMesh.SCENE)
         markerMesh = GlMesh(GlMesh.SCENE)
@@ -402,7 +406,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         trail.clear()
         val b = SceneBuilder(m, pal)
         builder = b
-        floorMesh!!.let { val mb = b.floor(); it.upload(mb.vertices(), mb.indices()) }
+        floorMesh!!.let { val mb = b.floor(true); it.upload(mb.vertices(), mb.indices()) }
+        setupSand(m)
         wallMesh!!.let { val mb = b.walls(); it.upload(mb.vertices(), mb.indices()) }
         b.planProps(kind.outerRadius)
         propMesh!!.let { val mb = b.props(); if (mb.vertexCount > 0) it.upload(mb.vertices(), mb.indices()) else it.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0)) }
@@ -612,6 +617,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
                     if (terrain != Terrain.NONE) layTrail(mb, m, dt)
+                    sandField?.let { stampSand(it, mb, m) }
                     if (mb.lastImpact > 0.3f && time - lastSparkAt > 0.05f) {
                         lastSparkAt = time
                         audio.impact(min(mb.lastImpact / 3f, 1f), panOf(mb.impactPos))
@@ -766,7 +772,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val last = trail.last
         val spd = mb.velocity.length() / (m.cellSize * 4f)
         // stamp densely along the path so the groove is continuous; fast rolling digs a slightly wider track
-        if (last == null || (under - last).length() > size * (if (q == 0) 0.4f else if (q == 1) 0.24f else 0.14f)) trail.add(under, n, size * (1f + 0.25f * spd.coerceAtMost(1f)), time)
+        if (sandField == null && (last == null || (under - last).length() > size * (if (q == 0) 0.4f else if (q == 1) 0.24f else 0.14f))) trail.add(under, n, size * (1f + 0.25f * spd.coerceAtMost(1f)), time)
         dirt = (dirt + spd * dt * (if (terrain == Terrain.MUD) 0.35f else 0.18f)).coerceAtMost(1f)
         val vdir = if (mb.velocity.lengthSq() > 1e-8f) mb.velocity.normalized() else Vec3.ZERO
         if (q == 2 && spd > 0.15f && rnd.nextFloat() < 0.5f) {
@@ -795,7 +801,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     val side = (n cross vdir).normalized() * (if (rnd.nextBoolean()) 1f else -1f)
                     val v = (n * 0.7f + side * (0.6f + rnd.nextFloat() * 0.6f) - vdir * 0.3f).normalized() * (0.22f + 0.35f * spd)
                     dust.emit(under, v, 0.45f, Vec3(0.12f, 0.075f, 0.045f), 0.016f + 0.01f * rnd.nextFloat())
-                    if (rnd.nextFloat() < 0.35f * spd) {
+                    if (sandField == null && rnd.nextFloat() < 0.35f * spd) {
                         val land = mb.surface.project(under + side * (mb.radius * (1.6f + 2.2f * rnd.nextFloat())) - vdir * (mb.radius * 1.0f * rnd.nextFloat()))
                         trail.add(land, mb.surface.normal(land), mb.radius * (0.22f + 0.35f * rnd.nextFloat()), time)
                     }
@@ -956,6 +962,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
+        run {
+            val sf = sandField
+            GLES30.glUniform1f(loc(sceneProg, "uSandOn"), if (sf != null) 1f else 0f)
+            if (sf != null) {
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE5)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sandTex)
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+                GLES30.glUniform1i(loc(sceneProg, "uSandTex"), 5)
+                GLES30.glUniform4f(loc(sceneProg, "uSandP"), sf.t.toFloat(), sf.tile.toFloat(), sf.perRow.toFloat(), 0f)
+                GLES30.glUniform2f(loc(sceneProg, "uSandAtlas"), sf.atlasW.toFloat(), sf.atlasH.toFloat())
+            } else GLES30.glUniform1i(loc(sceneProg, "uSandTex"), 5)
+        }
         val mbL = marble
         if (mbL != null && phase != Phase.MENU) {
             val wp = orient.rotate(mbL.position)
@@ -1211,6 +1229,53 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         pal.themeId in 0..10 -> pal.themeId + 1
         terrain == Terrain.SAND || medium == Medium.WATER -> 12
         else -> 0
+    }
+
+    /** Creates (or drops) the sand / mud height field for the new level; Basic simulation keeps the cheap decal tracks. */
+    private fun setupSand(m: Maze) {
+        sandField = null
+        sandStampAt = null
+        if (terrain == Terrain.NONE || simQuality < 1) return
+        val f = com.maze3d.core.SandField(m, terrain == Terrain.MUD, if (simQuality >= 2) 22 else 14)
+        sandField = f
+        if (sandTex == 0) { val id = IntArray(1); GLES30.glGenTextures(1, id, 0); sandTex = id[0] }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sandTex)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R16F, f.atlasW, f.atlasH, 0, GLES30.GL_RED, GLES30.GL_FLOAT, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        // start flat: a zero-filled atlas
+        val zero = java.nio.ByteBuffer.allocateDirect(f.atlasW * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+        for (row in 0 until f.atlasH) { zero.position(0); GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, row, f.atlasW, 1, GLES30.GL_RED, GLES30.GL_FLOAT, zero) }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        sandBuf = java.nio.ByteBuffer.allocateDirect(f.tile * f.tile * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+    }
+
+    /** The ball digs the surface as it rolls; slumping and texture upload follow. */
+    private fun stampSand(f: com.maze3d.core.SandField, mb: Marble, m: Maze) {
+        val n = mb.surface.normal(mb.position)
+        val under = mb.position - n * mb.radius
+        val spd = mb.velocity.length() / (m.cellSize * 4f)
+        val last = sandStampAt
+        if (spd > 0.02f && (last == null || (under - last).length() > mb.radius * 0.3f)) {
+            sandStampAt = under
+            val dir = mb.velocity.normalized()
+            f.stamp(mb.cell, under, dir, mb.radius * 1.1f, 0.75f + 0.5f * spd.coerceAtMost(1f))
+        }
+        f.update(1f / 60f)
+        val buf = sandBuf ?: return
+        if (f.dirty.isEmpty()) return
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sandTex)
+        var n2 = 0
+        val it = f.dirty.iterator()
+        while (it.hasNext() && n2 < 48) {
+            val c = it.next(); it.remove(); n2++
+            val (ox, oy) = f.tileOrigin(c)
+            buf.clear(); buf.put(f.h, c * f.tile * f.tile, f.tile * f.tile); buf.position(0)
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, ox, oy, f.tile, f.tile, GLES30.GL_RED, GLES30.GL_FLOAT, buf)
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
     }
 
     /** Advances the flood / gas / fog and applies its effect on the ball. */
