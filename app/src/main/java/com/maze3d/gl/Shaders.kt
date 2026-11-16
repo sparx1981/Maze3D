@@ -906,7 +906,7 @@ void main() {
         float d = length(vLocal - uMarbleP) * uScale;
         float ring = 0.0;
         float crest = 0.0;
-        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.05 * (0.4 + lv));
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.022 * (0.4 + lv));
         if (uWaveOn > 0.5) {
             // simulated surface: gradient of the wave height field, in cell units, mapped to the world
             float cellId = vTile.z; vec2 uv = vTile.xy;
@@ -920,7 +920,10 @@ void main() {
             if (abs(det) > 1e-12) {
                 vec3 Tu = normalize((dpx * uy.y - dpy * ux.y) / det);
                 vec3 Tv = normalize((dpy * ux.x - dpx * uy.x) / det);
-                N = normalize(N - (Tu * hu + Tv * hv) * 9.0);
+                vec3 wg = (Tu * hu + Tv * hv) * 2.2;
+                float wl = length(wg);
+                if (wl > 0.35) wg *= 0.35 / wl;
+                N = normalize(N - wg);
             }
         }
         float NoV = max(dot(N, V), 1e-3);

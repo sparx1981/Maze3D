@@ -62,8 +62,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var pendingPlain = false
     @Volatile var followOn = false
     /** User settings (menu): 0.4 .. 2.5, 1 = default. */
-    @Volatile var touchSens = 1f
-    @Volatile var gyroSens = 1f
+    @Volatile var touchSens = 0.5f
+    @Volatile var gyroSens = 0.5f
     /** 0 = orbit (turn the piece by hand), 1 = orbit that follows the marble, 2 = third-person chase camera. */
     @Volatile var cameraMode = 2
         private set
@@ -382,6 +382,18 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Chase-mode steering: [ix] right, [iy] forward, each -1..1, relative to where the camera is looking. */
+    @Volatile private var padX = 0f
+    @Volatile private var padY = 0f
+    @Volatile private var padOn = false
+
+    /** Game-pad stick: steers in chase view, turns the piece like a drag in the other views. */
+    fun padInput(x: Float, y: Float, on: Boolean) {
+        padX = x; padY = y; padOn = on
+        if (cameraMode == 2) { chaseIx = x; chaseIy = -y; joyActive = on }
+    }
+
+    fun nudgeZoom(d: Float) { zoom = (zoom - d).coerceIn(0.55f, 1.6f); updateCamera() }
+
     fun setChaseInput(ix: Float, iy: Float, active: Boolean) { chaseIx = ix; chaseIy = iy; joyActive = active }
 
     /** Two-finger twist in chase mode swings the camera round the marble. */
@@ -557,6 +569,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         lastNanos = now
         time += dt
         adaptResolution(raw.coerceIn(0.001f, 0.2f))
+        if (padOn && cameraMode != 2 && phase == Phase.PLAY && !paused) drag(padX * dt * 700f, padY * dt * 700f, dt)
         update(dt)
         computeCamera(dt)
         draw()
@@ -1357,12 +1370,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private fun stepWaves(wf: com.maze3d.core.WaveField, f: com.maze3d.core.MediumField, mb: Marble, m: Maze, dt: Float) {
         val rn = rain
         if (rn != null && rn.intensity > 0.05f) {
-            waveDropAcc += dt * 70f * rn.intensity
+            waveDropAcc += dt * 26f * rn.intensity
             var guard = 0
             while (waveDropAcc >= 1f && guard++ < 10) {
                 waveDropAcc -= 1f
-                val c = rnd.nextInt(m.cellCount)
-                if (f.levelAt(c) < 0.15f) continue
+                var c = rnd.nextInt(m.cellCount)
+                var tries = 0
+                while (tries++ < 8 && (m.centers[c] - mb.position).length() > m.cellSize * 9f) c = rnd.nextInt(m.cellCount)
+                if ((m.centers[c] - mb.position).length() > m.cellSize * 9f || f.levelAt(c) < 0.15f) continue
                 val p = m.mesh.surface.project(m.centers[c] + (m.mesh.vertices[m.mesh.cellVertex(c, 1)] - m.mesh.vertices[m.mesh.cellVertex(c, 0)]) * (rnd.nextFloat() - 0.5f) * 0.7f + (m.mesh.vertices[m.mesh.cellVertex(c, 3)] - m.mesh.vertices[m.mesh.cellVertex(c, 0)]) * (rnd.nextFloat() - 0.5f) * 0.7f)
                 wf.disturb(c, p, m.cellSize * 0.07f, -0.010f * (0.5f + rnd.nextFloat()))
             }
@@ -1373,10 +1388,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val under = mb.position - n * mb.radius
             val spd = (mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1.5f)
             // a ball displaces water: a dent where it is, a bow wave pushed ahead of it
-            wf.disturb(mb.cell, under, mb.radius * 1.2f, -0.018f * (0.3f + spd) * lv * dt * 60f)
+            wf.disturb(mb.cell, under, mb.radius * 1.2f, -0.006f * (0.3f + spd) * lv * dt * 60f)
             if (spd > 0.08f) {
                 val ahead = mb.surface.project(under + mb.velocity.normalized() * (mb.radius * 1.5f))
-                wf.disturb(mb.cell, ahead, mb.radius * 0.9f, 0.012f * spd * lv * dt * 60f)
+                wf.disturb(mb.cell, ahead, mb.radius * 0.9f, 0.004f * spd * lv * dt * 60f)
             }
         }
         wf.update(dt)
@@ -1385,7 +1400,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, waveTex)
         var cnt = 0
         val it = wf.dirty.iterator()
-        while (it.hasNext() && cnt < 64) {
+        while (it.hasNext() && cnt < 40) {
             val c = it.next(); it.remove(); cnt++
             val (ox, oy) = wf.tileOrigin(c)
             buf.clear(); buf.put(wf.h, c * wf.tile * wf.tile, wf.tile * wf.tile); buf.position(0)

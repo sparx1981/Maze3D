@@ -40,8 +40,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var loading: LoadingView? = null
     private lateinit var joystick: JoystickView
     private var cameraMode = 2
-    private var touchSens = 1f
-    private var gyroSens = 1f
+    private var touchSens = 0.5f
+    private var gyroSens = 0.5f
+    private var hapticsOn = true
     private var qualityLevel = 2
     private var profile = com.maze3d.gl.QualityProfile.HIGH
     private lateinit var customPanel: LinearLayout
@@ -90,8 +91,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         renderer = MazeRenderer(this)
         val ui = getSharedPreferences("maze3d_ui", MODE_PRIVATE)
         cameraMode = ui.getInt("camera2", 2).let { if (it == 0) 2 else it }                     // chase is the default view
-        touchSens = ui.getFloat("touchSens", 1f)
-        gyroSens = ui.getFloat("gyroSens", 1f)
+        touchSens = ui.getFloat("touchSens2", 0.5f)
+        gyroSens = ui.getFloat("gyroSens2", 0.5f)
+        hapticsOn = ui.getBoolean("haptics", true)
         qualityLevel = ui.getInt("quality", 2)
         simLevel = ui.getInt("sim", 1)
         renderer.simQuality = simLevel
@@ -354,9 +356,18 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private var smoothed: Vec3? = null
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        baseline = null; smoothed = null            // "level" is measured again in the new orientation
+    }
+
     override fun onSensorChanged(ev: SensorEvent) {
         // Device axes equal screen axes (portrait locked). Gravity "down" is minus the sensor vector.
-        val raw = Vec3(-ev.values[0], -ev.values[1], -ev.values[2]).normalized()
+        // Sensor axes belong to the device's natural orientation; rotate them to the screen when it is in landscape.
+        val vx = ev.values[0]; val vy = ev.values[1]
+        @Suppress("DEPRECATION") val rot = windowManager.defaultDisplay.rotation
+        val (sx, sy) = when (rot) { android.view.Surface.ROTATION_90 -> -vy to vx; android.view.Surface.ROTATION_180 -> -vx to -vy; android.view.Surface.ROTATION_270 -> vy to -vx; else -> vx to vy }
+        val raw = Vec3(-sx, -sy, -ev.values[2]).normalized()
         val down = smoothed?.let { Vec3.lerp(it, raw, 0.3f).normalized() } ?: raw
         smoothed = down
         // Whatever angle the phone is held at when Tilt is enabled counts as "level".
@@ -372,6 +383,51 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
+    // ---- game pads (USB-C or Bluetooth) ---------------------------------------------------------
+    private var padActive = false
+
+    private fun axis(ev: MotionEvent, a: Int): Float {
+        val v = ev.getAxisValue(a)
+        return if (kotlin.math.abs(v) < 0.14f) 0f else v
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        if (ev.source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK && ev.action == MotionEvent.ACTION_MOVE) {
+            var x = axis(ev, MotionEvent.AXIS_X); var y = axis(ev, MotionEvent.AXIS_Y)
+            if (x == 0f && y == 0f) { x = axis(ev, MotionEvent.AXIS_HAT_X); y = axis(ev, MotionEvent.AXIS_HAT_Y) }
+            val menuUp = menuLayer.visibility == View.VISIBLE
+            if (!menuUp) {
+                val on = x != 0f || y != 0f
+                if (on || padActive) {
+                    padActive = on
+                    glView.queueEvent { renderer.padInput(x, y, on) }
+                }
+                return true
+            }
+        }
+        return super.dispatchGenericMotionEvent(ev)
+    }
+
+    override fun dispatchKeyEvent(ev: android.view.KeyEvent): Boolean {
+        val pad = ev.source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD
+        if (pad && menuLayer.visibility != View.VISIBLE) {
+            if (ev.action == android.view.KeyEvent.ACTION_DOWN && ev.repeatCount == 0) {
+                when (ev.keyCode) {
+                    android.view.KeyEvent.KEYCODE_BUTTON_A -> { glView.queueEvent { renderer.requestHint() }; return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_B -> { glView.queueEvent { renderer.resetMarble() }; return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_X -> { camPill?.performClick(); return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_Y, android.view.KeyEvent.KEYCODE_BUTTON_START -> { showMenu(); return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_L1 -> { glView.queueEvent { renderer.nudgeZoom(-0.1f) }; return true }
+                    android.view.KeyEvent.KEYCODE_BUTTON_R1 -> { glView.queueEvent { renderer.nudgeZoom(0.1f) }; return true }
+                }
+            }
+        }
+        if (pad && menuLayer.visibility == View.VISIBLE && ev.action == android.view.KeyEvent.ACTION_DOWN && ev.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B) {
+            onBackPressed(); return true
+        }
+        return super.dispatchKeyEvent(ev)
+    }
+
     // ---- menu ----------------------------------------------------------------------------------
     private fun bigButton(text: String, primary: Boolean = false, onClick: () -> Unit): TextView = TextView(this).apply {
         this.text = text.uppercase()
@@ -382,6 +438,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         gravity = Gravity.CENTER
         setPadding(dp(20f), dp(15f), dp(20f), dp(15f))
         background = glass(primary)
+        isFocusable = true
+        setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.05f else 1f; v.scaleY = if (f) 1.05f else 1f; v.alpha = if (f) 1f else 0.92f }
         setOnClickListener { engine.uiClick(); onClick() }
     }
 
@@ -474,6 +532,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 gravity = Gravity.CENTER
                 setPadding(dp(4f), dp(12f), dp(4f), dp(12f))
                 background = glass(get() == i)
+                isFocusable = true
+                setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
                 setOnClickListener { set(i); refresh(); engine.uiClick(); if (usePreview) previewSelection() }
             }
             chips.add(c)
@@ -564,13 +624,20 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuSettings.addView(header("settings"))
         val sp = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sp.addView(sectionLabel("Gyro sensitivity"))
-        sp.addView(sensitivitySlider({ gyroSens }) { gyroSens = it; renderer.gyroSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("gyroSens", it).apply() })
+        sp.addView(sensitivitySlider({ gyroSens }) { gyroSens = it; renderer.gyroSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("gyroSens2", it).apply() })
         sp.addView(sectionLabel("Touch sensitivity"))
-        sp.addView(sensitivitySlider({ touchSens }) { touchSens = it; renderer.touchSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("touchSens", it).apply() })
+        sp.addView(sensitivitySlider({ touchSens }) { touchSens = it; renderer.touchSens = it; getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putFloat("touchSens2", it).apply() })
         sp.addView(sectionLabel("Music"))
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.musicOn) 0 else 1 }) { engine.setMusic(it == 0) })
         sp.addView(sectionLabel("Sound effects"))
         sp.addView(settingsChips(listOf("On", "Off"), { if (engine.sfxOn) 0 else 1 }) { engine.setSfx(it == 0) })
+        sp.addView(sectionLabel("Impact sounds"))
+        sp.addView(settingsChips(listOf("On", "Off"), { if (engine.impactOn) 0 else 1 }) { engine.setImpact(it == 0) })
+        sp.addView(sectionLabel("Haptic feedback on impacts"))
+        sp.addView(settingsChips(listOf("On", "Off"), { if (hapticsOn) 0 else 1 }) {
+            hapticsOn = it == 0
+            getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putBoolean("haptics", hapticsOn).apply()
+        })
         sp.addView(sectionLabel("Quality"))
         sp.addView(settingsChips(listOf("Low", "Medium", "High", "Custom"), { presetIndex() }) { i ->
             if (i < 3) applyProfile(com.maze3d.gl.QualityProfile.PRESETS[i])
@@ -592,10 +659,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         holder.addView(menuMain, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuLevels, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuDiff, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-        val settingsScroll = android.widget.ScrollView(this).apply { isVerticalScrollBarEnabled = false; isFillViewport = true; addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL)) }
-        holder.addView(settingsScroll, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER_HORIZONTAL))
-        settingsHolder = settingsScroll
-        menuLayer.addView(holder, FrameLayout.LayoutParams(-1, -1))
+        holder.addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        val menuScroll = android.widget.ScrollView(this).apply { isVerticalScrollBarEnabled = false; isFillViewport = true; addView(holder, FrameLayout.LayoutParams(-1, -2)) }
+        menuLayer.addView(menuScroll, FrameLayout.LayoutParams(-1, -1))
         return menuLayer
     }
 
@@ -605,6 +671,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuSettings.visibility = View.GONE
         menuDiff.visibility = View.GONE
         menuMain.visibility = View.VISIBLE
+        menuMain.post { for (k in 0 until menuMain.childCount) { val v = menuMain.getChildAt(k); if (v.isFocusable && v.visibility == View.VISIBLE) { v.requestFocus(); break } } }
     }
 
     private fun showSettings() {
@@ -727,6 +794,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     override fun onImpact(strength: Float) {
+        if (!hapticsOn) return
         runOnUiThread { glView.performHapticFeedback(if (strength > 0.5f) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK) }
     }
 

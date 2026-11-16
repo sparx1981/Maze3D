@@ -19,6 +19,7 @@ class SoundEngine(private val ctx: Context) : Audio {
 
     private val prefs = ctx.getSharedPreferences("maze3d_audio", Context.MODE_PRIVATE)
     @Volatile var sfxOn = prefs.getBoolean("sfx", true)
+    @Volatile var impactOn = prefs.getBoolean("impact", true)
         private set
     @Volatile var musicOn = prefs.getBoolean("music", true)
         private set
@@ -84,6 +85,7 @@ class SoundEngine(private val ctx: Context) : Audio {
 
     // ---- events --------------------------------------------------------------------------
     override fun impact(strength: Float, pan: Float) {
+        if (!impactOn) return
         val now = System.nanoTime()
         if (now - lastImpactAt < 45_000_000L) return
         lastImpactAt = now
@@ -161,6 +163,8 @@ class SoundEngine(private val ctx: Context) : Audio {
         prefs.edit().putBoolean("sfx", on).apply()
         if (!on) { silenceRolls(); pool.autoPause() } else if (!paused) pool.autoResume()
     }
+
+    fun setImpact(on: Boolean) { impactOn = on; prefs.edit().putBoolean("impact", on).apply() }
 
     fun setMusic(on: Boolean) {
         musicOn = on

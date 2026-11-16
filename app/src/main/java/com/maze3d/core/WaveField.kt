@@ -31,6 +31,31 @@ class WaveField(private val maze: Maze, val t: Int = 12) {
     private val eV = Array(maze.cellCount) { c -> val vs = maze.mesh.vertices; val m = maze.mesh
         ((vs[m.cellVertex(c, 3)] - vs[m.cellVertex(c, 0)]) + (vs[m.cellVertex(c, 2)] - vs[m.cellVertex(c, 1)])) * 0.5f }
     private var acc = 0f
+    /** For each cell and gutter texel: where to copy from (neighbour texel through an open passage, own edge texel at a wall). */
+    private val gutDst = IntArray(4 * tile)
+    private val gutSrc = IntArray(maze.cellCount * 4 * tile)
+    private val gutCount: Int
+
+    init {
+        var n = 0
+        for (j in 0..t + 1) for (i in 0..t + 1) { if (i in 1..t && j in 1..t) continue; gutDst[n++] = j * tile + i }
+        gutCount = n
+        for (c in 0 until maze.cellCount) {
+            var q = 0
+            for (j in 0..t + 1) for (i in 0..t + 1) {
+                if (i in 1..t && j in 1..t) continue
+                val k = when { i == 0 -> 3; i == t + 1 -> 1; j == 0 -> 0; else -> 2 }
+                val o = nb[c * 4 + k]
+                val ownIdx = idx(c, i.coerceIn(1, t), j.coerceIn(1, t))
+                gutSrc[c * 4 * tile + q] = if (o < 0 || !maze.open[maze.cellEdges[c * 4 + k]]) ownIdx else {
+                    val p = maze.centers[c] + eU[c] * (texU(i) - 0.5f) + eV[c] * (texU(j) - 0.5f)
+                    val (lu, lv) = local(o, p)
+                    idx(o, (lu * t + 0.5f).toInt().coerceIn(1, t), (lv * t + 0.5f).toInt().coerceIn(1, t))
+                }
+                q++
+            }
+        }
+    }
 
     fun idx(c: Int, i: Int, j: Int) = c * tex + j * tile + i
     private fun texU(i: Int) = (i - 0.5f) / t
@@ -53,7 +78,7 @@ class WaveField(private val maze: Maze, val t: Int = 12) {
         wake(cell)
     }
 
-    private fun wake(c: Int) { active[c] = 3.5f; dirty.add(c) }
+    private fun wake(c: Int) { active[c] = 2.2f; dirty.add(c) }
 
     fun update(dt: Float) {
         if (active.isEmpty()) return
@@ -89,24 +114,16 @@ class WaveField(private val maze: Maze, val t: Int = 12) {
         }
     }
 
-    /** Fills the gutter ring of [c]: neighbour's edge texels through an open passage, a mirrored edge texel at a wall. */
+    /** Fills the gutter ring of [c] from the precomputed sources. */
     private fun syncOne(c: Int) {
-        for (j in 0..t + 1) for (i in 0..t + 1) {
-            if (i in 1..t && j in 1..t) continue
-            val k = when { i == 0 -> 3; i == t + 1 -> 1; j == 0 -> 0; else -> 2 }
-            val o = nb[c * 4 + k]
-            val here = idx(c, i.coerceIn(1, t), j.coerceIn(1, t))
-            if (o < 0 || !maze.open[maze.cellEdges[c * 4 + k]]) { h[idx(c, i, j)] = h[here]; continue }
-            val p = maze.centers[c] + eU[c] * (texU(i) - 0.5f) + eV[c] * (texU(j) - 0.5f)
-            val (lu, lv) = local(o, p)
-            val ni = (lu * t + 0.5f).toInt().coerceIn(1, t); val nj = (lv * t + 0.5f).toInt().coerceIn(1, t)
-            h[idx(c, i, j)] = h[idx(o, ni, nj)]
-        }
+        val base = c * tex
+        val sb = c * 4 * tile
+        for (q in 0 until gutCount) h[base + gutDst[q]] = h[gutSrc[sb + q]]
     }
 
     fun tileOrigin(c: Int) = (c % perRow) * tile to (c / perRow) * tile
     fun clear() { java.util.Arrays.fill(h, 0f); java.util.Arrays.fill(v, 0f); active.clear(); dirty.clear() }
     fun energy() = h.sumOf { abs(it).toDouble() }.toFloat()
 
-    companion object { const val STEP = 1f / 120f; const val C = 1.8f; const val DAMP = 0.9965f }
+    companion object { const val STEP = 1f / 120f; const val C = 1.8f; const val DAMP = 0.994f }
 }

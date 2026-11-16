@@ -39,7 +39,7 @@ class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeigh
             var sum = 0f
             val nb = cornerCells[i]
             for (oc in nb) sum += level[oc]
-            val lv = if (nb.isEmpty()) level[c] else 0.6f * level[c] + 0.4f * sum / nb.size
+            val lv = if (nb.isEmpty()) level[c] else (level[c] + sum) / (nb.size + 1)
             val lift = when (kind) {
                 Medium.WATER -> maze.cellSize * 0.015f + lv * wallHeight * 0.55f
                 Medium.GAS -> wallHeight * (0.12f + 0.42f * l)
