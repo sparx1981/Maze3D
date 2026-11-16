@@ -549,6 +549,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         val bf = hz.bridgeCells.indices.map { frameFor(hz.bridgeCells[it], hz.bridgeDir[it], m.cellSize * 0.004f) }
         bridgeFrames = bf.map { it.first }; bridgeLat = bf.map { it.second }
+        bridgeDirT = hz.bridgeCells.indices.map { val c = m.centers[hz.bridgeCells[it]]; val n = m.mesh.surface.normal(c); val d = hz.bridgeDir[it]; (d - n * (d dot n)).normalized() }
         val hf = hz.hammerCells.indices.map { frameFor(hz.hammerCells[it], hz.hammerDir[it], 0f) }
         hammerFrames = hf.map { it.first }
         hammerAxis = hz.hammerCells.indices.map { val c = m.centers[hz.hammerCells[it]]; val n = m.mesh.surface.normal(c); val d = hz.hammerDir[it]; (d - n * (d dot n)).normalized() }
