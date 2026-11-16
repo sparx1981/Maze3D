@@ -888,7 +888,7 @@ float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 7.3) + 0.15
 void main() {
     float lv = vCol.x;
     float layer = vCol.y * 3.0;
-    if (lv < 0.02) discard;
+    if (lv < 0.01) discard;
     vec3 N = normalize(vNrm);
     vec3 V = normalize(uCam - vWorld);
     vec3 t1 = normalize(cross(N, vec3(0.31, 0.93, 0.19)));
@@ -906,7 +906,7 @@ void main() {
         float d = length(vLocal - uMarbleP) * uScale;
         float ring = 0.0;
         float crest = 0.0;
-        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.022 * (0.4 + lv));
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.012 * (0.4 + lv));
         if (uWaveOn > 0.5) {
             // simulated surface: gradient of the wave height field, in cell units, mapped to the world
             float cellId = vTile.z; vec2 uv = vTile.xy;
@@ -926,14 +926,17 @@ void main() {
                 N = normalize(N - wg);
             }
         }
+        N = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.3));          // water lies flat: soften the slope of the floor beneath it
         float NoV = max(dot(N, V), 1e-3);
         float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-        vec3 deep = mix(vec3(0.06, 0.34, 0.38), vec3(0.008, 0.07, 0.13), smoothstep(0.1, 0.8, lv));
-        vec3 col = deep * (0.7 + 0.3 * max(dot(N, uLightDir), 0.0)) + envMap(reflect(-V, N), 0.02) * vec3(0.5, 0.58, 0.7) * (0.12 + 0.88 * F);
-        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 900.0) * vec3(10.0, 9.4, 8.6);
-        float foam = smoothstep(0.30, 0.05, lv) * smoothstep(0.5, 0.8, vnoise(p * 9.0 + t * 0.5)) + smoothstep(0.012, 0.035, abs(crest)) * 0.5;
-        col = mix(col, vec3(0.9, 0.97, 1.0), clamp(foam, 0.0, 0.8));
-        float alpha = smoothstep(0.02, 0.16, lv) * (0.30 + 0.38 * smoothstep(0.1, 0.7, lv) + 0.35 * F) * (0.55 + 0.45 * near);
+        float Fv = 0.10 + 0.90 * F;
+        float shallow = 1.0 - smoothstep(0.1, 0.65, lv);
+        vec3 deep = mix(vec3(0.020, 0.040, 0.058), vec3(0.075, 0.12, 0.15), shallow);
+        vec3 col = deep * (1.0 - Fv) + envMap(reflect(-V, N), 0.012) * vec3(0.50, 0.56, 0.66) * Fv;
+        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 1100.0) * vec3(10.0, 9.4, 8.6);
+        float foam = smoothstep(0.22, 0.04, lv) * 0.25 * smoothstep(0.5, 0.8, vnoise(p * 7.0 + uTime * 0.2)) + smoothstep(0.02, 0.05, abs(crest)) * 0.35;
+        col = mix(col, vec3(0.8, 0.88, 0.95), clamp(foam, 0.0, 0.5));
+        float alpha = smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near);
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
     } else {                                                    // ---- gas and fog
         bool gas = uKind < 2.5;

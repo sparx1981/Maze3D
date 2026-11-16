@@ -443,12 +443,24 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         setOnClickListener { engine.uiClick(); onClick() }
     }
 
+    private var presetBox: LinearLayout? = null
+
+    /** The Low / Medium / High / Custom chips; rebuilt whenever the settings change so the right one is lit. */
+    private fun buildPresetRow() {
+        val box = presetBox ?: return
+        box.removeAllViews()
+        box.addView(settingsChips(listOf("Low", "Medium", "High", "Custom"), { presetIndex() }) { i ->
+            if (i < 3) { applyProfile(com.maze3d.gl.QualityProfile.PRESETS[i]); rebuildCustom() }
+        })
+    }
+
     private fun presetIndex(): Int { val i = com.maze3d.gl.QualityProfile.PRESETS.indexOf(profile); return if (i >= 0) i else 3 }
 
     private fun applyProfile(p: com.maze3d.gl.QualityProfile) {
         profile = p
         getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putString("qprofile", p.encode()).apply()
         glView.queueEvent { renderer.applyProfileSetting(p) }
+        buildPresetRow()
     }
 
     /** The "tweak anything" list under the quality presets; rebuilt whenever the preset changes so the chips match. */
@@ -639,10 +651,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putBoolean("haptics", hapticsOn).apply()
         })
         sp.addView(sectionLabel("Quality"))
-        sp.addView(settingsChips(listOf("Low", "Medium", "High", "Custom"), { presetIndex() }) { i ->
-            if (i < 3) applyProfile(com.maze3d.gl.QualityProfile.PRESETS[i])
-            rebuildCustom()
-        })
+        presetBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sp.addView(presetBox)
+        buildPresetRow()
         customPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sp.addView(customPanel)
         rebuildCustom()

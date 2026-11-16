@@ -1348,7 +1348,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val f = field ?: return
         f.update(dt)
         mediumAcc += dt
-        if (mediumAcc >= 0.1f) {
+        if (mediumAcc >= 0.05f) {
             mediumAcc = 0f
             mediumGeo?.let { g -> mediumMesh?.updateVertices(g.update(f.level)) }
         }
