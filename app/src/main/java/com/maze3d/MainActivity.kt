@@ -515,9 +515,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             add(settingRow(label, segmented(opts, get, { applyProfile(set(it)) })))
         levels("Shadows", listOf("Off", "Low", "High"), { profile.shadows }) { profile.copy(shadows = it) }
         levels("Ball reflections", listOf("Off", "Low", "High"), { profile.reflections }) { profile.copy(reflections = it) }
-        onOff("Distance fog", { profile.fog }) { profile.copy(fog = it) }
         onOff("Motion blur", { profile.motion }) { profile.copy(motion = it) }
-        onOff("Clouds", { profile.clouds }) { profile.copy(clouds = it) }
         onOff("Bloom glow", { profile.bloom }) { profile.copy(bloom = it) }
         onOff("Depth of field", { profile.dof }) { profile.copy(dof = it) }
         onOff("Ambient occlusion", { profile.ssao }) { profile.copy(ssao = it) }

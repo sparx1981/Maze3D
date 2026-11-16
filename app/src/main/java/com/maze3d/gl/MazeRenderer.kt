@@ -152,6 +152,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var holeMesh: GlMesh? = null
     private var bridgePitMesh: GlMesh? = null
     private var bridgeMesh: GlMesh? = null
+    private var bridgeBoardMesh: GlMesh? = null
+    private var bridgeDirT = emptyList<Vec3>()
     private var gantryMesh: GlMesh? = null
     private var hammerMesh: GlMesh? = null
     private var bridgeFrames = emptyList<FloatArray>()
@@ -296,7 +298,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         doorMesh = GlMesh(GlMesh.SCENE)
         holeMesh = GlMesh(GlMesh.SCENE)
         bridgePitMesh = GlMesh(GlMesh.SCENE)
-        bridgeMesh = GlMesh(GlMesh.SCENE); gantryMesh = GlMesh(GlMesh.SCENE); hammerMesh = GlMesh(GlMesh.SCENE)
+        bridgeMesh = GlMesh(GlMesh.SCENE); bridgeBoardMesh = GlMesh(GlMesh.SCENE); gantryMesh = GlMesh(GlMesh.SCENE); hammerMesh = GlMesh(GlMesh.SCENE)
         lidMesh = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1; postOn = false
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
@@ -476,8 +478,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         marble?.setObstacles(b.obstacles.map { Triple(it.cell, it.pos, it.radius) })
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
-        useClouds = rnd.nextFloat() < 0.45f
-        val wantRain = !plain && rnd.nextFloat() < (if (forcedMedium == Medium.WATER) 0.5f else 0.12f)
+        useClouds = false                                   // clouds, rain and distance haze were removed from the game
+        val wantRain = false
         if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
         cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
@@ -558,7 +560,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 mesh!!.upload(mb.vertices(), mb.indices())
             } else mesh!!.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0))
         }
-        upload(bridgeMesh, if (hz.hasBridges) HazardModels.bridge(bridgeHalfWidth) else null)
+        upload(bridgeMesh, if (hz.hasBridges) HazardModels.bridgeFrame(bridgeHalfWidth) else null)
+        upload(bridgeBoardMesh, if (hz.hasBridges) HazardModels.bridgeBoard(bridgeHalfWidth) else null)
         upload(gantryMesh, if (hz.hasHammers) HazardModels.gantry(0.5f) else null)
         upload(hammerMesh, if (hz.hasHammers) HazardModels.hammer() else null)
         hammerCooldown = 0f
@@ -798,10 +801,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                             val ctr = m.centers[mb.cell]
                             val lateral = (mb.position - ctr) dot bridgeLat[bi]
                             val off = hzb.bridgeOffset(bi, time) * cs
-                            if (kotlin.math.abs(lateral - off) > bridgeHalfWidth * cs + mb.radius * 0.2f) {
+                            val along = (((mb.position - ctr) dot bridgeDirT[bi]) / cs + 0.5f).coerceIn(0f, 0.999f)
+                            val k = (along * Hazards.BOARDS).toInt()
+                            fun gone(j: Int) = j in 0 until Hazards.BOARDS && hzb.boardScale(bi, j, time) < 0.35f
+                            val overGap = gone(k) && (gone(k - 1) || gone(k + 1))
+                            if (kotlin.math.abs(lateral - off) > bridgeHalfWidth * cs + mb.radius * 0.2f || overGap) {
                                 fallTimer = 0.55f
                                 audio.fall(panOf(ctr))
-                                host.onToast("Fell off the bridge")
+                                host.onToast("Fell through the bridge")
                                 fallFrom = mb.position
                                 fallTo = ctr - mb.surface.normal(ctr) * (cs * 0.8f)
                             }
@@ -814,9 +821,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                             val n = mb.surface.normal(c)
                             val a = hzb.hammerAngle(i, time)
                             val dir = hammerAxis[i]
-                            val head = c + dir * (HazardModels.HAMMER_LENGTH * kotlin.math.sin(a) * cs) + n * ((HazardModels.HAMMER_PIVOT - HazardModels.HAMMER_LENGTH * kotlin.math.cos(a)) * cs)
+                            val head = c - dir * (HazardModels.HAMMER_LENGTH * kotlin.math.sin(a) * cs) + n * ((HazardModels.HAMMER_PIVOT - HazardModels.HAMMER_LENGTH * kotlin.math.cos(a)) * cs)
                             if ((head - mb.position).length() < HazardModels.HAMMER_HEAD * cs + mb.radius) {
-                                val sign = if (hzb.hammerRate(i, time) >= 0f) 1f else -1f
+                                val sign = if (hzb.hammerRate(i, time) >= 0f) -1f else 1f      // the head moves toward -dir while the angle grows
                                 mb.kick(dir * (sign * cs * 6f) + n * (cs * 0.6f))
                                 hammerCooldown = 0.7f
                                 audio.impact(1f, panOf(head))
@@ -1204,7 +1211,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
-        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) (if (pal.themeId == 7 || pal.themeId == 11) 1.3f * fogK + 0.25f else if (pal.themeId == 12) 0.4f * fogK else 0.55f * fogK) else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uFog"), 0f)
         GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
@@ -1470,6 +1477,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Leaves keep falling around the ball and pile up where they land. */
     private fun fallLeaves(mb: Marble, m: Maze, dt: Float) {
+        // the rolling ball sweeps fallen leaves aside
+        val spd = mb.velocity.length() / (m.cellSize * 4f)
+        if (spd > 0.02f) {
+            val under = mb.position - mb.surface.normal(mb.position) * mb.radius
+            leaves.nudge(under, mb.radius * 2.6f, mb.radius * (0.18f + 0.5f * spd.coerceAtMost(1f)), time, 3.6f) { mb.surface.project(it) }
+        }
         leafAcc += dt * 7f
         while (leafAcc >= 1f) {
             leafAcc -= 1f
@@ -1713,6 +1726,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     private val objM = FloatArray(16)
     private val swingM = FloatArray(16)
+    private val boardM = FloatArray(16)
 
     /** Plank bridges and pendulum hammers: small meshes drawn with their own transform each frame. */
     private fun drawHazardObjects() {
@@ -1729,6 +1743,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             android.opengl.Matrix.multiplyMM(objM, 0, model, 0, f, 0)
             GLES30.glUniformMatrix4fv(uModel, 1, false, objM, 0)
             bridgeMesh?.draw()
+            for (k in 0 until Hazards.BOARDS) {                  // boards shrink away and come back: the gaps are the hazard
+                val sc = hz.boardScale(i, k, time)
+                if (sc < 0.05f) continue
+                System.arraycopy(f, 0, boardM, 0, 16)
+                android.opengl.Matrix.translateM(boardM, 0, -0.5f + (k + 0.5f) / Hazards.BOARDS, 0f, 0f)
+                android.opengl.Matrix.scaleM(boardM, 0, sc, sc, sc)
+                android.opengl.Matrix.multiplyMM(objM, 0, model, 0, boardM, 0)
+                GLES30.glUniformMatrix4fv(uModel, 1, false, objM, 0)
+                bridgeBoardMesh?.draw()
+            }
         }
         for (i in hammerFrames.indices) {
             android.opengl.Matrix.multiplyMM(objM, 0, model, 0, hammerFrames[i], 0)

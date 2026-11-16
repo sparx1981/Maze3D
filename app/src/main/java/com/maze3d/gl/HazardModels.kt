@@ -10,24 +10,22 @@ object HazardModels {
     const val HAMMER_PIVOT = 0.98f
     const val HAMMER_HEAD = 0.17f
 
-    /** A wooden plank bridge of the given half-width. */
-    fun bridge(halfWidth: Float) = PM().apply {
-        val boards = 7
-        val len = 1.0f / boards
-        for (i in 0 until boards) {
-            val x = -0.5f + (i + 0.5f) * len
-            val tint = 0.82f + 0.18f * ((i * 37) % 7) / 7f
-            col = c((150 * tint).toInt(), (104 * tint).toInt(), (62 * tint).toInt())
-            push(); translate(x, 0f, 0.016f); box(len * 0.9f, halfWidth * 2f, 0.03f); pop()
-        }
+    /** The rails of a plank bridge: stringers, ropes and posts. */
+    fun bridgeFrame(halfWidth: Float) = PM().apply {
         col = c(92, 62, 38)
-        for (s in intArrayOf(-1, 1)) {                                                // stringers under the boards, ropes above
+        for (s in intArrayOf(-1, 1)) {
             push(); translate(0f, s * (halfWidth - 0.03f), 0.0f); box(1.04f, 0.04f, 0.03f); pop()
             col = c(210, 190, 150)
             tube(listOf(Vec3(-0.5f, s * halfWidth, 0.15f), Vec3(0f, s * halfWidth, 0.12f), Vec3(0.5f, s * halfWidth, 0.15f)), 0.012f, 6)
             col = c(92, 62, 38)
             for (e in intArrayOf(-1, 1)) { push(); translate(e * 0.5f, s * halfWidth, 0.075f); cylinder(0.02f, 0.09f, 8); pop() }
         }
+    }.build()
+
+    /** One board, centred on the origin (1 / 7 of the bridge long). */
+    fun bridgeBoard(halfWidth: Float) = PM().apply {
+        col = c(150, 104, 62)
+        push(); translate(0f, 0f, 0.016f); box(0.9f / 7f, halfWidth * 2f, 0.03f); pop()
     }.build()
 
     /** The frame the hammer hangs from: two posts against the walls and a beam across. */

@@ -115,7 +115,7 @@ class DumpSceneTest {
                 }
                 var q = 0; while (q < pm.idx.size) { mb.tri(base + pm.idx[q], base + pm.idx[q + 1], base + pm.idx[q + 2]); q += 3 }
             }
-            add(HazardModels.bridge(0.36f), -1.4f, 0f)
+            add(HazardModels.bridgeFrame(0.36f), -1.4f, 0f)
             add(HazardModels.gantry(0.5f), 0f, 0f)
             val hm = HazardModels.hammer()
             // hang the hammer from the gantry pivot

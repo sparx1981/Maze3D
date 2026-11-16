@@ -79,7 +79,8 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         val straight = ArrayList<Int>()
         for (k in 1 until path.size - 1) {
             val a = maze.centers[path[k - 1]]; val c = maze.centers[path[k]]; val b = maze.centers[path[k + 1]]
-            if (((c - a).normalized() dot (b - c).normalized()) > 0.93f && path[k] !in taken && maze.links[path[k]].size == 2) straight.add(k)
+            if (((c - a).normalized() dot (b - c).normalized()) > 0.93f && path[k] !in taken && maze.links[path[k]].size == 2 &&
+                holes.none { (maze.centers[it] - c).length() < maze.cellSize * 3f }) straight.add(k)
         }
         fun pick(count: Int, usedIdx: MutableList<Int>): List<Int> {
             val out = ArrayList<Int>()
@@ -109,6 +110,12 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     fun bridgeAt(cell: Int) = bridgeIndex[cell]
 
     /** Sideways offset of the plank of bridge [i] at time [t], in cell widths. */
+    /** Size (1 = solid, 0 = gone) of plank [k] of bridge [i]: boards shrink away and return in a travelling wave, leaving gaps to time. */
+    fun boardScale(i: Int, k: Int, t: Float): Float {
+        val v = sin(BOARD_W * t + bridgePhase[i] * 2 * PI.toFloat() + k * 0.55f)
+        return 1f - smooth(0.42f, 0.68f, v)
+    }
+
     fun bridgeOffset(i: Int, t: Float) = BRIDGE_AMP * sin(BRIDGE_W * t + bridgePhase[i] * 2 * PI.toFloat())
 
     /** Swing angle of hammer [i] in radians (0 = hanging straight down). */
@@ -136,7 +143,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     companion object {
         const val DOOR_W = 1.15f
         const val HOLE_W = 0.9f
-        const val BRIDGE_W = 1.1f; const val BRIDGE_AMP = 0.07f
+        const val BRIDGE_W = 1.1f; const val BRIDGE_AMP = 0.07f; const val BOARD_W = 1.5f; const val BOARDS = 7
         const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)

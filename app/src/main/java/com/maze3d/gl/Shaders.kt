@@ -677,15 +677,38 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         vec3 emit = glow * (0.15 + 0.5 * pow(1.0 - NoV, 2.0)) * 0.6 + vec3(0.9, 0.8, 1.0) * arc * 3.2 + glow * arc * 2.0;
         return shadeBall(vec3(0.01, 0.005, 0.03), 0.08, 0.0, emit, 1.0, N, V);
     }
-    if (uSkin == 6) {            // bun: toasted dome with sesame seeds
-        float t = fb3(p, 3.0);
-        vec3 c = mix(vec3(0.82, 0.48, 0.16), vec3(0.62, 0.3, 0.08), t);
-        vec2 g = vec2(lon * 6.0, lat * 11.0);
-        vec2 ip = floor(g), fp = fract(g) - 0.5;
-        vec2 off = vec2(hash21(ip) - 0.5, hash21(ip + 9.0) - 0.5) * 0.45;
-        float seed = hash21(ip + 3.0) > 0.45 ? smoothstep(0.30, 0.14, length((fp - off) * vec2(1.0, 1.9))) : 0.0;
-        c = mix(c, vec3(0.97, 0.9, 0.7), seed * smoothstep(0.9, 0.5, abs(lat)));
-        return shadeBall(pow(c, vec3(2.2)), 0.55, 0.0, vec3(0.0), 0.35, N, V);
+    if (uSkin == 6) {            // burger: sesame bun, lettuce, ketchup, melted cheese, grilled patty, tomato and the bottom bun
+        float z = lat;
+        float wav = sin(lon * 7.0) * 0.012 + sin(lon * 17.0) * 0.006;
+        vec3 c; float rr = 0.55; float cc = 0.3;
+        if (z > 0.36) {
+            float t = fb3(p, 3.0);
+            c = mix(vec3(0.84, 0.50, 0.16), vec3(0.60, 0.28, 0.07), t);
+            vec2 g = vec2(lon * 6.0, z * 13.0);
+            vec2 ip = floor(g), fp = fract(g) - 0.5;
+            vec2 off = vec2(hash21(ip) - 0.5, hash21(ip + 9.0) - 0.5) * 0.45;
+            float seed = hash21(ip + 3.0) > 0.4 ? smoothstep(0.30, 0.14, length((fp - off) * vec2(1.0, 1.9))) : 0.0;
+            c = mix(c, vec3(0.97, 0.9, 0.7), seed);
+        } else if (z > 0.27 + wav) {             // lettuce, ruffled
+            c = mix(vec3(0.20, 0.55, 0.10), vec3(0.50, 0.82, 0.22), 0.5 + 0.5 * sin(lon * 16.0 + z * 40.0));
+            rr = 0.4; cc = 0.6;
+        } else if (z > 0.2 + wav) {              // ketchup
+            c = vec3(0.78, 0.05, 0.04); rr = 0.15; cc = 1.0;
+        } else if (z > 0.07 + 0.06 * (0.5 + 0.5 * sin(lon * 5.0 + 1.0))) {   // cheese with drips
+            c = vec3(1.0, 0.76, 0.10); rr = 0.3; cc = 0.8;
+        } else if (z > -0.18) {                  // patty with grill marks
+            float t = fb3(p, 8.0);
+            c = vec3(0.24, 0.11, 0.05) * (0.6 + 0.8 * t);
+            float grill = smoothstep(0.05, 0.0, abs(fract(lon * 4.0 + z * 6.0) - 0.5) - 0.38);
+            c = mix(c, vec3(0.06, 0.03, 0.02), grill * 0.7);
+            rr = 0.75; cc = 0.1;
+        } else if (z > -0.25) {                  // tomato slice
+            c = vec3(0.82, 0.18, 0.10); rr = 0.35; cc = 0.7;
+        } else {                                 // bottom bun
+            float t = fb3(p, 3.0);
+            c = mix(vec3(0.86, 0.58, 0.22), vec3(0.70, 0.40, 0.12), t);
+        }
+        return shadeBall(pow(c, vec3(2.2)), rr, 0.0, vec3(0.0), cc, N, V);
     }
     if (uSkin == 7) {            // science: glowing core inside orbital rings
         float r1 = smoothstep(0.045, 0.0, abs(p.x)), r2 = smoothstep(0.045, 0.0, abs(p.y)), r3 = smoothstep(0.045, 0.0, abs(p.z));
@@ -936,7 +959,7 @@ void main() {
     vec3 a = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 t1 = normalize(cross(a, n));
     vec3 t2 = cross(n, t1);
-    float seed = fract(sin(dot(aPA.xyz, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float seed = fract(sin(aPA.w * 127.1 + aNS.w * 4311.7) * 43758.5453);   // per leaf, so it stays the same leaf while it is pushed around
     float age = uTime - aPA.w;
     float f = clamp(age / 3.4, 0.0, 1.0);                  // 0 = on the branch, 1 = landed
     float air = 1.0 - f;

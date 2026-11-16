@@ -44,6 +44,25 @@ class TrailBuffer(private val max: Int = 7000) {
         dirty = true
     }
 
+    /** Pushes entries that have already landed (older than [landedAge]) away from [from]; [project] puts them back on the surface. */
+    fun nudge(from: Vec3, radius: Float, strength: Float, now: Float, landedAge: Float, project: (Vec3) -> Vec3) {
+        var moved = false
+        val r2 = radius * radius
+        for (i in 0 until count) {
+            val o = i * 8
+            if (now - data[o + 3] < landedAge) continue
+            val dx = data[o] - from.x; val dy = data[o + 1] - from.y; val dz = data[o + 2] - from.z
+            val d2 = dx * dx + dy * dy + dz * dz
+            if (d2 >= r2 || d2 < 1e-12f) continue
+            val d = kotlin.math.sqrt(d2)
+            val k = (radius - d) / radius * strength
+            val p = project(Vec3(data[o] + dx / d * k, data[o + 1] + dy / d * k, data[o + 2] + dz / d * k))
+            data[o] = p.x; data[o + 1] = p.y; data[o + 2] = p.z
+            moved = true
+        }
+        if (moved) dirty = true
+    }
+
     fun draw(prog: Int, passLoc: Int) {
         if (count == 0) return
         GLES30.glBindVertexArray(vao[0])
