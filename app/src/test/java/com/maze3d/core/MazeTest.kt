@@ -248,7 +248,7 @@ class MazeTest {
         assertTrue(p.difficultyUnlocked(Difficulty.EASY) && !p.difficultyUnlocked(Difficulty.MEDIUM))
         val u = p.record("sand", ShapeKind.SPHERE, Difficulty.EASY)
         assertEquals("mud", u.surface); assertEquals("sand", u.ball); assertEquals(Difficulty.MEDIUM, u.difficulty)
-        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(12) && !p.difficultyUnlocked(Difficulty.HARD))
+        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(14) && !p.difficultyUnlocked(Difficulty.HARD))
         p.record("classic", ShapeKind.SPHERE, Difficulty.MEDIUM)
         assertTrue(p.difficultyUnlocked(Difficulty.HARD) && p.shapeUnlocked(ShapeKind.CAPSULE))
         assertEquals(2, Progress(store).completed)                 // survives a restart
