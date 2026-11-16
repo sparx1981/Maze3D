@@ -1,6 +1,6 @@
 <!doctype html><meta charset="utf-8"><body style="margin:0;background:#000">
 <script>
-// Rollabyrinth app icon: a maze-carved sphere with a golden thread and a glass marble (same art as loading sheet A).
+// Marblix app icon: a maze-carved sphere with a golden thread and a glass marble (same art as loading sheet A).
 function rng(seed){let s=seed;return()=> (s=(s*1664525+1013904223)>>>0)/4294967296}
 function proj(la,lo,rot,tilt){const a=la*Math.PI/180,b=(lo+rot)*Math.PI/180;let x=Math.cos(a)*Math.sin(b),y=-Math.sin(a),z=Math.cos(a)*Math.cos(b);
   const ct=Math.cos(tilt),st=Math.sin(tilt);return[x,y*ct-z*st,y*st+z*ct]}

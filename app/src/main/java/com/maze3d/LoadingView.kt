@@ -7,6 +7,8 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
+import android.graphics.RuntimeShader
+import android.os.Build
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.view.View
@@ -20,7 +22,7 @@ import kotlin.math.sin
  * Animated loading screen: a golden thread draws itself around a maze-carved sphere while a marble
  * rolls at its head, then the name fades in. Drawn entirely with Canvas so it shows instantly.
  */
-class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", private val subtitle: String = "3D MARBLE MAZE") : View(context) {
+class LoadingView(context: Context, private val title: String = "MARBLIX", private val subtitle: String = "3D MARBLE BALL MAZE") : View(context) {
 
     /** Animation clock in seconds. Uses the wall clock, so it still plays at full length when the system's animation scale is off. */
     private var t = 0f
@@ -71,6 +73,7 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         t = (System.nanoTime() - startNanos) / 1e9f
         if (running) postInvalidateOnAnimation()
         val w = width.toFloat(); val h = height.toFloat()
+        if (drawShader(c, w, h)) { drawOverlay(c, w, h, w / 2); return }
         // background (reset the paint first: a leftover colour alpha would make the whole screen translucent)
         p.style = Paint.Style.FILL; p.color = Color.WHITE; p.alpha = 255; p.xfermode = null
         p.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(16, 26, 51), Color.rgb(4, 6, 12), Shader.TileMode.CLAMP)
@@ -154,6 +157,41 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
         c.drawArc(cx - R * grow, cy - R * grow, cx + R * grow, cy + R * grow, 190f, 100f, false, p)
         p.style = Paint.Style.FILL
 
+        drawOverlay(c, w, h, cx)
+    }
+
+    private var shader: RuntimeShader? = null
+    private var shaderFailed = false
+    private var lastFrame = 0f
+    private var slowAcc = 0f
+    private var quality = 1f
+
+    /** GPU-shader scene on Android 13+; returns false if it is unavailable so the Canvas animation runs instead. */
+    private fun drawShader(c: Canvas, w: Float, h: Float): Boolean {
+        if (Build.VERSION.SDK_INT < 33 || shaderFailed) return false
+        try {
+            var sh = shader
+            if (sh == null) { sh = RuntimeShader(LoadingShader.SRC); shader = sh }
+            // frame-time governor: if the GPU struggles, drop the refraction pass
+            val dt = t - lastFrame; lastFrame = t
+            if (t > 0.5f && dt > 0.034f) slowAcc += dt else slowAcc = max(0f, slowAcc - dt)
+            if (slowAcc > 0.5f) quality = 0f
+            sh.setFloatUniform("uRes", w, h)
+            sh.setFloatUniform("uTime", t)
+            sh.setFloatUniform("uQ", quality)
+            p.reset(); p.isAntiAlias = false; p.shader = sh
+            c.drawRect(0f, 0f, w, h, p)
+            p.shader = null
+            return true
+        } catch (e: Throwable) {
+            shaderFailed = true
+            return false
+        }
+    }
+
+    /** Wordmark and progress line, drawn over either background. */
+    private fun drawOverlay(c: Canvas, w: Float, h: Float, cx: Float) {
+        val ty = h * (if (shader != null && !shaderFailed) 0.8f else 0.7f)
         // title
         val ta = ease((t - 2.0f) / 0.8f)
         if (ta > 0f) {
@@ -161,12 +199,12 @@ class LoadingView(context: Context, private val title: String = "ROLLABYRINTH", 
             text.letterSpacing = 0.28f
             text.alpha = (ta * 255).toInt()
             text.setShadowLayer(18f, 0f, 0f, Color.argb((ta * 150).toInt(), 120, 200, 255))
-            c.drawText(title, cx + text.textSize * 0.14f, h * 0.7f, text)
+            c.drawText(title, cx + text.textSize * 0.14f, ty, text)
             text.setShadowLayer(0f, 0f, 0f, 0)
             text.textSize = text.textSize * 0.28f
             text.letterSpacing = 0.4f
             text.alpha = (ta * 150).toInt()
-            c.drawText(subtitle, cx + text.textSize * 0.2f, h * 0.7f + text.textSize * 2.8f, text)
+            c.drawText(subtitle, cx + text.textSize * 0.2f, ty + text.textSize * 2.8f, text)
         }
 
         // progress line

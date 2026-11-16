@@ -615,7 +615,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         fun header(sub: String): LinearLayout {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
             box.addView(TextView(this).apply {
-                text = "ROLLABYRINTH"; setTextColor(Color.WHITE); textSize = 30f; letterSpacing = 0.22f
+                text = "MARBLIX"; setTextColor(Color.WHITE); textSize = 30f; letterSpacing = 0.22f
                 typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
                 setShadowLayer(16f, 0f, 3f, Color.argb(180, 0, 0, 0))
             })
@@ -629,7 +629,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         // ---- main screen
         menuMain = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        menuMain.addView(header("3D marble maze"))
+        menuMain.addView(header("3D marble ball maze"))
         resumeBtn = bigButton("Resume", primary = true) { hideMenu(); glView.queueEvent { renderer.paused = false } }
         menuMain.addView(resumeBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Quick start", primary = true) { showDifficulty() },
