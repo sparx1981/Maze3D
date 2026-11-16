@@ -467,7 +467,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
                 placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
-                if (pal.themeId == 7) lamps.add(p + n * (topH + sizeJ * 0.95f))
+                if (pal.themeId == 7 || pal.themeId == 11) lamps.add(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
             }
         }

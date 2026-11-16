@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21; const val PROP = 22; const val HEDGE = 23
+    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24
 }
 
 /** Wall cross-sections. */
@@ -110,7 +110,17 @@ class Palette(
             // 10 Jungle ruins: mossy floor, vine walls
             Palette("Jungle ruins", c(48, 94, 42), Mat.MOSS, 0.55f, c(74, 134, 52), Mat.ENAMEL, 0.55f,
                 c(50, 110, 60), c(6, 26, 12), c(196, 255, 126), c(255, 160, 40),
-                wall2 = c(112, 162, 62), profile = Profile.TUBE, stripes = true, backdrop = Backdrop.SHAFTS, wallMetal = 0f, themeId = 10)
+                wall2 = c(112, 162, 62), profile = Profile.TUBE, stripes = true, backdrop = Backdrop.SHAFTS, wallMetal = 0f, themeId = 10),
+            // 11 Glow: a night forest floor with bioluminescent mushrooms and glowing walls (after the spore demo)
+            Palette("Glow", c(12, 24, 20), Mat.MOSS, 0.6f, c(16, 48, 36), Mat.ENAMEL, 0.3f,
+                c(4, 10, 12), c(1, 3, 4), c(140, 255, 92), c(77, 255, 192),
+                wall2 = c(14, 60, 56), wallTop = c(140, 255, 92), profile = Profile.TUBE, knobs = true,
+                backdrop = Backdrop.STARS, wallMetal = 0f, glow = 1.2f, themeId = 11),
+            // 12 Fall: golden leaf litter, amber hedges, a low warm sun
+            Palette("Fall", c(110, 56, 20), Mat.LEAF, 0.85f, c(150, 64, 16), Mat.HEDGE, 0.9f,
+                c(255, 176, 84), c(96, 44, 30), c(255, 150, 40), c(255, 214, 80),
+                wall2 = c(130, 56, 18), wallTop = c(196, 104, 26), profile = Profile.TUBE,
+                backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 12)
         )
 
         val all = classic + themes

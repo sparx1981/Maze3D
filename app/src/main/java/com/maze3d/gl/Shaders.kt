@@ -132,6 +132,8 @@ uniform float uMarbleR;     // marble radius; 0 disables
 uniform vec3 uMarbleC;
 uniform float uFog;         // distance haze density (chase view)
 uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the lighting
+uniform vec3 uLampCol;
+uniform float uHedgeSnow;   // 1 = snow dusts the hedges
 uniform vec4 uLamp[8];      // local-space lamp positions (xyz) and reach (w)
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
@@ -412,15 +414,26 @@ void main() {
     } else if (uMat == 23) {    // snow-capped hedge: dense leaf clumps with powder on top
         float leaf = vnoise(vec2(dot(P, vec3(190.0, 110.0, 150.0)), dot(P, vec3(-90.0, 170.0, 120.0))));
         float clump = vnoise(vec2(dot(P, vec3(42.0, 24.0, 32.0)), dot(P, vec3(-20.0, 38.0, 28.0))));
-        float snowK = smoothstep(0.72, 0.86, clump * 0.55 + leaf * 0.25 + vCol.g * 0.6);
+        float snowK = uHedgeSnow * smoothstep(0.72, 0.86, clump * 0.55 + leaf * 0.25 + vCol.g * 0.6);
         vec3 foliage = albedo * (0.45 + 1.0 * leaf) * (0.65 + 0.7 * clump);
         vec3 powder = vec3(0.62, 0.68, 0.8) * (0.85 + 0.2 * leaf);
         albedo = mix(foliage, powder, snowK);
         hgt = mix((leaf - 0.5) * 0.0010 + (clump - 0.5) * 0.0016, (clump - 0.5) * 0.0010, snowK);
         rough = mix(0.93, 0.8, snowK);
+    } else if (uMat == 24) {    // forest-floor leaf litter: overlapping gold, orange and rust
+        float la = vnoise(vec2(dot(P, vec3(55.0, 32.0, 44.0)), dot(P, vec3(-30.0, 52.0, 38.0))));
+        float lb = vnoise(vec2(dot(P, vec3(170.0, 100.0, 140.0)), dot(P, vec3(-90.0, 160.0, 110.0))));
+        float lc = vnoise(vec2(dot(P, vec3(420.0, 250.0, 330.0)), dot(P, vec3(-230.0, 400.0, 290.0))));
+        vec3 leafA = vec3(0.62, 0.26, 0.05), leafB = vec3(0.86, 0.55, 0.09), leafC = vec3(0.36, 0.10, 0.04);
+        vec3 lcol = mix(mix(leafA, leafB, smoothstep(0.35, 0.65, la)), leafC, smoothstep(0.55, 0.82, lb));
+        albedo = mix(albedo * 0.4, lcol * (0.5 + 0.45 * lc), 0.9);
+        hgt = (lb - 0.5) * 0.0012 + (lc - 0.5) * 0.0005;
+        rough = 0.82;
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
-        albedo = pow(min(vCol, vec3(1.0)) * 0.8, vec3(2.2));
-        emit = max(vCol - vec3(1.0), vec3(0.0)) * 1.4;
+        float vm = max(vCol.r, max(vCol.g, vCol.b));
+        vec3 baseC = vm > 1.0 ? vCol / vm : vCol;                // keep the hue of a glowing colour instead of clipping it to white
+        albedo = pow(baseC * 0.8, vec3(2.2));
+        emit = vm > 1.0 ? pow(baseC, vec3(2.2)) * (vm - 1.0) * 1.9 : vec3(0.0);
         rough = 0.5; coat = 0.45;
     } else if (uMat == 0) {     // lacquer / enamel
         coat = 1.0;
@@ -519,7 +532,7 @@ void main() {
             float dd = length(dl);
             float att = 1.0 / (1.0 + 9.0 * (dd / uLamp[i].w) * (dd / uLamp[i].w)) * (1.0 - smoothstep(0.6, 1.0, dd / uLamp[i].w));
             float nl = max(dot(N, normalize(dl)), 0.0) * 0.8 + 0.2;
-            col += (diffC * 2.0 + 0.02) * vec3(0.38, 0.62, 1.0) * att * nl * 0.55;
+            col += (diffC * 2.0 + 0.02) * uLampCol * att * nl * 0.55;
         }
     }
     // rim light
@@ -709,7 +722,27 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         vec3 c = mix(vec3(0.34, 0.34, 0.31) * (0.6 + 0.8 * rock), vec3(0.18, 0.4, 0.1) * (0.6 + 0.7 * rock), moss);
         return shadeBall(pow(c, vec3(2.2)), 0.85, 0.0, vec3(0.0), 0.0, N, V);
     }
-    // 12: beach ball: six panels, white pole caps
+    if (uSkin == 12) {           // glow orb: dark spore-skin with living green mycelium and drifting spores
+        vec3 q = p * 2.4 + vec3(uTime * 0.05, 0.0, -uTime * 0.07);
+        float f = abs(fb3(q, 1.5) - 0.5);
+        float vein = pow(smoothstep(0.06, 0.0, f), 1.4);
+        vec2 g = vec2(lon * 9.0, lat * 11.0);
+        vec2 ip = floor(g), fp = fract(g) - 0.5;
+        float spore = step(0.8, hash21(ip)) * smoothstep(0.2, 0.0, length(fp - (vec2(hash21(ip + 3.0), hash21(ip + 9.0)) - 0.5) * 0.5)) * (0.5 + 0.5 * sin(uTime * 2.0 + hash21(ip) * 40.0));
+        float breath = 0.75 + 0.25 * sin(uTime * 1.7);
+        vec3 emit = vec3(0.55, 1.0, 0.36) * (vein * 2.6 + spore * 3.0) * breath + vec3(0.1, 0.55, 0.35) * 0.18;
+        return shadeBall(vec3(0.02, 0.05, 0.04), 0.25, 0.0, emit, 0.8, N, V);
+    }
+    if (uSkin == 13) {           // autumn leaf: gold to rust patches with a dark vein network
+        float t = fb3(p, 3.0);
+        vec3 c = mix(vec3(0.95, 0.66, 0.12), vec3(0.78, 0.22, 0.06), smoothstep(0.35, 0.7, t));
+        c = mix(c, vec3(0.45, 0.25, 0.08), smoothstep(0.6, 0.85, fb3(p + 4.0, 5.0)) * 0.6);
+        float rib = smoothstep(0.045, 0.0, abs(sin(lon * 0.5)) - 0.0) * 0.0 + smoothstep(0.05, 0.0, abs(lon - 0.0) * 0.4);
+        float net = smoothstep(0.07, 0.0, abs(fb3(p * 2.6, 2.0) - 0.5));
+        c = mix(c, c * 0.42, max(net * 0.85, rib));
+        return shadeBall(pow(c, vec3(2.2)), 0.5, 0.0, vec3(0.0), 0.5, N, V);
+    }
+    // 14: beach ball: six panels, white pole caps
     float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
     vec3 c = seg < 1.0 ? vec3(0.95, 0.15, 0.15) : seg < 2.0 ? vec3(1.0) : seg < 3.0 ? vec3(1.0, 0.85, 0.1) : seg < 4.0 ? vec3(1.0) : seg < 5.0 ? vec3(0.1, 0.45, 0.95) : vec3(1.0);
     float seamL = smoothstep(0.02, 0.0, abs(fract((lon / 6.2831853 + 0.5) * 6.0) - 0.5) - 0.48);
@@ -855,6 +888,107 @@ void main() {
     col += vec3(0.30, 0.40, 0.50) * (1.0 - smoothstep(0.0, 0.06, abs(r - R + 0.03))) * 0.55;   // meniscus glint
     float alpha = inside * mix(0.94, 0.78, rim);
     outColor = vec4(finish(col, gl_FragCoord.xy), max(alpha, halo));
+}
+"""
+
+    /** Neon trail left by the ball on the Glow level: additive soft discs that fade over a few seconds. */
+    const val GLOW_FS = """#version 300 es
+precision highp float;
+uniform float uPass;
+in vec2 vUv;
+in float vAge;
+in vec3 vNrm;
+in vec3 vT1;
+in vec3 vT2;
+in vec3 vWorld;
+out vec4 outColor;
+void main() {
+    if (uPass > 0.5) discard;
+    float r = length(vUv);
+    if (r > 1.0) discard;
+    float f = 1.0 - smoothstep(0.0, 3.6, vAge);
+    f *= f;
+    if (f < 0.004) discard;
+    float glow = exp(-r * r * 3.4);
+    float core = exp(-r * r * 15.0);
+    vec3 young = vec3(0.35, 1.0, 0.55), mid = vec3(0.2, 0.85, 1.0), old = vec3(0.9, 0.3, 1.0);
+    vec3 col = mix(mix(young, mid, smoothstep(0.0, 1.4, vAge)), old, smoothstep(1.2, 3.2, vAge));
+    outColor = vec4(col * (glow * 0.9 + core * 2.2) * f, 1.0);
+}
+"""
+
+    /** Leaves that drift down and settle: the quad is placed at its landing spot and lifted by its remaining fall. */
+    const val LEAF_VS = """#version 300 es
+uniform mat4 uVP;
+uniform mat4 uModel;
+uniform float uTime;
+layout(location=0) in vec4 aPA;     // xyz = landing position (local), w = time the leaf left the branch
+layout(location=1) in vec4 aNS;     // xyz = local surface normal, w = half size
+out vec2 vUv;
+out float vAge;
+out vec3 vNrm;
+out vec3 vWorld;
+out float vSeed;
+void main() {
+    const vec2 C[6] = vec2[6](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
+    vec2 c = C[gl_VertexID];
+    vec3 n = normalize(aNS.xyz);
+    vec3 a = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 t1 = normalize(cross(a, n));
+    vec3 t2 = cross(n, t1);
+    float seed = fract(sin(dot(aPA.xyz, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float age = uTime - aPA.w;
+    float f = clamp(age / 3.4, 0.0, 1.0);                  // 0 = on the branch, 1 = landed
+    float air = 1.0 - f;
+    float s = aNS.w;
+    float ang = seed * 6.2831 + air * sin(age * 2.6 + seed * 5.0) * 1.6;
+    vec2 r = vec2(c.x * cos(ang) - c.y * sin(ang), c.x * sin(ang) + c.y * cos(ang));
+    vec3 off = (t1 * r.x * 1.25 + t2 * r.y * 0.85) * s;
+    off += n * (r.x * sin(age * 3.1 + seed * 7.0) * air * s * 0.9);              // tumbling while airborne
+    float h = air * s * 15.0;
+    vec3 sway = t1 * sin(age * 1.9 + seed * 6.0) * s * 2.6 * air + t2 * cos(age * 1.5 + seed * 9.0) * s * 2.6 * air;
+    vec3 p = aPA.xyz + off + n * (0.0035 + h + 0.0006 * seed) + sway;
+    vec4 w = uModel * vec4(p, 1.0);
+    vWorld = w.xyz;
+    vNrm = mat3(uModel) * n;
+    vUv = c;
+    vAge = age;
+    vSeed = seed;
+    gl_Position = uVP * w;
+}
+"""
+
+    const val LEAF_FS = """#version 300 es
+precision highp float;
+uniform vec3 uLightDir;
+uniform float uPass;
+in vec2 vUv;
+in float vAge;
+in vec3 vNrm;
+in vec3 vWorld;
+in float vSeed;
+out vec4 outColor;
+void main() {
+    if (uPass > 0.5) discard;
+    // pointed leaf outline with a stalk, midrib and side veins
+    float x = vUv.x, y = vUv.y;
+    float w = 0.64 * pow(max(1.0 - x * x, 0.0), 0.65) * (0.75 + 0.25 * x);
+    float body = w - abs(y);
+    float stalk = step(0.82, -x) * step(abs(y), 0.05) * step(-1.0, x);
+    if (body < 0.0 && stalk < 0.5) discard;
+    vec3 gold = vec3(0.96, 0.72, 0.16), orange = vec3(0.92, 0.42, 0.08), red = vec3(0.68, 0.14, 0.06), brown = vec3(0.50, 0.30, 0.10);
+    float k = fract(vSeed * 7.31);
+    vec3 col = k < 0.35 ? gold : k < 0.65 ? orange : k < 0.85 ? red : brown;
+    col = mix(col, col * vec3(1.1, 0.9, 0.7), smoothstep(-0.9, 0.9, x) * 0.5);
+    float rib = smoothstep(0.045, 0.0, abs(y));
+    float veins = smoothstep(0.05, 0.0, abs(fract((abs(y) * 5.0 - x * 2.6) + 0.5) - 0.5) * 0.4) * step(abs(y), w);
+    col = mix(col, col * 0.55, max(rib, veins * 0.6));
+    vec3 N = normalize(vNrm);
+    float lit = 0.45 + 0.75 * abs(dot(N, uLightDir));
+    float edge = smoothstep(0.0, 0.06, body);
+    float a = smoothstep(0.0, 0.35, vAge) * (stalk > 0.5 ? 1.0 : edge);
+    if (a < 0.02) discard;
+    outColor = vec4(pow(col * lit, vec3(1.0)), a);
 }
 """
 

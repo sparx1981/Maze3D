@@ -121,6 +121,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var poison = 0f
     private var trailProg = 0
     private val trail = TrailBuffer()
+    private val glowTrail = TrailBuffer(900)
+    private val leaves = TrailBuffer(800)
+    private var glowProg = 0
+    private var leafProg = 0
+    private var glowStampAt: Vec3? = null
+    private var leafAcc = 0f
     private var terrain = Terrain.NONE
     private var dirt = 0f
     private var dustAt = 0f
@@ -269,6 +275,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         puddleProg = Shaders.program(Shaders.SCENE_VS, Shaders.PUDDLE_FS)
         trailProg = Shaders.program(Shaders.TRAIL_VS, Shaders.TRAIL_FS)
         trail.init()
+        glowTrail.init(); leaves.init()
+        glowProg = Shaders.program(Shaders.TRAIL_VS, Shaders.GLOW_FS)
+        leafProg = Shaders.program(Shaders.LEAF_VS, Shaders.LEAF_FS)
         rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
         puddleMesh = GlMesh(GlMesh.SCENE)
         mediumProg = Shaders.program(Shaders.SCENE_VS, Shaders.MEDIUM_FS)
@@ -455,7 +464,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             else -> pal
         }
         dirt = 0f
-        trail.clear()
+        trail.clear(); glowTrail.clear(); leaves.clear(); glowStampAt = null; leafAcc = 0f
         val b = SceneBuilder(m, pal)
         builder = b
         floorMesh!!.let { val mb = b.floor(true); it.upload(mb.vertices(), mb.indices()) }
@@ -576,6 +585,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             checkpoints = picks.sortedBy { c -> path.indexOf(c) }.toIntArray()
             cpReached = -1
+        }
+        if (pal.themeId == 12) {                                       // a first carpet of fallen leaves
+            val vs = m.mesh.vertices
+            for (i in 0 until minOf(m.cellCount * 3, 600)) {
+                val c = rnd.nextInt(m.cellCount)
+                val a = vs[m.mesh.cellVertex(c, 0)]; val bq = vs[m.mesh.cellVertex(c, 1)]; val cq = vs[m.mesh.cellVertex(c, 3)]
+                val p = m.mesh.surface.project(a + (bq - a) * rnd.nextFloat() + (cq - a) * rnd.nextFloat())
+                leaves.add(p, m.mesh.surface.normal(p), m.marbleRadius * (0.55f + 0.4f * rnd.nextFloat()), time - 30f)
+            }
         }
         markerMesh!!.let { val mb = b.markers(hz.doorEdges, checkpoints, cpReached); it.upload(mb.vertices(), mb.indices()) }
         cloudAmt = 0f
@@ -755,6 +773,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         sparks.emit(under, Vec3.ZERO, 0.38f, pal.accent, 0.012f + 0.01f * spd)
                     }
                     if (pal.themeId == 7) snowfall(mb, m)
+                    if (pal.themeId == 11) glowStamp(mb)
+                    if (pal.themeId == 12) fallLeaves(mb, m, dt)
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
                     if (terrain != Terrain.NONE) layTrail(mb, m, dt)
@@ -1152,9 +1172,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
-        GLES30.glUniform1f(loc(sceneProg, "uNight"), if (pal.themeId == 7) 1f else 0f)
+        val night = pal.themeId == 7 || pal.themeId == 11
+        GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
+        if (pal.themeId == 11) GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.35f, 1f, 0.5f) else GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.38f, 0.62f, 1f)
         lampUniform.fill(0f)
-        if (pal.themeId == 7) {
+        if (night) {
             val from = marble?.position ?: Vec3.ZERO
             val near = lamps.sortedBy { (it - from).lengthSq() }.take(8)
             val reach = (maze?.cellSize ?: 0.1f) * 4.2f
@@ -1181,7 +1204,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
-        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) (if (pal.themeId == 7) 1.3f * fogK + 0.25f else 0.55f * fogK) else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uFog"), if (profile.fog) (if (pal.themeId == 7 || pal.themeId == 11) 1.3f * fogK + 0.25f else if (pal.themeId == 12) 0.4f * fogK else 0.55f * fogK) else 0f)
         GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
@@ -1199,6 +1222,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         doorMesh?.draw()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         drawTrail(vpm, cam)
+        drawGlowAndLeaves(vpm, cam)
         drawHoles(vpm, cam)
         drawPuddles(vpm, cam)
         drawMedium(vpm, cam)
@@ -1428,9 +1452,52 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Ball skin for the current level: themed surfaces get a matching ball, sand and water levels a beach ball. */
     private fun ballSkin(): Int = if (ballChoice >= 0) ballChoice else when {
-        pal.themeId in 0..10 -> pal.themeId + 1
-        terrain == Terrain.SAND || medium == Medium.WATER -> 12
+        pal.themeId >= 0 -> pal.themeId + 1
+        terrain == Terrain.SAND || medium == Medium.WATER -> 14
         else -> 0
+    }
+
+    /** Neon trail: a glowing disc every little while along the ball's path; it fades over a few seconds in the shader. */
+    private fun glowStamp(mb: Marble) {
+        val n = mb.surface.normal(mb.position)
+        val under = mb.position - n * (mb.radius * 0.97f)
+        val last = glowStampAt
+        if (mb.velocity.length() > mb.radius * 0.5f && (last == null || (under - last).length() > mb.radius * 0.35f)) {
+            glowStampAt = under
+            glowTrail.add(under, n, mb.radius * 0.95f, time)
+        }
+    }
+
+    /** Leaves keep falling around the ball and pile up where they land. */
+    private fun fallLeaves(mb: Marble, m: Maze, dt: Float) {
+        leafAcc += dt * 7f
+        while (leafAcc >= 1f) {
+            leafAcc -= 1f
+            val n = mb.surface.normal(mb.position)
+            val a = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+            val off = (a - n * (a dot n)).normalized() * (m.cellSize * 7f * rnd.nextFloat())
+            val p = mb.surface.project(mb.position + off)
+            leaves.add(p, mb.surface.normal(p), mb.radius * (0.55f + 0.4f * rnd.nextFloat()), time)
+        }
+    }
+
+    private fun drawGlowAndLeaves(vpm: FloatArray, cam: Vec3) {
+        if (pal.themeId != 11 && pal.themeId != 12) return
+        val prog = if (pal.themeId == 11) glowProg else leafProg
+        val buf = if (pal.themeId == 11) glowTrail else leaves
+        if (buf.count == 0) return
+        GLES30.glUseProgram(prog)
+        GLES30.glUniformMatrix4fv(loc(prog, "uVP"), 1, false, vpm, 0)
+        GLES30.glUniformMatrix4fv(loc(prog, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(prog, "uTime"), time)
+        GLES30.glUniform3f(loc(prog, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        if (pal.themeId == 11) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE) else GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        buf.draw(prog, loc(prog, "uPass"))
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(sceneProg)
     }
 
     /** Soft powder drifting through the air around the ball on the ice level (after the example's windblown snow). */

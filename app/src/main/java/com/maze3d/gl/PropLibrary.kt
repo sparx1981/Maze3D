@@ -30,7 +30,9 @@ object PropLibrary {
         7 -> ThemeProps(lampPost(), snowman(), snowPine(), snowPine(), iceCrystals())
         8 -> ThemeProps(obelisk(), canopicJar(), sphinx(), pyramidProp())
         9 -> ThemeProps(neonStar(), arcadeStick(), neonRing(), neonPalm())
-        else -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
+        10 -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
+        11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), sporePod(), glowBell())
+        else -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
     }
 
     // ---------------------------------------------------------------- candy
@@ -458,5 +460,85 @@ object PropLibrary {
         for (i in 0 until 4) { col = Vec3.lerp(c(40, 120, 46), c(110, 190, 70), i / 3f)
             at(cos(i * 1.7f) * 0.18f, sin(i * 1.7f) * 0.18f, 0.8f + 0.06f * i) { push(); scale(1f, 1f, 0.6f); sphere(0.3f - 0.03f * i, 14, 8); pop() } }
         col = c(60, 150, 50); for (i in 0 until 3) tube(listOf(Vec3(0.2f * cos(i * 2.1f), 0.2f * sin(i * 2.1f), 0.82f), Vec3(0.26f * cos(i * 2.1f), 0.26f * sin(i * 2.1f), 0.55f), Vec3(0.24f * cos(i * 2.1f), 0.24f * sin(i * 2.1f), 0.3f)), 0.012f, 5)
+    }.build()
+
+    // ---------------------------------------------------------------- glow (bioluminescent forest)
+    private val FOX = c(140, 255, 92)
+    private val TEAL = c(77, 255, 192)
+    private val CYAN = c(63, 224, 255)
+    private val LIME = c(216, 255, 90)
+
+    /** A mushroom: pale stem, glowing cap and gills. Colours above 1.0 glow. */
+    private fun PM.shroom(stem: Float, capR: Float, glowCol: Vec3, k: Float = 2.4f, x: Float = 0f, y: Float = 0f) {
+        push(); translate(x, y, 0f)
+        col = c(176, 190, 170); cylinder(stem * 0.14f / 0.5f * 0.5f + 0.02f, stem, 10, 0.03f)
+        // cap: a bell lathe that glows brighter toward the rim, with a bright underside ring (gills)
+        val prof = listOf(floatArrayOf(0.02f, stem * 0.92f), floatArrayOf(capR * 0.55f, stem * 0.9f), floatArrayOf(capR, stem * 1.02f), floatArrayOf(capR * 0.9f, stem * 1.25f), floatArrayOf(capR * 0.5f, stem * 1.45f), floatArrayOf(0.01f, stem * 1.52f))
+        lathe(prof, 18, true) { _, v -> glowCol * (k * (0.55 + 0.7 * (1f - v)).toFloat()) }
+        col = glowCol * (k * 1.3f); at(z = stem * 0.9f) { torus(capR * 0.82f, 0.018f, 20, 6) }
+        for (i in 0 until 5) { col = c(235, 255, 225) * 1.2f; val a = i * 1.257f; push(); translate(cos(a) * capR * 0.5f, sin(a) * capR * 0.5f, stem * 1.33f); sphere(0.025f, 6, 4); pop() }
+        pop()
+    }
+
+    private fun glowBell() = PM().apply { shroom(0.38f, 0.3f, FOX, 1.8f) }.build()
+
+    private fun glowCluster() = PM().apply {
+        shroom(0.5f, 0.2f, TEAL, 2.4f, -0.22f, 0.08f)
+        shroom(0.34f, 0.16f, FOX, 2.6f, 0.16f, 0.16f)
+        shroom(0.62f, 0.24f, CYAN, 2.4f, 0.04f, -0.2f)
+        shroom(0.22f, 0.11f, LIME, 2.8f, 0.3f, -0.12f)
+        shroom(0.28f, 0.12f, TEAL, 2.6f, -0.28f, -0.2f)
+    }.build()
+
+    private fun glowParasol() = PM().apply { shroom(0.8f, 0.42f, c(192, 112, 255), 2.2f) }.build()
+
+    private fun glowGiant() = PM().apply {
+        shroom(0.62f, 0.46f, FOX, 2.0f, 0f, 0f)
+        shroom(0.36f, 0.2f, TEAL, 2.4f, 0.34f, 0.1f)
+        shroom(0.28f, 0.16f, CYAN, 2.4f, -0.3f, 0.22f)
+    }.build()
+
+    private fun sporePod() = PM().apply {
+        col = c(60, 90, 70); cylinder(0.04f, 0.4f, 8, 0.02f)
+        col = FOX * 2.6f; at(z = 0.46f) { sphere(0.12f, 12, 8) }
+        for (i in 0 until 8) { val a = i * 0.785f; col = LIME * 3f; at(cos(a) * 0.2f, sin(a) * 0.2f, 0.5f + 0.1f * ((i * 5) % 3)) { sphere(0.03f, 6, 4) } }
+    }.build()
+
+    // ---------------------------------------------------------------- fall (autumn)
+    private fun pumpkin() = PM().apply {
+        val orange = c(238, 120, 28)
+        col = orange
+        lathe((0..12).map { val ph = (PI * it / 12).toFloat(); floatArrayOf(sin(ph) * 0.42f, 0.28f - cos(ph) * 0.26f) }, 20, true) { u, _ -> if ((u * 12f).toInt() % 2 == 0) orange else orange * 0.84f }
+        col = c(92, 112, 40); cylinder(0.05f, 0.18f, 8, 0.035f).also { }
+        push(); translate(0f, 0f, 0.5f); col = c(96, 120, 44); cylinder(0.05f, 0.16f, 8, 0.03f); pop()
+        col = c(70, 140, 50); tube(listOf(Vec3(0.04f, 0f, 0.6f), Vec3(0.16f, 0.04f, 0.62f), Vec3(0.2f, 0.12f, 0.56f)), 0.012f, 5)
+    }.build()
+
+    private fun leafPile() = PM().apply {
+        val cols = listOf(c(240, 180, 40), c(232, 100, 24), c(190, 52, 24), c(210, 140, 40))
+        for (i in 0 until 28) {
+            val a = i * 2.4f; val r = 0.34f * ((i * 7) % 11) / 11f
+            col = cols[i % 4]
+            push(); translate(cos(a) * r, sin(a) * r, 0.04f + 0.17f * (1f - r / 0.34f) + 0.01f * (i % 3)); rotZ(a * 1.7f); rotX(0.25f * ((i % 5) - 2)); scale(0.2f, 0.12f, 0.02f); sphere(0.5f, 8, 4); pop()
+        }
+        col = c(238, 120, 28); push(); translate(0.1f, 0.06f, 0.3f); scale(0.5f, 0.5f, 0.42f); sphere(0.3f, 14, 10); pop()
+        col = c(92, 112, 40); push(); translate(0.1f, 0.06f, 0.5f); cylinder(0.025f, 0.08f, 6); pop()
+    }.build()
+
+    private fun hayBale() = PM().apply {
+        col = c(196, 144, 52)
+        push(); translate(0f, 0.25f, 0.3f); rotX(-(PI / 2).toFloat()); cylinder(0.3f, 0.5f, 20); pop()
+        col = c(170, 124, 44)
+        for (k in 0 until 3) { push(); translate(0f, -0.25f + k * 0.25f, 0.2f); rotX((PI / 2).toFloat()); torus(0.3f, 0.012f, 20, 4); pop() }
+    }.build()
+
+    private fun autumnTree() = PM().apply {
+        col = c(94, 62, 36); tube(listOf(Vec3(0f, 0f, 0f), Vec3(0.03f, 0f, 0.3f), Vec3(-0.02f, 0f, 0.55f), Vec3(0f, 0f, 0.7f)), 0.07f, 10, false, null) { 1f - 0.4f * it }
+        val cols = listOf(c(240, 180, 40), c(232, 100, 24), c(210, 140, 40), c(190, 60, 24))
+        for (i in 0 until 7) {
+            val a = i * 0.9f; val r = if (i == 0) 0f else 0.22f
+            col = cols[i % 4]
+            at(cos(a) * r, sin(a) * r, 0.72f + 0.07f * (i % 3)) { push(); scale(1f, 1f, 0.75f); sphere(0.26f - 0.012f * i, 12, 8); pop() }
+        }
     }.build()
 }

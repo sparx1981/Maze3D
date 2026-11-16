@@ -374,6 +374,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         baseline = null; smoothed = null            // "level" is measured again in the new orientation
+        if (menuSettings.visibility == View.VISIBLE) buildSettings()      // the settings layout depends on the width
+        else if (menuBest.visibility == View.VISIBLE) showBest()
     }
 
     override fun onSensorChanged(ev: SensorEvent) {
@@ -895,7 +897,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var progress: com.maze3d.core.Progress
     private lateinit var bestTimes: com.maze3d.core.BestTimes
     private var ballBox: LinearLayout? = null
-    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle")
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
 
