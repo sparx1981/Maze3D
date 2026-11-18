@@ -470,8 +470,15 @@ void main() {
         albedo = mix(albedo, pcol * 0.8, 0.55);
         albedo *= 0.86 + 0.26 * stud;
         albedo *= 1.0 - 0.25 * smoothstep(0.30, 0.40, length(fp)) * (1.0 - stud);
-        hgt = stud * uStud.y;
+        hgt = 0.0;
         rough = 0.28; coat = 0.7;
+        if (uShell > 0.0) {                                  // the studs are real: each shell layer keeps a slightly smaller disc, lifted off the plate
+            float r = length(fp);
+            if (r > 0.40 - 0.08 * uShell) discard;
+            albedo *= 0.92 + 0.22 * uShell;
+            hgt = -r * uStud.y * 1.4;                         // a domed top and rounded flank for the lighting
+            rough = 0.22;
+        }
     } else if (uMat == 26) {    // craft felt with stitching
         vec2 q = vec2(dot(P, vec3(30.0, 18.0, 24.0)), dot(P, vec3(-16.0, 29.0, 20.0)));
         float fuzz = vnoise(q * 9.0) * 0.6 + vnoise(q * 23.0) * 0.4;

@@ -1475,9 +1475,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), holeCount)
         if (holeCount > 0) GLES30.glUniform4fv(loc(sceneProg, "uHoleC"), 48, holeUniform, 0)
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
-        if (pal.floorMat == Mat.TURF && profile.shadows >= 1) {      // short 3D grass: the ground drawn again as layers climbing up the blades
-            val shells = if (profile.shadows >= 2) 8 else 5
-            GLES30.glUniform1f(loc(sceneProg, "uShellH"), (maze?.cellSize ?: 0.1f) * 0.075f)
+        if ((pal.floorMat == Mat.TURF && profile.shadows >= 1) || pal.floorMat == Mat.TOY) {      // short 3D grass / raised studs: the ground drawn again as layers climbing up
+            val toy = pal.floorMat == Mat.TOY
+            val shells = if (toy) (if (profile.shadows >= 2) 5 else 3) else if (profile.shadows >= 2) 8 else 5
+            GLES30.glUniform1f(loc(sceneProg, "uShellH"), if (toy) studPitch() * 0.15f else (maze?.cellSize ?: 0.1f) * 0.075f)
             for (k in 1..shells) { GLES30.glUniform1f(loc(sceneProg, "uShell"), k / (shells + 1f)); floorMesh?.draw() }
             GLES30.glUniform1f(loc(sceneProg, "uShell"), 0f)
         }
