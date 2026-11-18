@@ -186,6 +186,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var bridgeHalfWidth = 0.36f
     private val sparks = Sparks()
     private var hazards: Hazards? = null
+    private var fxFrames = emptyList<FloatArray>()
+    private var fxDirT = emptyList<Vec3>()
+    private var fxLat = emptyList<Vec3>()
+    private val fxMeshes = arrayOfNulls<GlMesh>(11)   // 0 pad,1 oil,2 belt,3 chevron,4 crusher frame,5 ram,6 sweeper,7 seesaw base,8 plank
+    private var padKick = FloatArray(0)
+    private var fxCooldown = 0f
     private var doors: List<Door> = emptyList()
     private var useClouds = false
     private var cloudAmt = 0f
@@ -326,6 +332,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         swingPitMesh = GlMesh(GlMesh.SCENE); swingGantryMesh = GlMesh(GlMesh.SCENE); swingSeatMesh = GlMesh(GlMesh.SCENE)
         bridgeMesh = GlMesh(GlMesh.SCENE); bridgeBoardMesh = GlMesh(GlMesh.SCENE); gantryMesh = GlMesh(GlMesh.SCENE); hammerMesh = GlMesh(GlMesh.SCENE)
         lidMesh = GlMesh(GlMesh.SCENE)
+        for (i in fxMeshes.indices) fxMeshes[i] = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1; postOn = false
         ShadowMap.lightMatrix(lightDir, 1.75f, lightVP)
         GLES30.glGenVertexArrays(1, emptyVao, 0)
@@ -570,7 +577,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val wantBridges = !plain && rnd.nextFloat() < 0.26f + hardBoost
         val wantHammers = !plain && rnd.nextFloat() < 0.26f + hardBoost
         val wantSwings = !plain && rnd.nextFloat() < 0.22f + hardBoost
-        val hz = Hazards(m, rnd, wantDoors, wantHoles, wantBridges, wantHammers, if (difficulty.scale >= 1.7f) 1.5f else 1f, wantSwings)
+        val wantFx = !plain && Random(seed xor 0x7A3F1C9L).nextFloat() < 0.45f + hardBoost
+        val hz = Hazards(m, rnd, wantDoors, wantHoles, wantBridges, wantHammers, if (difficulty.scale >= 1.7f) 1.5f else 1f, wantSwings, if (wantFx) Random(seed xor 0x2B7E1516L) else null)
         rain = if (rainNow) Rain(m, rnd) else null
         marble!!.rain = rain
         marble!!.terrain = terrain
@@ -664,6 +672,23 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         upload(swingGantryMesh, if (hz.hasSwings) HazardModels.swingGantry(0.56f) else null)
         upload(swingSeatMesh, if (hz.hasSwings) HazardModels.swingSeat(Hazards.SWING_DISC) else null)
         hammerCooldown = 0f
+        run {
+            val ff = hz.fxCell.indices.map { frameFor(hz.fxCell[it], hz.fxDir[it], m.cellSize * 0.002f) }
+            fxFrames = ff.map { it.first }; fxLat = ff.map { it.second }
+            fxDirT = hz.fxCell.indices.map { val c = m.centers[hz.fxCell[it]]; val n = m.mesh.surface.normal(c); val d = hz.fxDir[it]; (d - n * (d dot n)).normalized() }
+            padKick = FloatArray(hz.fxCell.size)
+            fxCooldown = 0f
+            val has = { k: Int -> hz.fxKind.any { it == k } }
+            upload(fxMeshes[0], if (has(Hazards.FX_BUMPER)) HazardModels.springPad() else null)
+            upload(fxMeshes[1], if (has(Hazards.FX_OIL)) HazardModels.oil() else null)
+            upload(fxMeshes[2], if (has(Hazards.FX_CONVEYOR)) HazardModels.belt() else null)
+            upload(fxMeshes[3], if (has(Hazards.FX_CONVEYOR)) HazardModels.chevron() else null)
+            upload(fxMeshes[4], if (has(Hazards.FX_CRUSHER)) HazardModels.crusherFrame() else null)
+            upload(fxMeshes[5], if (has(Hazards.FX_CRUSHER)) HazardModels.crusherRam() else null)
+            upload(fxMeshes[6], if (has(Hazards.FX_SWEEPER)) HazardModels.sweeper() else null)
+            upload(fxMeshes[7], if (has(Hazards.FX_SEESAW)) HazardModels.seesawBase() else null)
+            upload(fxMeshes[8], if (has(Hazards.FX_SEESAW)) HazardModels.seesawPlank() else null)
+        }
         holeCount = minOf(hz.holeCells.size, 32)
         holeUniform.fill(0f)
         for (i in 0 until holeCount) {
@@ -683,7 +708,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         run {
             val path = m.solution
-            val avoid = HashSet<Int>().apply { add(m.start); add(m.goal); hz.holeCells.forEach { add(it) }; hz.bridgeCells.forEach { add(it) }; hz.hammerCells.forEach { add(it) }; for (sc in hz.swingCells) { add(sc); for (o in m.links[sc]) add(o) } }
+            val avoid = HashSet<Int>().apply { add(m.start); add(m.goal); hz.holeCells.forEach { add(it) }; hz.bridgeCells.forEach { add(it) }; hz.hammerCells.forEach { add(it) }; hz.fxCell.forEach { add(it) }; for (sc in hz.swingCells) { add(sc); for (o in m.links[sc]) add(o) } }
             val picks = ArrayList<Int>()
             for (f in floatArrayOf(0.25f, 0.5f, 0.75f)) {
                 val base = (path.size * f).toInt().coerceIn(1, path.size - 2)
@@ -975,6 +1000,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                             }
                         }
                     }
+                    if (hzb != null && hzb.hasFx && fallTimer <= 0f) updateFx(hzb, m, mb, dt)
                     val hz = hazards
                     if (hz != null && hz.hasHoles) {
                         val under = mb.position - mb.surface.normal(mb.position) * mb.radius
@@ -1338,10 +1364,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
-        val night = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11
+        val night = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17
         GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
-        when (pal.themeId) { 11 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.35f, 1f, 0.5f); 9 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 1f, 0.28f, 0.85f); else -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.38f, 0.62f, 1f) }
+        when (pal.themeId) { 11 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.35f, 1f, 0.5f); 9 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 1f, 0.28f, 0.85f); 17 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 1f, 0.42f, 0.1f); else -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.38f, 0.62f, 1f) }
         lampUniform.fill(0f)
         if (night) {
             val from = marble?.position ?: Vec3.ZERO
@@ -1383,6 +1409,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), holeCount)
         if (holeCount > 0) GLES30.glUniform4fv(loc(sceneProg, "uHoleC"), 32, holeUniform, 0)
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
+        if (pal.floorMat == Mat.TURF && profile.shadows >= 1) {      // short 3D grass: the ground drawn again as layers climbing up the blades
+            val shells = if (profile.shadows >= 2) 8 else 5
+            GLES30.glUniform1f(loc(sceneProg, "uShellH"), (maze?.cellSize ?: 0.1f) * 0.075f)
+            for (k in 1..shells) { GLES30.glUniform1f(loc(sceneProg, "uShell"), k / (shells + 1f)); floorMesh?.draw() }
+            GLES30.glUniform1f(loc(sceneProg, "uShell"), 0f)
+        }
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), 0)
         scene(pal.wallMat, pal.wallRough, pal.wallMetal, 0f); wallMesh?.draw()
         if (pal.themeId >= 0) { scene(Mat.PROP, 0.42f, 0f, 0f); propMesh?.draw() }
@@ -1641,7 +1673,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Ball skin for the current level: themed surfaces get a matching ball, sand and water levels a beach ball. */
     private fun ballSkin(): Int = if (ballChoice >= 0) ballChoice else when {
         pal.themeId >= 0 -> pal.themeId + 1
-        terrain == Terrain.SAND || medium == Medium.WATER -> 14
+        terrain == Terrain.SAND || medium == Medium.WATER -> 19
         else -> 0
     }
 
@@ -1939,6 +1971,58 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(sceneProg)
     }
 
+    /** Spring pads, oil, conveyors, crushers, sweepers and seesaws acting on the marble. */
+    private fun updateFx(hz: Hazards, m: Maze, mb: Marble, dt: Float) {
+        val cs = m.cellSize
+        fxCooldown -= dt
+        var slick = 0f
+        for (i in hz.fxKind.indices) {
+            if (padKick[i] > 0f) padKick[i] = maxOf(0f, padKick[i] - dt * 3f)
+            val c = m.centers[hz.fxCell[i]]
+            val rel = mb.position - c
+            if (rel.length() > cs * 0.75f) continue
+            val n = mb.surface.normal(c)
+            val d = fxDirT[i]
+            val along = (rel dot d) / cs; val lat = (rel dot fxLat[i]) / cs
+            when (hz.fxKind[i]) {
+                Hazards.FX_BUMPER -> if (rel.length() < cs * 0.3f && fxCooldown <= 0f) {
+                    val v = mb.velocity; val sp = v.length()
+                    val dir = if (sp > cs * 0.15f) v * (1f / sp) else (rel - n * (rel dot n)).normalized()
+                    mb.kick(dir * (cs * 3.4f) + n * (cs * 0.3f))
+                    padKick[i] = 1f; fxCooldown = 0.35f
+                    audio.impact(0.7f, panOf(c)); host.onStat("springs", 1f)
+                    sparks.burst(c, n, 8, 0.4f, Vec3(1f, 0.5f, 0.4f))
+                }
+                Hazards.FX_OIL -> if (rel.length() < cs * 0.34f) slick = 1f
+                Hazards.FX_CONVEYOR -> if (kotlin.math.abs(along) < 0.5f && kotlin.math.abs(lat) < 0.31f) mb.kick(d * (cs * 2.6f * dt))
+                Hazards.FX_SEESAW -> if (kotlin.math.abs(along) < 0.5f && kotlin.math.abs(lat) < 0.3f)
+                    mb.kick(d * (kotlin.math.sin(hz.seesawAngle(i, time)) * cs * 9f * dt))
+                Hazards.FX_SWEEPER -> {
+                    val a = hz.sweepAngle(i, time)
+                    val x = (m.mesh.surface.normal(c) cross d).normalized()
+                    val ax = d * kotlin.math.cos(a) + x * kotlin.math.sin(a)             // arm direction
+                    val dist = (rel - n * (rel dot n))
+                    val t = (dist dot ax).coerceIn(-Hazards.SWEEP_REACH * cs, Hazards.SWEEP_REACH * cs)
+                    val off = (dist - ax * t).length()
+                    if (off < cs * 0.08f + mb.radius && fxCooldown <= 0f) {
+                        val tang = (n cross ax) * (if (t >= 0f) 1f else -1f)            // direction the arm sweeps there
+                        mb.kick(tang * (cs * 3.2f) + n * (cs * 0.25f))
+                        fxCooldown = 0.3f
+                        audio.impact(0.9f, panOf(c)); host.onImpact(0.6f); host.onStat("sweeper", 1f)
+                        sparks.burst(mb.position, n, 8, 0.5f, Vec3(1f, 0.8f, 0.5f))
+                    }
+                }
+                Hazards.FX_CRUSHER -> if (hz.crushH(i, time) > 0.92f && kotlin.math.abs(along) < 0.4f && kotlin.math.abs(lat) < 0.4f) {
+                    fallTimer = 0.55f; host.onStat("falls", 1f)
+                    audio.impact(1f, panOf(c)); host.onImpact(1f)
+                    host.onToast("Crushed!")
+                    fallFrom = mb.position; fallTo = c - n * (cs * 0.15f)
+                }
+            }
+        }
+        mb.slick = slick
+    }
+
     private val objM = FloatArray(16)
     private val swingM = FloatArray(16)
     private val boardM = FloatArray(16)
@@ -1946,7 +2030,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Plank bridges and pendulum hammers: small meshes drawn with their own transform each frame. */
     private fun drawHazardObjects() {
         val hz = hazards ?: return
-        if (!hz.hasBridges && !hz.hasHammers && !hz.hasSwings) return
+        if (!hz.hasBridges && !hz.hasHammers && !hz.hasSwings && !hz.hasFx) return
         val uModel = loc(sceneProg, "uModel")
         scene(Mat.PROP, 0.55f, 0f, 0f)
         val cs = maze?.cellSize ?: 0.1f
@@ -1997,7 +2081,58 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniformMatrix4fv(uModel, 1, false, tmp, 0)
             swingSeatMesh?.draw()
         }
+        if (hz.hasFx) drawFx(hz, uModel)
         GLES30.glUniformMatrix4fv(uModel, 1, false, model, 0)
+    }
+
+    private fun drawFx(hz: Hazards, uModel: Int) {
+        val tmp = FloatArray(16); val m2 = FloatArray(16)
+        fun put(base: FloatArray, local: FloatArray, mesh: GlMesh?) {
+            android.opengl.Matrix.multiplyMM(tmp, 0, base, 0, local, 0)
+            android.opengl.Matrix.multiplyMM(objM, 0, model, 0, tmp, 0)
+            GLES30.glUniformMatrix4fv(uModel, 1, false, objM, 0)
+            mesh?.draw()
+        }
+        val id = FloatArray(16).also { android.opengl.Matrix.setIdentityM(it, 0) }
+        for (i in hz.fxKind.indices) {
+            val f = fxFrames[i]
+            when (hz.fxKind[i]) {
+                Hazards.FX_BUMPER -> {
+                    scene(Mat.PROP, 0.45f, 0f, 0f)
+                    System.arraycopy(id, 0, m2, 0, 16); val sq = 1f - 0.5f * padKick[i]; m2[10] = sq
+                    put(f, m2, fxMeshes[0])
+                }
+                Hazards.FX_OIL -> { scene(Mat.PROP, 0.04f, 0.9f, 0f); put(f, id, fxMeshes[1]) }
+                Hazards.FX_CONVEYOR -> {
+                    scene(Mat.PROP, 0.6f, 0.1f, 0f); put(f, id, fxMeshes[2])
+                    scene(Mat.PROP, 0.5f, 0f, 0.6f)
+                    for (k in 0 until 3) {
+                        val ph = ((time * 0.5f + k / 3f) % 1f)
+                        val sc = kotlin.math.sin(ph * Math.PI.toFloat()).coerceIn(0f, 1f)
+                        System.arraycopy(id, 0, m2, 0, 16)
+                        m2[12] = -0.4f + ph * 0.8f; m2[0] = sc; m2[5] = sc
+                        put(f, m2, fxMeshes[3])
+                    }
+                }
+                Hazards.FX_CRUSHER -> {
+                    scene(Mat.PROP, 0.5f, 0.3f, 0f); put(f, id, fxMeshes[4])
+                    System.arraycopy(id, 0, m2, 0, 16); m2[14] = 0.75f - 0.62f * hz.crushH(i, time)
+                    put(f, m2, fxMeshes[5])
+                }
+                Hazards.FX_SWEEPER -> {
+                    scene(Mat.PROP, 0.5f, 0.2f, 0f)
+                    val a = hz.sweepAngle(i, time); val ca = kotlin.math.cos(a); val sa = kotlin.math.sin(a)
+                    System.arraycopy(id, 0, m2, 0, 16); m2[0] = ca; m2[1] = sa; m2[4] = -sa; m2[5] = ca
+                    put(f, m2, fxMeshes[6])
+                }
+                Hazards.FX_SEESAW -> {
+                    scene(Mat.PROP, 0.6f, 0.2f, 0f); put(f, id, fxMeshes[7])
+                    val a = hz.seesawAngle(i, time); val ca = kotlin.math.cos(a); val sa = kotlin.math.sin(a)
+                    System.arraycopy(id, 0, m2, 0, 16); m2[0] = ca; m2[2] = -sa; m2[8] = sa; m2[10] = ca
+                    put(f, m2, fxMeshes[8])
+                }
+            }
+        }
     }
 
     private fun drawHoles(vpm: FloatArray, cam: Vec3) {

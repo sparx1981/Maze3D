@@ -32,7 +32,12 @@ object PropLibrary {
         9 -> ThemeProps(neonSign(), terminal(), hologram(), cityTower(), neonRing(), neonStar())
         10 -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
         11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), bonnets(), inkcap())
-        else -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
+        12 -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
+        13 -> ThemeProps(legoBrick(), duck(), toyCar(), toyRocket(), blockStack(), starBlock())
+        14 -> ThemeProps(buttonProp(), spool(), pomPom(), feltTree(), heartPatch(), yarnBall())
+        15 -> ThemeProps(boneProp(), eggNest(), fern(), volcanoProp(), ammonite(), jungleTree())
+        16 -> ThemeProps(boltProp(), toolbox(), wrench(), hammerProp(), gearProp(), boltProp())
+        else -> ThemeProps(emberSpire(), lavaRocks(), obsidianCrystal(), brazier(), volcanoProp(), emberSpire())
     }
 
     // ---------------------------------------------------------------- candy
@@ -609,5 +614,171 @@ object PropLibrary {
             col = cols[i % 4]
             at(cos(a) * r, sin(a) * r, 0.72f + 0.07f * (i % 3)) { push(); scale(1f, 1f, 0.75f); sphere(0.26f - 0.012f * i, 12, 8); pop() }
         }
+    }.build()
+
+    // ---------------------------------------------------------------- toy world
+    private fun legoBrick() = PM().apply {
+        col = c(226, 48, 40); push(); translate(0f, 0f, 0.22f); box(0.7f, 0.7f, 0.44f); pop()
+        for (i in 0..1) for (j in 0..1) { col = c(240, 70, 56); at(-0.17f + i * 0.34f, -0.17f + j * 0.34f, 0.44f) { cylinder(0.1f, 0.08f, 14) } }
+    }.build()
+
+    private fun starBlock() = PM().apply {
+        col = c(250, 200, 30); push(); translate(0f, 0f, 0.2f); box(0.5f, 0.5f, 0.4f); pop()
+        col = c(255, 235, 120); at(z = 0.4f) { cylinder(0.12f, 0.08f, 5) }
+    }.build()
+
+    private fun duck() = PM().apply {
+        col = c(255, 214, 40)
+        push(); translate(0f, 0f, 0.26f); scale(1.1f, 0.8f, 0.8f); sphere(0.3f, 16, 10); pop()
+        push(); translate(0f, -0.18f, 0.56f); sphere(0.19f, 14, 10); pop()
+        col = c(255, 130, 20); push(); translate(0f, -0.36f, 0.54f); scale(1.2f, 1f, 0.5f); sphere(0.08f, 8, 6); pop()
+        col = c(20, 20, 30); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.08f, -0.32f, 0.62f); sphere(0.025f, 6, 4); pop() }
+        col = c(255, 230, 100); push(); translate(0f, 0.22f, 0.4f); rotX(-0.5f); scale(0.9f, 0.5f, 0.6f); sphere(0.14f, 8, 6); pop()
+    }.build()
+
+    private fun toyCar() = PM().apply {
+        col = c(40, 130, 230); push(); translate(0f, 0f, 0.2f); box(0.5f, 0.84f, 0.2f); pop()
+        col = c(230, 240, 255); push(); translate(0f, 0.04f, 0.38f); box(0.4f, 0.4f, 0.18f); pop()
+        col = c(20, 20, 24); for (sx in intArrayOf(-1, 1)) for (sy in intArrayOf(-1, 1)) { push(); translate(sx * 0.27f, sy * 0.28f, 0.12f); rotY((PI / 2).toFloat()); cylinder(0.12f, 0.08f, 12); pop() }
+        col = c(255, 214, 40); push(); translate(0f, -0.43f, 0.2f); box(0.4f, 0.02f, 0.08f); pop()
+    }.build()
+
+    private fun toyRocket() = PM().apply {
+        col = c(235, 60, 50)
+        lathe(listOf(floatArrayOf(0.02f, 0.2f), floatArrayOf(0.2f, 0.22f), floatArrayOf(0.2f, 0.7f), floatArrayOf(0.1f, 0.92f), floatArrayOf(0f, 1f)), 20, true) { _, v -> if (v > 0.75f) c(250, 200, 30) else c(235, 60, 50) }
+        col = c(40, 130, 230); for (k in 0 until 3) { push(); rotZ(k * 2.094f); translate(0.2f, 0f, 0.28f); box(0.16f, 0.03f, 0.3f); pop() }
+        col = c(210, 235, 255); at(0f, -0.195f, 0.55f) { sphere(0.06f, 10, 8) }
+    }.build()
+
+    private fun blockStack() = PM().apply {
+        val cols = listOf(c(226, 48, 40), c(250, 200, 30), c(34, 120, 230))
+        for (i in 0 until 3) { col = cols[i]; push(); translate(0.04f * (i % 2), 0f, 0.15f + i * 0.3f); rotZ(0.3f * i); box(0.34f, 0.34f, 0.3f); pop() }
+        col = c(255, 255, 255); at(z = 0.92f) { sphere(0.12f, 10, 8) }
+    }.build()
+
+    // ---------------------------------------------------------------- craft
+    private fun buttonProp() = PM().apply {
+        col = c(236, 90, 120); cylinder(0.3f, 0.08f, 26)
+        col = c(250, 130, 150); at(z = 0.06f) { torus(0.26f, 0.025f, 26, 6) }
+        col = c(60, 40, 40); for (i in 0..1) for (j in 0..1) { at(-0.07f + i * 0.14f, -0.07f + j * 0.14f, 0.075f) { cylinder(0.03f, 0.02f, 8) } }
+        col = c(250, 240, 220); tube(listOf(Vec3(-0.07f, -0.07f, 0.1f), Vec3(0.07f, 0.07f, 0.1f)), 0.012f, 5); tube(listOf(Vec3(0.07f, -0.07f, 0.1f), Vec3(-0.07f, 0.07f, 0.1f)), 0.012f, 5)
+    }.build()
+
+    private fun spool() = PM().apply {
+        col = c(200, 150, 90); cylinder(0.3f, 0.07f, 24); at(z = 0.73f) { cylinder(0.3f, 0.07f, 24) }
+        col = c(224, 60, 90); at(z = 0.07f) { cylinder(0.2f, 0.66f, 22) }
+        col = c(240, 100, 130); for (k in 0 until 8) { at(z = 0.1f + k * 0.075f) { torus(0.2f, 0.012f, 22, 5) } }
+        col = c(250, 240, 220); tube(listOf(Vec3(0.2f, 0f, 0.3f), Vec3(0.34f, 0.1f, 0.15f), Vec3(0.3f, 0.3f, 0.03f)), 0.012f, 5)
+    }.build()
+
+    private fun pomPom() = PM().apply {
+        val cols = listOf(c(250, 140, 170), c(250, 200, 80), c(110, 200, 220))
+        for (i in 0 until 40) { val a = i * 2.4f; val z = 0.1f + 0.5f * ((i * 7) % 13) / 13f; val r = 0.28f * kotlin.math.sqrt(1f - ((z - 0.35f) / 0.4f).let { it * it }.coerceAtMost(1f))
+            col = cols[i % 3]; push(); translate(cos(a) * r, sin(a) * r, z); sphere(0.07f, 6, 4); pop() }
+        col = c(250, 140, 170); at(z = 0.36f) { sphere(0.26f, 12, 8) }
+    }.build()
+
+    private fun heartPatch() = PM().apply {
+        col = c(224, 60, 90)
+        push(); translate(-0.13f, 0f, 0.4f); sphere(0.2f, 12, 8); pop(); push(); translate(0.13f, 0f, 0.4f); sphere(0.2f, 12, 8); pop()
+        push(); translate(0f, 0f, 0.14f); rotX(PI.toFloat()); cone(0.3f, 0.3f, 14); pop()
+        col = c(250, 240, 220); for (k in 0 until 8) tube(listOf(Vec3(-0.3f + k * 0.085f, -0.19f, 0.2f), Vec3(-0.3f + k * 0.085f, -0.19f, 0.34f)), 0.008f, 4)
+    }.build()
+
+    private fun yarnBall() = PM().apply {
+        for (k in 0 until 14) { col = if (k % 2 == 0) c(100, 190, 210) else c(236, 100, 130); push(); translate(0f, 0f, 0.3f); rotZ(k * 0.5f); rotX(0.4f * k); torus(0.28f, 0.03f, 26, 6); pop() }
+        col = c(236, 100, 130); at(0f, 0f, 0.3f) { sphere(0.27f, 14, 10) }
+    }.build()
+
+    private fun feltTree() = PM().apply {
+        col = c(130, 90, 60); cylinder(0.06f, 0.25f, 8)
+        for (i in 0 until 3) { col = if (i % 2 == 0) c(70, 150, 90) else c(100, 180, 100); at(z = 0.2f + i * 0.22f) { cone(0.34f - i * 0.08f, 0.4f, 14) } }
+        col = c(250, 200, 60); at(z = 0.92f) { sphere(0.05f, 8, 6) }
+    }.build()
+
+    // ---------------------------------------------------------------- prehistoric
+    private fun boneProp() = PM().apply {
+        col = c(238, 230, 204)
+        push(); translate(0f, 0f, 0.14f); rotY((PI / 2).toFloat()); translate(0f, 0f, -0.4f); cylinder(0.07f, 0.8f, 12); pop()
+        for (s in intArrayOf(-1, 1)) for (t in intArrayOf(-1, 1)) { push(); translate(s * 0.4f, t * 0.07f, 0.14f); sphere(0.1f, 10, 8); pop() }
+    }.build()
+
+    private fun eggNest() = PM().apply {
+        col = c(120, 84, 48); at(z = 0.05f) { torus(0.28f, 0.06f, 22, 6) }
+        for (i in 0 until 14) { val a = i * 0.8f; tube(listOf(Vec3(cos(a) * 0.26f, sin(a) * 0.26f, 0.05f), Vec3(cos(a + 1.2f) * 0.3f, sin(a + 1.2f) * 0.3f, 0.1f)), 0.015f, 4) }
+        for (i in 0 until 3) { col = c(238, 226, 196); val a = i * 2.1f; push(); translate(cos(a) * 0.1f, sin(a) * 0.1f, 0.22f); scale(1f, 1f, 1.3f); sphere(0.14f, 12, 8); pop()
+            col = c(120, 150, 70); for (k in 0 until 4) { push(); translate(cos(a) * 0.1f + 0.06f * cos(k * 1.6f), sin(a) * 0.1f + 0.06f * sin(k * 1.6f), 0.22f + 0.05f * k - 0.05f); sphere(0.02f, 5, 4); pop() } }
+    }.build()
+
+    private fun volcanoProp() = PM().apply {
+        col = c(92, 70, 56); lathe(listOf(floatArrayOf(0.02f, 0f), floatArrayOf(0.44f, 0f), floatArrayOf(0.14f, 0.82f), floatArrayOf(0.1f, 0.86f), floatArrayOf(0.02f, 0.84f)), 20, false)
+        col = c(255, 110, 20) * 2.2f; at(z = 0.84f) { cylinder(0.1f, 0.03f, 14) }
+        for (i in 0 until 5) { col = c(255, 120, 30) * 1.8f; push(); translate(0f, 0f, 0.1f + i * 0.14f); rotZ(i * 1.3f); tube(listOf(Vec3(0.3f - i * 0.05f, 0f, 0f), Vec3(0.26f - i * 0.05f, 0.1f, 0.08f)), 0.012f, 4); pop() }
+    }.build()
+
+    private fun ammonite() = PM().apply {
+        col = c(176, 150, 110)
+        val path = ArrayList<Vec3>(); for (i in 0..30) { val a = i * 0.28f; val r = 0.04f + 0.012f * i; path.add(Vec3(cos(a) * r, 0f, 0.2f + sin(a) * r)) }
+        tube(path, 0.05f, 8, false, null) { 0.5f + 0.9f * it }
+        col = c(120, 100, 70); push(); translate(0f, 0f, 0.0f); cylinder(0.2f, 0.06f, 14); pop()
+    }.build()
+
+    // ---------------------------------------------------------------- tool shop
+    private fun boltProp() = PM().apply {
+        col = c(168, 172, 182); cylinder(0.3f, 0.12f, 6); at(z = 0.12f) { cylinder(0.22f, 0.04f, 6, 0.2f) }
+        col = c(130, 134, 144); at(z = 0.1f) { cylinder(0.09f, 0.5f, 12) }
+        col = c(100, 104, 114); for (k in 0 until 7) at(z = 0.14f + k * 0.06f) { torus(0.09f, 0.012f, 12, 4) }
+    }.build()
+
+    private fun toolbox() = PM().apply {
+        col = c(214, 40, 36); push(); translate(0f, 0f, 0.2f); box(0.78f, 0.4f, 0.4f); pop()
+        col = c(180, 30, 28); push(); translate(0f, 0f, 0.42f); box(0.8f, 0.42f, 0.04f); pop()
+        col = c(190, 194, 204); tube(listOf(Vec3(-0.2f, 0f, 0.44f), Vec3(-0.18f, 0f, 0.62f), Vec3(0.18f, 0f, 0.62f), Vec3(0.2f, 0f, 0.44f)), 0.02f, 6)
+        col = c(250, 214, 40); push(); translate(0f, -0.21f, 0.28f); box(0.14f, 0.02f, 0.06f); pop()
+    }.build()
+
+    private fun wrench() = PM().apply {
+        col = c(176, 180, 190)
+        push(); translate(0f, 0f, 0.4f); box(0.1f, 0.04f, 0.8f); pop()
+        at(z = 0.82f) { torus(0.1f, 0.04f, 16, 6) }
+        col = c(230, 40, 36); push(); translate(0f, 0f, 0.15f); box(0.115f, 0.05f, 0.28f); pop()
+    }.build()
+
+    private fun hammerProp() = PM().apply {
+        col = c(170, 110, 60); cylinder(0.04f, 0.72f, 10)
+        col = c(70, 74, 86); push(); translate(0f, 0f, 0.72f); box(0.34f, 0.12f, 0.14f); pop()
+        col = c(230, 40, 36); push(); translate(0f, 0f, 0.05f); cylinder(0.045f, 0.18f, 10); pop()
+    }.build()
+
+    private fun gearProp() = PM().apply {
+        col = c(150, 156, 168)
+        push(); translate(0f, 0f, 0.4f); rotX((PI / 2).toFloat()); cylinder(0.3f, 0.1f, 24)
+        for (k in 0 until 12) { push(); rotZ(k * (PI / 6).toFloat()); translate(0.33f, 0f, 0f); box(0.12f, 0.1f, 0.1f); pop() }
+        col = c(60, 64, 76); cylinder(0.1f, 0.12f, 14); pop()
+        col = c(100, 104, 114); push(); translate(0f, 0f, 0.0f); cylinder(0.04f, 0.4f, 8); pop()
+    }.build()
+
+    // ---------------------------------------------------------------- lava
+    private fun emberSpire() = PM().apply {
+        col = c(40, 30, 34); cone(0.26f, 0.9f, 7)
+        col = c(255, 100, 20) * 2.4f; at(z = 0.62f) { cone(0.08f, 0.3f, 7) }
+        for (k in 0 until 3) { col = c(255, 120, 30) * 1.9f; push(); rotZ(k * 2.1f); translate(0.1f, 0f, 0.08f); box(0.02f, 0.02f, 0.3f); pop() }
+    }.build()
+
+    private fun lavaRocks() = PM().apply {
+        for (i in 0 until 4) { val a = i * 1.6f; col = c(38, 28, 32); push(); translate(cos(a) * 0.15f, sin(a) * 0.15f, 0f); rotZ(a); scale(0.7f + 0.2f * (i % 2), 1f, 1f + 0.3f * i); cone(0.16f, 0.5f, 6); pop() }
+        col = c(255, 100, 20) * 2.2f; for (k in 0 until 6) { push(); translate(cos(k * 1.1f) * 0.2f, sin(k * 1.1f) * 0.2f, 0.04f); sphere(0.03f, 6, 4); pop() }
+    }.build()
+
+    private fun obsidianCrystal() = PM().apply {
+        col = c(24, 18, 28); cylinder(0.14f, 0.6f, 6, 0.1f); at(z = 0.6f) { cone(0.1f, 0.3f, 6) }
+        col = c(255, 90, 30) * 1.7f; push(); translate(0.1f, 0f, 0.0f); box(0.02f, 0.02f, 0.6f); pop()
+        col = c(40, 26, 34); push(); translate(0.22f, 0.1f, 0f); rotZ(0.6f); cylinder(0.08f, 0.38f, 6, 0.05f); pop()
+    }.build()
+
+    private fun brazier() = PM().apply {
+        col = c(46, 38, 40); cylinder(0.04f, 0.4f, 8); at(z = 0.4f) { cylinder(0.24f, 0.1f, 14, 0.16f) }
+        col = c(255, 90, 20) * 2.6f; at(z = 0.5f) { cone(0.16f, 0.4f, 8) }
+        col = c(255, 190, 50) * 2.8f; at(z = 0.52f) { cone(0.09f, 0.3f, 8) }
     }.build()
 }

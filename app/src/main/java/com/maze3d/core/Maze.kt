@@ -93,12 +93,12 @@ class Maze(val mesh: CellMesh, seed: Long) {
         // size the marble from the narrow cells, ignoring a few extreme outliers
         val lens = FloatArray(edgeCount) { e -> (mesh.vertices[edgeA[e]] - mesh.vertices[edgeB[e]]).length() }
         val sortedLens = lens.sortedArray()
-        val narrow = sortedLens[(edgeCount * 0.05f).toInt()]
-        val r0 = minOf(cellSize * 0.235f, narrow * 0.27f)          // a slightly smaller ball and thinner walls leave ~30% more room to slide sideways
-        val wh = minOf(cellSize * 0.065f, narrow * 0.075f)
+        val narrow = sortedLens[(edgeCount * 0.12f).toInt()]
+        val r0 = minOf(cellSize * 0.225f, narrow * 0.23f)          // a slightly smaller ball and thinner walls leave ~30% more room to slide sideways
+        val wh = minOf(cellSize * 0.06f, narrow * 0.065f)
         wallHalfThickness = wh
         // a passage must be wide enough for the marble between two walls; narrower ones are opened only as a last resort
-        val minPassage = 2f * r0 * 1.15f + 2f * wh
+        val minPassage = 2f * r0 * 1.5f + 2f * wh
 
         // Randomised depth-first search carve (iterative). Narrow edges are skipped; leftovers are bridged afterwards.
         val visited = BooleanArray(n)
@@ -139,7 +139,7 @@ class Maze(val mesh: CellMesh, seed: Long) {
         // marble: the narrowest open passage decides the largest size that still fits
         var minOpen = Float.MAX_VALUE
         for (e in 0 until edgeCount) if (open[e]) minOpen = minOf(minOpen, lens[e])
-        marbleRadius = minOf(r0, maxOf(r0 * 0.62f, (minOpen - 2f * wh) * 0.5f / 1.12f))
+        marbleRadius = minOf(r0, maxOf(r0 * 0.62f, (minOpen - 2f * wh) * 0.5f / 1.4f))
 
         links = Array(n) { c ->
             val l = ArrayList<Int>(4)

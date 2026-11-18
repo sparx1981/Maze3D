@@ -35,7 +35,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 var tile: Vec3? = null
                 if (tiles) { val dd = pt - maze.centers[c]; tile = Vec3((dd dot maze.axisU[c]) + 0.5f, (dd dot maze.axisV[c]) + 0.5f, c.toFloat()) }
                 // glowing walls light the floor beside them
-                val tint = when (pal.themeId) { 11 -> (pal.wallTop ?: pal.wall) * 0.20f; 9 -> pal.wall * 0.22f + (pal.wall2) * 0.08f; else -> Vec3.ZERO }
+                val tint = when (pal.themeId) { 17 -> (pal.wallTop ?: pal.wall) * 0.12f; 11 -> (pal.wallTop ?: pal.wall) * 0.20f; 9 -> pal.wall * 0.22f + (pal.wall2) * 0.08f; else -> Vec3.ZERO }
                 val lightOn = tint * exp(-d / (cs * 0.32f))
                 base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
             }
@@ -473,7 +473,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
                 placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
-                if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11) addLamp(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
+                if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
             }
         }
@@ -492,7 +492,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
             placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
             obstacles.add(Obstacle(c, p, size * 0.4f))
-            if (pal.themeId == 9 || pal.themeId == 11) addLamp(p + surface.normal(p) * (size * 0.55f))
+            if (pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + surface.normal(p) * (size * 0.55f))
             deads++
         }
         // 3. landmarks floating around the shape

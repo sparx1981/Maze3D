@@ -88,6 +88,9 @@ class Marble(private val maze: Maze) {
     /** Adds an outside push (a hammer blow). */
     fun kick(v: Vec3) { velocity += v }
 
+    /** 0..1 slipperiness (oil slick): cuts rolling drag so the ball keeps sliding. */
+    var slick = 0f
+
     fun reset(at: Int = maze.start) {
         cell = at
         position = maze.centers[cell] + surface.normal(maze.centers[cell]) * radius
@@ -135,6 +138,7 @@ class Marble(private val maze: Maze) {
             drag += w * 3.4f
             speedCap -= w * 2.4f
         }
+        drag *= 1f - 0.82f * slick
         velocity *= exp(-drag * h)
         val maxSpeed = maze.cellSize * speedCap
         val sp = velocity.length()

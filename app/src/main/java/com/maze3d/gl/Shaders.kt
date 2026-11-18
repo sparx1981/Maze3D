@@ -11,6 +11,8 @@ uniform mat4 uModel;
 uniform float uGrowT;
 uniform float uTime;
 uniform float uDoorMode;   // 1 = door mesh: aDelay is the phase of its open/close cycle
+uniform float uShell;      // grass shells: how far up the blade this pass is (0 = the ground itself)
+uniform float uShellH;
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNrm;
 layout(location=2) in vec3 aCol;
@@ -31,7 +33,7 @@ void main() {
         float s = 0.5 + 0.5 * sin(1.15 * uTime + aDelay * 6.2831853);
         g = smoothstep(0.4, 0.8, s) * smoothstep(0.0, 0.6, uGrowT);
     }
-    vec3 p = aPos + aLift * g;
+    vec3 p = aPos + aLift * g + aNrm * (uShell * uShellH);
     vec4 w = uModel * vec4(p, 1.0);
     vWorld = w.xyz;
     vNrm = mat3(uModel) * aNrm;
@@ -140,6 +142,7 @@ uniform float uLampMode;     // 1 = each lamp takes one of the four spore colour
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uSandOn;     // 1 = sand / mud height field is bound
+uniform float uShell;
 uniform sampler2D uSandTex;
 uniform vec4 uSandP;       // x = texels per cell, y = tile size in texels (with gutter), z = tiles per atlas row
 uniform vec2 uSandAtlas;
@@ -357,6 +360,16 @@ void main() {
         albedo *= 0.78 + 0.4 * blade * fade3(P) + 0.2 * (1.0 - fade3(P));
         hgt = (blade - 0.5) * 0.0006 * fade3(P);
         rough = 0.92;
+        if (uShell > 0.0) {                                  // one layer of the short grass: each blade is a thin tapering column
+            vec2 gq = vec2(dot(P, vec3(150.0, 85.0, 120.0)), dot(P, vec3(-80.0, 140.0, 95.0)));
+            vec2 gc = floor(gq), gf = fract(gq) - 0.5;
+            float bh = 0.4 + 0.6 * hash21(gc + 3.7);
+            vec2 off = (vec2(hash21(gc + 1.3), hash21(gc + 8.1)) - 0.5) * 0.5;
+            if (uShell > bh || length(gf - off) > 0.46 * (1.0 - 0.75 * uShell / bh)) discard;
+            albedo *= 0.45 + 0.85 * uShell;                   // darker at the root, brighter at the tip
+            albedo = mix(albedo, albedo * vec3(1.15, 1.1, 0.8), uShell * 0.5);
+            hgt = 0.0; rough = 0.7;
+        }
     } else if (uMat == 11) {    // space hull: panel seams, rivets and lit windows
         vec4 s1 = panels(P.yz), s2 = panels(P.xz), s3 = panels(P.xy);
         vec4 pn = s1 * tw.x + s2 * tw.y + s3 * tw.z;
@@ -431,6 +444,56 @@ void main() {
         albedo = mix(albedo * 0.4, lcol * (0.5 + 0.45 * lc), 0.9);
         hgt = (lb - 0.5) * 0.0012 + (lc - 0.5) * 0.0005;
         rough = 0.82;
+    } else if (uMat == 25) {    // toy world: a studded baseplate in bright primary patches
+        vec2 q = vec2(dot(P, vec3(34.0, 20.0, 28.0)), dot(P, vec3(-18.0, 33.0, 22.0)));
+        vec2 fp = fract(q) - 0.5;
+        float stud = smoothstep(0.36, 0.30, length(fp));
+        float ring = smoothstep(0.30, 0.26, length(fp)) * smoothstep(0.16, 0.2, length(fp)) * 0.0;
+        float hp = hash21(floor(q * 0.18));
+        vec3 pcol = hp < 0.25 ? vec3(0.9, 0.12, 0.1) : hp < 0.5 ? vec3(0.1, 0.35, 0.9) : hp < 0.75 ? vec3(0.98, 0.78, 0.08) : vec3(0.1, 0.65, 0.25);
+        albedo = mix(albedo, pcol * 0.8, 0.55);
+        albedo *= 0.88 + 0.22 * stud;
+        hgt = stud * 0.0022 + 0.0002 * (1.0 - stud);
+        rough = 0.28; coat = 0.7;
+    } else if (uMat == 26) {    // craft felt with stitching
+        vec2 q = vec2(dot(P, vec3(30.0, 18.0, 24.0)), dot(P, vec3(-16.0, 29.0, 20.0)));
+        float fuzz = vnoise(q * 9.0) * 0.6 + vnoise(q * 23.0) * 0.4;
+        float weave = 0.5 + 0.5 * sin(q.x * 40.0) * sin(q.y * 40.0);
+        albedo *= 0.8 + 0.3 * fuzz;
+        float lineX = smoothstep(0.04, 0.0, abs(fract(q.x * 0.35) - 0.5) - 0.45) * step(0.5, fract(q.y * 4.0));
+        float lineY = smoothstep(0.04, 0.0, abs(fract(q.y * 0.35) - 0.5) - 0.45) * step(0.5, fract(q.x * 4.0));
+        albedo = mix(albedo, vec3(0.92, 0.82, 0.62), max(lineX, lineY) * 0.85);
+        hgt = (fuzz - 0.5) * 0.0007 + weave * 0.0002;
+        rough = 0.97; coat = 0.0;
+    } else if (uMat == 27) {    // prehistoric ground: cracked ochre earth with pebbles
+        float a = vnoise(vec2(dot(P, vec3(36.0, 21.0, 29.0)), dot(P, vec3(-19.0, 34.0, 24.0))));
+        float b = vnoise(vec2(dot(P, vec3(120.0, 70.0, 95.0)), dot(P, vec3(-62.0, 110.0, 80.0))));
+        float crack = smoothstep(0.045, 0.0, abs(a - 0.5));
+        albedo *= 0.65 + 0.7 * b;
+        albedo = mix(albedo, albedo * vec3(0.5, 0.62, 0.35), smoothstep(0.55, 0.8, vnoise(vec2(dot(P, vec3(14.0, 8.0, 11.0)), dot(P, vec3(-8.0, 14.0, 9.0))))) * 0.6);
+        albedo *= 1.0 - 0.6 * crack;
+        hgt = (b - 0.5) * 0.0012 - crack * 0.0012;
+        rough = 0.9;
+    } else if (uMat == 28) {    // diamond-plate steel with oil stains
+        vec2 q = vec2(dot(P, vec3(44.0, 26.0, 36.0)), dot(P, vec3(-24.0, 42.0, 28.0)));
+        vec2 fp = fract(q) - 0.5;
+        float chk = mod(floor(q.x) + floor(q.y), 2.0);
+        vec2 sc = chk < 0.5 ? vec2(1.0, 3.2) : vec2(3.2, 1.0);
+        float bump = smoothstep(0.34, 0.2, length(fp * sc * 0.75));
+        float stain = smoothstep(0.55, 0.8, vnoise(vec2(dot(P, vec3(12.0, 7.0, 9.0)), dot(P, vec3(-6.0, 12.0, 8.0)))));
+        albedo *= 0.8 + 0.3 * bump;
+        albedo = mix(albedo, albedo * vec3(0.35, 0.33, 0.4), stain * 0.6);
+        hgt = bump * 0.0016;
+        metal = 0.85; rough = mix(0.33, 0.12, stain);
+    } else if (uMat == 29) {    // basalt veined with lava
+        float a = abs(vnoise(vec2(dot(P, vec3(30.0, 17.0, 24.0)), dot(P, vec3(-16.0, 28.0, 19.0)))) - 0.5);
+        float b = abs(vnoise(vec2(dot(P, vec3(78.0, 44.0, 62.0)), dot(P, vec3(-40.0, 72.0, 50.0)))) - 0.5);
+        float vein = max(smoothstep(0.06, 0.0, a), smoothstep(0.035, 0.0, b) * 0.7);
+        float rockN = vnoise(vec2(dot(P, vec3(160.0, 90.0, 130.0)), dot(P, vec3(-80.0, 150.0, 110.0))));
+        albedo *= 0.6 + 0.8 * rockN;
+        emit = vec3(1.0, 0.34, 0.05) * vein * (1.5 + 0.7 * sin(uTime * 1.4 + a * 30.0)) + vec3(0.4, 0.08, 0.0) * smoothstep(0.2, 0.0, a) * 0.4;
+        hgt = (rockN - 0.5) * 0.0010 - vein * 0.0014;
+        rough = 0.55;
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
         float vm = max(vCol.r, max(vCol.g, vCol.b));
         vec3 baseC = vm > 1.0 ? vCol / vm : vCol;                // keep the hue of a glowing colour instead of clipping it to white
@@ -867,7 +930,44 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         c = mix(c, c * 0.42, max(net * 0.85, rib));
         return shadeBall(pow(c, vec3(2.2)), 0.5, 0.0, vec3(0.0), 0.5, N, V);
     }
-    // 14: beach ball: six panels, white pole caps
+    if (uSkin == 14) {           // toy ball: glossy rubber in primary panels with white stars
+        float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
+        vec3 c = seg < 1.0 ? vec3(0.92, 0.12, 0.10) : seg < 2.0 ? vec3(0.98, 0.8, 0.08) : seg < 3.0 ? vec3(0.1, 0.4, 0.92) : seg < 4.0 ? vec3(0.92, 0.12, 0.10) : seg < 5.0 ? vec3(0.98, 0.8, 0.08) : vec3(0.1, 0.4, 0.92);
+        vec2 g = vec2(lon * 3.0, lat * 4.0); vec2 fp = fract(g) - 0.5;
+        float star = smoothstep(0.2, 0.12, length(fp) * (1.0 + 0.5 * abs(sin(atan(fp.y, fp.x) * 2.5)))) * step(0.5, hash21(floor(g)));
+        c = mix(c, vec3(0.97), star);
+        return shadeBall(pow(c, vec3(2.2)), 0.2, 0.0, vec3(0.0), 0.9, N, V);
+    }
+    if (uSkin == 15) {           // yarn ball: fuzzy wound strands
+        float w = dot(p, normalize(vec3(1.0, 2.0, 3.0))) * 34.0 + sin(dot(p, vec3(5.0, 3.0, 7.0))) * 2.0;
+        float w2 = dot(p, normalize(vec3(3.0, -1.0, 2.0))) * 30.0;
+        float st = 0.5 + 0.5 * sin(w);
+        vec3 c = mix(vec3(0.92, 0.28, 0.46), vec3(0.2, 0.7, 0.78), smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(w2 * 0.5 + fb3(p, 2.0) * 3.0)));
+        c *= 0.7 + 0.4 * st;
+        return shadeBall(pow(c, vec3(2.2)), 0.97, 0.0, vec3(0.0), 0.0, N, V);
+    }
+    if (uSkin == 16) {           // amber: honey glass with bubbles and a little dark inclusion
+        float t = fb3(p, 3.0);
+        vec3 c = mix(vec3(1.0, 0.55, 0.06), vec3(0.75, 0.3, 0.02), t);
+        float bub = step(0.93, hash21(floor(p.xy * 26.0) + floor(p.zx * 26.0))) * 0.5;
+        c = mix(c, vec3(1.0, 0.9, 0.5), bub);
+        float bug = smoothstep(0.12, 0.0, length((p - normalize(vec3(0.3, 0.2, 0.9))) * vec3(1.0, 2.2, 1.0)));
+        c = mix(c, vec3(0.08, 0.05, 0.02), bug * 0.9);
+        return shadeBall(pow(c, vec3(2.2)), 0.1, 0.0, vec3(0.55, 0.22, 0.02) * (0.25 + 0.3 * t), 1.0, N, V);
+    }
+    if (uSkin == 17) {           // ball bearing: polished chrome with a fine race line
+        float line = smoothstep(0.012, 0.0, abs(lat) - 0.004);
+        vec3 c = mix(vec3(0.82, 0.84, 0.88), vec3(0.3, 0.32, 0.36), line);
+        return shadeBall(c, 0.1, 1.0, vec3(0.0), 0.0, N, V);
+    }
+    if (uSkin == 18) {           // molten core: dark crust over glowing fissures
+        float f1 = abs(fb3(p * 2.2 + vec3(0.0, uTime * 0.03, 0.0), 1.6) - 0.5);
+        float f2 = abs(fb3(p * 4.5 + 7.0, 1.4) - 0.5);
+        float vein = max(smoothstep(0.07, 0.0, f1), smoothstep(0.045, 0.0, f2) * 0.7);
+        vec3 emit = vec3(1.0, 0.36, 0.06) * vein * (1.8 + 0.8 * sin(uTime * 2.0 + f1 * 20.0)) + vec3(0.5, 0.1, 0.0) * 0.08;
+        return shadeBall(vec3(0.02, 0.015, 0.015), 0.5, 0.0, emit, 0.5, N, V);
+    }
+    // 19: beach ball: six panels, white pole caps
     float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
     vec3 c = seg < 1.0 ? vec3(0.95, 0.15, 0.15) : seg < 2.0 ? vec3(1.0) : seg < 3.0 ? vec3(1.0, 0.85, 0.1) : seg < 4.0 ? vec3(1.0) : seg < 5.0 ? vec3(0.1, 0.45, 0.95) : vec3(1.0);
     float seamL = smoothstep(0.02, 0.0, abs(fract((lon / 6.2831853 + 0.5) * 6.0) - 0.5) - 0.48);

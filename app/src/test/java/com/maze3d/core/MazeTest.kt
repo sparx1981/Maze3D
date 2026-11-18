@@ -101,6 +101,19 @@ class MazeTest {
     }
 
     @Test
+    fun floorEffectsAreSafelyPlaced() {
+        for (kind in ShapeKind.values()) for (seed in 1L..4L) {
+            val maze = Maze(kind.createMesh(), seed)
+            val hz = Hazards(maze, Random(seed), false, false, fxRnd = Random(seed + 77))
+            assertTrue("${kind.label} has effects", hz.hasFx)
+            assertEquals(hz.fxKind.size, hz.fxCell.toSet().size)
+            for (c in hz.fxCell) assertTrue(c != maze.start && c != maze.goal && c !in maze.links[maze.start] && c !in maze.links[maze.goal])
+            for (i in hz.fxKind.indices) if (hz.fxKind[i] == Hazards.FX_CRUSHER || hz.fxKind[i] == Hazards.FX_CONVEYOR || hz.fxKind[i] == Hazards.FX_SEESAW)
+                assertEquals(2, maze.links[hz.fxCell[i]].size)
+        }
+    }
+
+    @Test
     fun hazardsAreSafelyPlaced() {
         for (kind in ShapeKind.values()) for (seed in 1L..5L) {
             val maze = Maze(kind.createMesh(), seed)
@@ -248,11 +261,11 @@ class MazeTest {
         assertTrue(p.difficultyUnlocked(Difficulty.EASY) && !p.difficultyUnlocked(Difficulty.MEDIUM))
         val u = p.record("sand", ShapeKind.SPHERE, Difficulty.EASY)
         assertEquals("mud", u.surface); assertEquals("sand", u.ball); assertEquals(Difficulty.MEDIUM, u.difficulty)
-        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(14) && !p.difficultyUnlocked(Difficulty.HARD))
+        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(19) && !p.difficultyUnlocked(Difficulty.HARD))
         p.record("classic", ShapeKind.SPHERE, Difficulty.MEDIUM)
         assertTrue(p.difficultyUnlocked(Difficulty.HARD) && p.shapeUnlocked(ShapeKind.CAPSULE))
         assertEquals(2, Progress(store).completed)                 // survives a restart
-        repeat(20) { p.record("t0", ShapeKind.SPHERE, Difficulty.EASY) }
+        repeat(30) { p.record("t0", ShapeKind.SPHERE, Difficulty.EASY) }
         assertTrue(Progress.SURFACE_CHAIN.all { p.surfaceUnlocked(it) } && ShapeKind.values().all { p.shapeUnlocked(it) })
     }
 

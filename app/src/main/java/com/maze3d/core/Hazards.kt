@@ -8,7 +8,7 @@ import kotlin.math.sin
  * Per-level moving hazards: sliding doors on open passages and floor holes that open and close.
  * The timing formulas are mirrored in the shaders (SCENE_VS for doors, HOLE_FS for holes).
  */
-class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false) {
+class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false, fxRnd: Random? = null) {
     val doorEdges: IntArray
     val doorPhase: FloatArray
     val holeCells: IntArray
@@ -28,6 +28,11 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     val swingDir: Array<Vec3>
     val swingPhase: FloatArray
     private val swingIndex = IntArray(maze.cellCount) { -1 }
+    /** Floor effects: spring pads, oil slicks, conveyor belts, crushers, paddle sweepers and seesaws (kinds FX_*). */
+    val fxKind: IntArray
+    val fxCell: IntArray
+    val fxDir: Array<Vec3>
+    val fxPhase: FloatArray
     val doorSet = HashSet<Int>()
     val holeRadius = maze.cellSize * 0.40f
 
@@ -126,7 +131,46 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         swingDir = Array(sks.size) { dirAt(sks[it]) }
         swingPhase = FloatArray(sks.size) { rnd.nextFloat() }
         swingCells.forEachIndexed { i, c -> swingIndex[c] = i }
+
+        val fk = ArrayList<Int>(); val fc = ArrayList<Int>(); val fd = ArrayList<Vec3>()
+        if (fxRnd != null) {
+            val busy = ArrayList<Vec3>()
+            for (c in taken) busy.add(maze.centers[c])
+            for (c in bridgeCells) busy.add(maze.centers[c]); for (c in hammerCells) busy.add(maze.centers[c])
+            for (c in swingCells) { busy.add(maze.centers[c]); for (o in maze.links[c]) busy.add(maze.centers[o]) }
+            val want = ((maze.cellCount / 55f) * scale).toInt().coerceIn(3, 9)
+            val placed = ArrayList<Vec3>()
+            val order = ArrayList<Int>().apply { repeat(2) { addAll((0 until FX_KINDS).shuffled(fxRnd)) } }
+            val cells = (0 until maze.cellCount).shuffled(fxRnd)
+            for (kind in order) {
+                if (fk.size >= want) break
+                for (c in cells) {
+                    if (c in protectedCells || c in fc) continue
+                    val p = maze.centers[c]
+                    if (busy.any { (it - p).length() < maze.cellSize * 1.7f } || placed.any { (it - p).length() < maze.cellSize * 2.3f }) continue
+                    var dir = Vec3(1f, 0f, 0f)
+                    if (kind == FX_CONVEYOR || kind == FX_CRUSHER || kind == FX_SEESAW) {
+                        if (maze.links[c].size != 2) continue
+                        val a = maze.centers[maze.links[c][0]]; val b = maze.centers[maze.links[c][1]]
+                        if (((p - a).normalized() dot (b - p).normalized()) < 0.9f) continue
+                        dir = (b - a).normalized()
+                        if (kind == FX_CONVEYOR && fxRnd.nextBoolean()) dir = dir * -1f
+                    } else if (kind == FX_SWEEPER && maze.links[c].size < 3 && fxRnd.nextInt(3) != 0) continue
+                    fk.add(kind); fc.add(c); fd.add(dir); placed.add(p)
+                    break
+                }
+            }
+        }
+        fxKind = fk.toIntArray(); fxCell = fc.toIntArray(); fxDir = fd.toTypedArray()
+        fxPhase = FloatArray(fxKind.size) { (fxRnd ?: rnd).nextFloat() }
     }
+
+    val hasFx get() = fxKind.isNotEmpty()
+    private fun fxPh(i: Int, w: Float, t: Float) = w * t + fxPhase[i] * 2 * PI.toFloat()
+    /** 0 (raised) .. 1 (slammed down) for crusher [i]. */
+    fun crushH(i: Int, t: Float) = smooth(0.5f, 0.8f, sin(fxPh(i, CRUSH_W, t)))
+    fun sweepAngle(i: Int, t: Float) = fxPh(i, SWEEP_W, t)
+    fun seesawAngle(i: Int, t: Float) = SEESAW_MAX * sin(fxPh(i, SEESAW_W, t))
 
     val hasSwings get() = swingCells.isNotEmpty()
     fun swingAt(cell: Int) = swingIndex[cell]
@@ -174,6 +218,8 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         const val HOLE_W = 0.9f
         const val BRIDGE_W = 1.1f; const val BRIDGE_AMP = 0.07f; const val BOARD_W = 1.5f; const val BOARDS = 7
         const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
+        const val FX_BUMPER = 0; const val FX_OIL = 1; const val FX_CONVEYOR = 2; const val FX_CRUSHER = 3; const val FX_SWEEPER = 4; const val FX_SEESAW = 5; const val FX_KINDS = 6
+        const val CRUSH_W = 1.9f; const val SWEEP_W = 1.35f; const val SWEEP_REACH = 0.44f; const val SEESAW_W = 1.0f; const val SEESAW_MAX = 0.22f
         const val SWING_AMP = 0.7f; const val SWING_W = 0.95f; const val SWING_DISC = 0.5f; const val SWING_PIT = 1.15f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)

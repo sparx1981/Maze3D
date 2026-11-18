@@ -963,7 +963,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val dm = com.maze3d.core.Difficulty.values()
         val surfacesOpen = com.maze3d.core.Progress.SURFACE_CHAIN.count { progress.surfaceUnlocked(it) }
         val shapesOpen = ShapeKind.values().count { progress.shapeUnlocked(it) }
-        val ballsOpen = (0..14).count { progress.ballUnlocked(it) }
+        val ballsOpen = (0..19).count { progress.ballUnlocked(it) }
         menuStats.addView(settingsCard("Play",
             statRow("Play time", com.maze3d.core.Stats.duration(stats.get("playSeconds"))),
             statRow("Sessions", n(stats.get("sessions"))),
@@ -972,12 +972,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             statRow("Ball resets", n(stats.get("resets"))),
             statRow("Falls", n(stats.get("falls"))),
             statRow("Hammer hits", n(stats.get("hammer"))),
+            statRow("Spring pad launches", n(stats.get("springs"))),
+            statRow("Sweeper hits", n(stats.get("sweeper"))),
             statRow("Checkpoints reached", n(stats.get("checkpoints")))), gap)
         menuStats.addView(settingsCard("Unlocked",
             statRow("Surfaces", "$surfacesOpen / ${com.maze3d.core.Progress.SURFACE_CHAIN.size}"),
             statRow("Shapes", "$shapesOpen / ${ShapeKind.values().size}"),
             statRow("Difficulties", "${dm.count { progress.difficultyUnlocked(it) }} / ${dm.size}"),
-            statRow("Balls", "$ballsOpen / 15")), gap)
+            statRow("Balls", "$ballsOpen / 20")), gap)
         val played = stats.surfacesPlayed()
         val rows = if (played.isEmpty()) listOf(TextView(this).apply { text = "No levels played yet."; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 13f }) else
             played.mapIndexed { i, (key, count) ->
@@ -1038,7 +1040,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var stats: com.maze3d.core.Stats
     private lateinit var progPrefsRef: android.content.SharedPreferences
     private var lastStatFlush = 0L
-    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall")
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
 

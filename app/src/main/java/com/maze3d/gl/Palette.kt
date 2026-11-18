@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24
+    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24; const val TOY = 25; const val FELT = 26; const val ROCK = 27; const val PLATE = 28; const val LAVA = 29
 }
 
 /** Wall cross-sections. */
@@ -120,7 +120,27 @@ class Palette(
             Palette("Fall", c(110, 56, 20), Mat.LEAF, 0.85f, c(150, 64, 16), Mat.HEDGE, 0.9f,
                 c(255, 176, 84), c(96, 44, 30), c(255, 150, 40), c(255, 214, 80),
                 wall2 = c(130, 56, 18), wallTop = c(196, 104, 26), profile = Profile.TUBE,
-                backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 12)
+                backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 12),
+            // 13 Toy world: a blue studded baseplate, chunky red and yellow bricks
+            Palette("Toy world", c(34, 104, 214), Mat.TOY, 0.3f, c(226, 48, 40), Mat.ENAMEL, 0.22f,
+                c(255, 214, 120), c(120, 60, 150), c(255, 205, 30), c(40, 200, 90),
+                wall2 = c(250, 200, 30), profile = Profile.BLOCK, stripes = true, knobs = true, backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 13),
+            // 14 Craft: cream felt stitched with thread, stuffed fabric walls with buttons at the joints
+            Palette("Craft", c(236, 212, 168), Mat.FELT, 0.95f, c(214, 82, 116), Mat.FELT, 0.95f,
+                c(250, 228, 198), c(150, 104, 90), c(255, 120, 150), c(80, 170, 200),
+                wall2 = c(80, 160, 190), profile = Profile.TUBE, stripes = true, knobs = true, backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 14),
+            // 15 Prehistoric: cracked ochre ground, boulders and moss, a hot jungle sky
+            Palette("Prehistoric", c(128, 94, 56), Mat.ROCK, 0.85f, c(150, 140, 118), Mat.STONE, 0.85f,
+                c(176, 214, 126), c(28, 48, 28), c(255, 150, 40), c(60, 190, 120),
+                wall2 = c(98, 124, 70), profile = Profile.BLOCK, stripes = true, knobs = true, backdrop = Backdrop.SHAFTS, wallMetal = 0f, themeId = 15),
+            // 16 Tool shop: diamond-plate steel floor, hazard-orange and black beams
+            Palette("Tool shop", c(122, 128, 138), Mat.PLATE, 0.35f, c(255, 142, 18), Mat.ENAMEL, 0.3f,
+                c(150, 156, 168), c(36, 40, 48), c(255, 142, 18), c(255, 214, 40),
+                wall2 = c(38, 40, 46), profile = Profile.BLOCK, stripes = true, knobs = true, backdrop = Backdrop.STUDIO, wallMetal = 0.3f, themeId = 16),
+            // 17 Lava: black basalt veined with fire, obsidian walls with glowing edges
+            Palette("Lava", c(18, 12, 14), Mat.LAVA, 0.6f, c(30, 22, 24), Mat.ENAMEL, 0.15f,
+                c(46, 8, 4), c(168, 44, 8), c(255, 110, 20), c(255, 200, 60),
+                wall2 = c(36, 24, 26), wallTop = c(255, 100, 20), profile = Profile.BLOCK, backdrop = Backdrop.STARS, wallMetal = 0f, glow = 1.3f, themeId = 17)
         )
 
         val all = classic + themes
