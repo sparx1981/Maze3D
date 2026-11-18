@@ -4,5 +4,6 @@ package com.maze3d.core
 enum class Difficulty(val label: String, val scale: Float, val blurb: String) {
     EASY("Easy", 0.55f, "Small maze, about a minute"),
     MEDIUM("Medium", 1f, "Standard maze, a few minutes"),
-    HARD("Hard", 1.75f, "Huge maze, several minutes")
+    HARD("Hard", 1.75f, "Huge maze, several minutes"),
+    ULTRA("Ultra", 1.75f, "Hard-sized, and no hints")
 }

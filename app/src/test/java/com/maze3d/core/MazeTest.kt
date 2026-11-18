@@ -286,4 +286,18 @@ class MazeTest {
         assertEquals(75f, all.first { it.surface == "sand" }.seconds)
         assertEquals("1:15", BestTimes.format(75f))
     }
+
+    @Test
+    fun statsAccumulateAndRank() {
+        val mem = HashMap<String, String>()
+        val store = object : ProgressStore { override fun get(key: String) = mem[key]; override fun put(key: String, value: String) { mem[key] = value } }
+        val st = Stats(store)
+        st.add("distance", 10.0); st.add("distance", 5.5)
+        st.add("started:sand", 1.0); st.add("started:t3", 3.0)
+        assertEquals(15.5, st.get("distance"), 1e-6)
+        st.flush()
+        assertEquals(15.5, Stats(store).get("distance"), 1e-6)
+        assertEquals(listOf("t3", "sand"), Stats(store).surfacesPlayed().map { it.first })
+        assertEquals("1h 2m", Stats.duration(3725.0))
+    }
 }

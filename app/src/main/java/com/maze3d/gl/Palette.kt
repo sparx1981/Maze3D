@@ -16,7 +16,7 @@ object Mat {
 object Profile { const val ROUND = 0; const val SQUARE = 1; const val KERB = 2; const val TAPER = 3; const val TUBE = 4; const val BLOCK = 5; const val FLAT = 6 }
 
 /** Backdrop styles drawn behind the piece. */
-object Backdrop { const val STUDIO = 0; const val STARS = 1; const val SKY = 2; const val NEON = 3; const val BOKEH = 4; const val AURORA = 5; const val SHAFTS = 6 }
+object Backdrop { const val STUDIO = 0; const val STARS = 1; const val SKY = 2; const val NEON = 3; const val BOKEH = 4; const val AURORA = 5; const val SHAFTS = 6; const val CITY = 7 }
 
 /**
  * A "finish" or surface theme: floor and wall materials, wall shape and decoration, and the backdrop.
@@ -103,10 +103,10 @@ class Palette(
             Palette("Egyptian temple", c(216, 178, 120), Mat.SANDSTONE, 0.85f, c(206, 166, 106), Mat.STONE, 0.8f,
                 c(244, 156, 76), c(58, 28, 40), c(255, 206, 84), c(40, 170, 204),
                 wallTop = c(255, 204, 64), profile = Profile.BLOCK, backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 8),
-            // 9 Neon arcade: black grid floor, glowing neon tubes
-            Palette("Neon arcade", c(12, 8, 24), Mat.NEON, 0.2f, c(255, 60, 200), Mat.ENAMEL, 0.1f,
-                c(40, 12, 70), c(4, 2, 14), c(255, 60, 200), c(60, 255, 222),
-                wall2 = c(60, 220, 255), profile = Profile.TUBE, backdrop = Backdrop.NEON, wallMetal = 0f, glow = 2.6f, themeId = 9),
+            // 9 Neon city: cyberpunk night, wet black streets, hot magenta and cyan tubes, yellow accents
+            Palette("Neon city", c(10, 8, 20), Mat.NEON, 0.12f, c(66, 10, 52), Mat.ENAMEL, 0.1f,
+                c(24, 6, 48), c(2, 2, 10), c(252, 238, 10), c(0, 238, 255),
+                wall2 = c(8, 56, 66), wallTop = c(255, 40, 180), profile = Profile.BLOCK, stripes = true, backdrop = Backdrop.CITY, wallMetal = 0f, glow = 2.2f, themeId = 9),
             // 10 Jungle ruins: mossy floor, vine walls
             Palette("Jungle ruins", c(48, 94, 42), Mat.MOSS, 0.55f, c(74, 134, 52), Mat.ENAMEL, 0.55f,
                 c(50, 110, 60), c(6, 26, 12), c(196, 255, 126), c(255, 160, 40),

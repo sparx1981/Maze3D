@@ -10,7 +10,7 @@ interface ProgressStore { fun get(key: String): String?; fun put(key: String, va
 class Progress(private val store: ProgressStore) {
     @Volatile var completed = store.get("completed")?.toIntOrNull() ?: 0
         private set
-    @Volatile private var byDiff = (store.get("byDiff") ?: "0,0,0").split(",").mapNotNull { it.toIntOrNull() }.let { if (it.size == 3) it.toIntArray() else IntArray(3) }
+    @Volatile private var byDiff = (store.get("byDiff") ?: "0,0,0,0").split(",").mapNotNull { it.toIntOrNull() }.let { l -> IntArray(4) { l.getOrElse(it) { 0 } } }
     @Volatile private var balls: Set<String> = (store.get("balls") ?: "").split(",").filter { it.isNotEmpty() }.toSet()
 
     class Unlocked(val surface: String?, val shape: ShapeKind?, val difficulty: Difficulty?, val ball: String?) {
@@ -19,7 +19,7 @@ class Progress(private val store: ProgressStore) {
 
     fun surfaceUnlocked(key: String): Boolean { val i = SURFACE_CHAIN.indexOf(key); return i >= 0 && i < 2 + completed }
     fun shapeUnlocked(s: ShapeKind): Boolean { val i = SHAPE_CHAIN.indexOf(s); return i >= 0 && i < shapeCount() }
-    fun difficultyUnlocked(d: Difficulty) = when (d) { Difficulty.EASY -> true; Difficulty.MEDIUM -> completed >= 1; Difficulty.HARD -> byDiff[1] >= 1 }
+    fun difficultyUnlocked(d: Difficulty) = when (d) { Difficulty.EASY -> true; Difficulty.MEDIUM -> completed >= 1; Difficulty.HARD -> byDiff[1] >= 1; Difficulty.ULTRA -> byDiff[2] >= 1 }
     private fun shapeCount() = 2 + completed / 2
 
     /** Mazes still to finish before [key] opens (0 = open). */

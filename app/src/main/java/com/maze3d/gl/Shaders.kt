@@ -124,7 +124,7 @@ uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood,
 uniform float uRough;
 uniform float uMetal;
 uniform int uHoleN;
-uniform vec4 uHoleC[16];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
+uniform vec4 uHoleC[32];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
 uniform vec3 uFloor2;       // second floor colour for patterned themes (sRGB)
 uniform float uShadowOn;
 uniform vec3 uMarbleL;      // marble position (world) for its glow and contact shadow
@@ -134,7 +134,7 @@ uniform float uFog;         // distance haze density (chase view)
 uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the lighting
 uniform vec3 uLampCol;
 uniform float uHedgeSnow;   // 1 = snow dusts the hedges
-uniform vec4 uLamp[8];      // local-space lamp positions (xyz) and reach (w)
+uniform vec4 uLamp[12];      // local-space lamp positions (xyz) and reach (w)
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uSandOn;     // 1 = sand / mud height field is bound
@@ -273,7 +273,7 @@ float sandH(vec2 uv, float cell) {
 }
 
 void main() {
-    for (int i = 0; i < 16; i++) {                         // real holes: the floor is cut away
+    for (int i = 0; i < 32; i++) {                         // real holes: the floor is cut away
         if (i >= uHoleN) break;
         if (distance(vLocal, uHoleC[i].xyz) < uHoleC[i].w) discard;
     }
@@ -526,7 +526,7 @@ void main() {
     float occ = mix(1.0, 0.55 + 0.45 * sh, 0.6);  // shadowed areas also lose some specular sky light
     col += irradiance(N) * diffC * mix(1.0, 0.28, uNight) * mix(vec3(1.0), vec3(0.4, 0.55, 1.1), uNight) + spec * occ * mix(1.0, 0.3, uNight);
     if (uNight > 0.01) {                                      // lamps: soft blue pools of light around each post
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 12; i++) {
             if (uLamp[i].w <= 0.0) continue;
             vec3 dl = uLamp[i].xyz - vLocal;
             float dd = length(dl);
@@ -1641,7 +1641,7 @@ void main() {
         float band = smoothstep(0.52, 0.8, vUv.y) * (1.0 - smoothstep(0.8, 1.0, vUv.y)) * (0.4 + 0.6 * cur);
         c += mix(vec3(0.1, 1.0, 0.6), vec3(0.5, 0.3, 1.0), vUv.y) * band * 0.45;
         c += step(0.985, h21(floor(p * 90.0))) * 0.6 * (1.0 - smoothstep(0.3, 0.9, vUv.y) * 0.0);
-    } else {                                                    // light shafts through foliage
+    } else if (uTheme < 6.5) {                                  // light shafts through foliage
         float beam = 0.0;
         for (int i = 0; i < 4; i++) {
             float fi = float(i);
@@ -1650,6 +1650,26 @@ void main() {
         }
         c += vec3(0.75, 1.0, 0.5) * beam * 0.10 * smoothstep(0.2, 1.0, vUv.y);
         c += uTop * 0.18 * (1.0 - smoothstep(0.0, 0.6, v));
+    } else {                                                    // cyberpunk skyline: three layers of towers with lit windows and neon roof lines
+        c += mix(vec3(0.95, 0.10, 0.55), vec3(0.05, 0.65, 1.0), vUv.x) * 0.22 * exp(-abs(vUv.y - 0.30) * 4.5);
+        for (int i = 0; i < 3; i++) {
+            float fl = float(2 - i);
+            float x = p.x * (6.0 + 5.0 * fl) + fl * 7.3;
+            float id = floor(x), fx = fract(x);
+            float top = 0.24 + 0.26 * h21(vec2(id, fl + 3.0)) + 0.05 * fl;
+            float inside = step(vUv.y, top) * step(0.05, fx) * step(fx, 0.95);
+            vec3 col = mix(vec3(0.015, 0.015, 0.04), vec3(0.05, 0.03, 0.09), 1.0 - fl * 0.5);
+            vec2 w = vec2(fx * 7.0, vUv.y * (46.0 + 8.0 * fl));
+            vec2 wi = floor(w), wf = fract(w);
+            float win = step(0.52, h21(wi + id * 7.0 + fl * 3.0)) * step(abs(wf.x - 0.5), 0.28) * step(abs(wf.y - 0.5), 0.3);
+            float hh = h21(wi + id);
+            vec3 wc = hh < 0.4 ? vec3(1.0, 0.78, 0.28) : (hh < 0.7 ? vec3(0.2, 0.9, 1.0) : vec3(1.0, 0.2, 0.7));
+            col += wc * win * (0.95 - 0.22 * fl);
+            vec3 ne = h21(vec2(id, 9.0 + fl)) < 0.5 ? vec3(0.1, 0.9, 1.0) : vec3(1.0, 0.15, 0.7);
+            col += ne * smoothstep(0.008, 0.0, abs(vUv.y - top)) * 1.6 * inside;
+            c = mix(c, col, inside);
+        }
+        c += vec3(0.9, 0.2, 0.7) * 0.07 * vn(p * vec2(3.0, 9.0) + vec2(uTime * 0.05, 0.0));    // smog
     }
     c *= 1.0 - 0.6 * smoothstep(0.35, 1.05, v);                 // vignette
     c = pow(max(c, 0.0), vec3(1.0 / 2.2));

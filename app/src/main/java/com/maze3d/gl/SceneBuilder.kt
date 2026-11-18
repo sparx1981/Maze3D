@@ -34,7 +34,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val ao = 1f - 0.7f * exp(-d / (cs * 0.2f))
                 var tile: Vec3? = null
                 if (tiles) { val dd = pt - maze.centers[c]; tile = Vec3((dd dot maze.axisU[c]) + 0.5f, (dd dot maze.axisV[c]) + 0.5f, c.toFloat()) }
-                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)), Vec3.ZERO, -1f, tile)
+                // glowing walls light the floor beside them
+                val tint = when (pal.themeId) { 11 -> (pal.wallTop ?: pal.wall) * 0.20f; 9 -> pal.wall * 0.22f + (pal.wall2) * 0.08f; else -> Vec3.ZERO }
+                val lightOn = tint * exp(-d / (cs * 0.32f))
+                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
             }
             for (a in 0 until sub) for (b in 0 until sub) {
                 mb.quad(base[a * (sub + 1) + b], base[(a + 1) * (sub + 1) + b], base[(a + 1) * (sub + 1) + b + 1], base[a * (sub + 1) + b + 1])
@@ -56,7 +59,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         fun p(lat: Float, v: Float) { half.add(floatArrayOf(lat, v, 0f, 0f)) }
         when (kind) {
             Profile.SQUARE -> { ws = 1.15f; hs = 1f; p(1f, -0.08f); p(1f, 0.93f); p(0.95f, 0.985f); p(0.86f, 1f); p(0f, 1f) }
-            Profile.KERB -> { ws = 1.9f; hs = 0.5f; p(1f, -0.08f); p(1f, 0.22f); p(0.72f, 0.62f); p(0.4f, 0.9f); p(0.2f, 1f); p(0f, 1f) }
+            Profile.KERB -> { ws = 1.9f; hs = 0.85f; p(1f, -0.08f); p(1f, 0.22f); p(0.72f, 0.62f); p(0.4f, 0.9f); p(0.2f, 1f); p(0f, 1f) }
             Profile.TAPER -> { ws = 1.05f; hs = 1.55f; p(1f, -0.08f); p(0.82f, 0.3f); p(0.6f, 0.62f); p(0.34f, 0.86f); p(0.1f, 1f); p(0f, 1f) }
             Profile.TUBE -> {
                 ws = 1.15f; hs = 0.95f
@@ -64,7 +67,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 for (k in 1..6) { val th = (PI / 2 * k / 6).toFloat(); p(cos(th), 0.42f + 0.58f * sin(th)) }
             }
             Profile.BLOCK -> { ws = 1.35f; hs = 0.9f; p(1f, -0.08f); p(1f, 0.9f); p(0.96f, 0.975f); p(0.9f, 1f); p(0f, 1f) }
-            Profile.FLAT -> { ws = 2.1f; hs = 0.22f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
+            Profile.FLAT -> { ws = 2.1f; hs = 0.8f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
             else -> {                                   // ROUND
                 val rr = 0.62f
                 p(1f, -0.08f); p(1f, 1f - rr * 0.4f)
@@ -220,12 +223,12 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     /** Shaft wall, glowing bottom and hazard rim for each hole (see Shaders.PIT_FS for the vertex encoding). */
-    fun pits(cells: IntArray, phases: FloatArray, radius: Float, depth: Float): MeshBuilder {
+    fun pits(cells: IntArray, phases: FloatArray, radius: Float, depth: Float, centres: List<Vec3>? = null): MeshBuilder {
         val mb = MeshBuilder()
         val seg = 28
         for (i in cells.indices) {
             val c = cells[i]
-            val ctr = maze.centers[c]
+            val ctr = centres?.get(i) ?: maze.centers[c]
             val n = surface.normal(ctr)
             var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
             t1 = (t1 - n * (t1 dot n)).normalized()
@@ -467,7 +470,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
                 placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
-                if (pal.themeId == 7 || pal.themeId == 11) lamps.add(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
+                if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11) lamps.add(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
             }
         }
@@ -486,6 +489,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
             placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
             obstacles.add(Obstacle(c, p, size * 0.4f))
+            if (pal.themeId == 9 || pal.themeId == 11) lamps.add(p + surface.normal(p) * (size * 0.55f))
             deads++
         }
         // 3. landmarks floating around the shape

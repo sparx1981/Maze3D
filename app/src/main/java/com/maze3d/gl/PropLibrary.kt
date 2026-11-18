@@ -29,7 +29,7 @@ object PropLibrary {
         6 -> ThemeProps(flask(), beaker(), testTubes(), atom())
         7 -> ThemeProps(lampPost(), snowman(), snowPine(), snowPine(), iceCrystals())
         8 -> ThemeProps(obelisk(), canopicJar(), sphinx(), pyramidProp())
-        9 -> ThemeProps(neonStar(), arcadeStick(), neonRing(), neonPalm())
+        9 -> ThemeProps(neonSign(), terminal(), hologram(), cityTower(), neonRing(), neonStar())
         10 -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
         11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), sporePod(), glowBell())
         else -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
@@ -426,6 +426,63 @@ object PropLibrary {
         col = c(255, 140, 40) * 2.0f; tube(listOf(Vec3(0f, 0f, 0f), Vec3(0.05f, 0f, 0.4f), Vec3(0.02f, 0f, 0.75f)), 0.03f, 8)
         for (i in 0 until 6) { val a = i * 1.047f; val p = ArrayList<Vec3>(); for (k in 0..6) { val t = k / 6f; p.add(Vec3(0.02f + cos(a) * 0.38f * t, sin(a) * 0.38f * t, 0.75f + 0.18f * sin(t * 2.2f) - 0.2f * t * t)) }
             col = c(60, 255, 150) * 2.2f; tube(p, 0.02f, 6, false, null) { 1f - it * 0.5f } }
+    }.build()
+
+    // ---------------------------------------------------------------- neon city (cyberpunk)
+    private val PINK = c(255, 28, 170)
+    private val NCYAN = c(0, 238, 255)
+    private val NYEL = c(252, 238, 10)
+
+    private fun neonSign() = PM().apply {
+        col = c(20, 22, 30); cylinder(0.035f, 0.5f, 8)
+        col = c(14, 14, 22); push(); translate(0f, 0f, 0.78f); box(0.46f, 0.05f, 0.62f); pop()
+        col = PINK * 3.2f; push(); translate(0f, -0.03f, 0.95f); box(0.4f, 0.02f, 0.05f); pop()
+        col = NCYAN * 3.2f; push(); translate(0f, -0.03f, 0.8f); box(0.3f, 0.02f, 0.05f); pop()
+        col = NYEL * 3.0f; push(); translate(0f, -0.03f, 0.65f); box(0.36f, 0.02f, 0.05f); pop()
+        col = NCYAN * 3.2f; push(); translate(-0.19f, -0.03f, 0.8f); box(0.04f, 0.02f, 0.5f); pop()
+        col = PINK * 3.2f; push(); translate(0.19f, -0.03f, 0.78f); box(0.04f, 0.02f, 0.4f); pop()
+    }.build()
+
+    private fun terminal() = PM().apply {
+        col = c(24, 26, 38); push(); translate(0f, 0f, 0.42f); box(0.5f, 0.34f, 0.84f); pop()
+        col = NCYAN * 2.4f; push(); translate(0f, -0.175f, 0.62f); box(0.36f, 0.012f, 0.22f); pop()
+        col = PINK * 2.8f; push(); translate(-0.16f, -0.175f, 0.36f); box(0.05f, 0.012f, 0.18f); pop()
+        col = NYEL * 2.8f; push(); translate(0f, -0.175f, 0.36f); box(0.18f, 0.012f, 0.04f); pop()
+        col = c(0, 255, 160) * 2.6f; push(); translate(0.16f, -0.175f, 0.36f); box(0.05f, 0.012f, 0.18f); pop()
+        col = NCYAN * 3f; push(); translate(0f, -0.175f, 0.82f); box(0.5f, 0.02f, 0.02f); pop()
+        col = PINK * 3f; push(); translate(0f, -0.175f, 0.04f); box(0.5f, 0.02f, 0.02f); pop()
+    }.build()
+
+    private fun hologram() = PM().apply {
+        col = c(22, 24, 36); cylinder(0.3f, 0.07f, 20, 0.26f); at(z = 0.07f) { cylinder(0.12f, 0.05f, 16) }
+        val apex = Vec3(0f, 0f, 0.8f); val b = listOf(Vec3(0.2f, 0.2f, 0.2f), Vec3(-0.2f, 0.2f, 0.2f), Vec3(-0.2f, -0.2f, 0.2f), Vec3(0.2f, -0.2f, 0.2f))
+        col = NCYAN * 3.2f
+        for (i in 0 until 4) { tube(listOf(b[i], apex), 0.012f, 5); tube(listOf(b[i], b[(i + 1) % 4]), 0.012f, 5) }
+        col = PINK * 2.6f; at(z = 0.46f) { torus(0.1f, 0.012f, 20, 5) }
+        col = NYEL * 3f; at(z = 0.45f) { sphere(0.035f, 8, 6) }
+    }.build()
+
+    private fun cityTower() = PM().apply {
+        col = c(16, 16, 26)
+        val tiers = listOf(floatArrayOf(0.42f, 0.9f), floatArrayOf(0.32f, 0.7f), floatArrayOf(0.22f, 0.5f))
+        var z = 0f
+        for ((ti, t) in tiers.withIndex()) {
+            val w = t[0]; val h = t[1]
+            col = c(16, 16, 26); push(); translate(0f, 0f, z + h * 0.5f * 0.5f); box(w, w, h * 0.5f); pop()
+            val rows = 6; val cols = 4
+            for (r in 0 until rows) for (k in 0 until cols) for (face in 0 until 2) {
+                val lit = ((r * 7 + k * 3 + ti * 5 + face) % 5) != 0
+                if (!lit) continue
+                col = (when ((r + k + ti) % 3) { 0 -> NYEL; 1 -> NCYAN; else -> PINK }) * 2.4f
+                val wx = -w / 2 + (k + 0.5f) * w / cols; val wz = z + (r + 0.5f) * h * 0.5f / rows
+                push(); translate(wx, if (face == 0) -w / 2 - 0.004f else w / 2 + 0.004f, wz); box(w / cols * 0.5f, 0.012f, h * 0.5f / rows * 0.5f); pop()
+            }
+            col = (if (ti % 2 == 0) NCYAN else PINK) * 3f; push(); translate(0f, 0f, z + h * 0.5f); box(w + 0.02f, w + 0.02f, 0.02f); pop()
+            z += h * 0.5f
+        }
+        col = c(60, 64, 80); cylinder(0.012f, 0.35f, 6)
+        push(); translate(0f, 0f, z); cylinder(0.012f, 0.35f, 6); pop()
+        col = c(255, 40, 60) * 3.4f; at(z = z + 0.36f) { sphere(0.025f, 8, 6) }
     }.build()
 
     // ---------------------------------------------------------------- jungle

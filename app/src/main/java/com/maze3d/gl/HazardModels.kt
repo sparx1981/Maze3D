@@ -2,6 +2,8 @@ package com.maze3d.gl
 
 import com.maze3d.core.Vec3
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** Models for bridges and hammers in cell units (1 = one cell): x runs along the corridor, y across it, z up. */
 object HazardModels {
@@ -49,6 +51,35 @@ object HazardModels {
             push(); translate(0f, 0f, -0.16f + i * 0.053f); cylinder(HAMMER_HEAD, 0.055f, 18); pop()
         }
         col = c(40, 44, 54); push(); translate(0f, 0f, -0.18f); cylinder(HAMMER_HEAD * 0.7f, 0.02f, 14); pop(); push(); translate(0f, 0f, 0.16f); cylinder(HAMMER_HEAD * 0.7f, 0.02f, 14); pop()
+        pop()
+    }.build()
+
+    const val SWING_LENGTH = 3.0f
+
+    /** Tall frame the swing hangs from: two legs against the corridor walls and a beam across at the top. */
+    fun swingGantry(halfSpan: Float) = PM().apply {
+        col = c(58, 64, 76)
+        for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * halfSpan, 0f); cylinder(0.06f, SWING_LENGTH + 0.06f, 10, 0.05f); pop() }
+        push(); translate(0f, 0f, SWING_LENGTH + 0.06f); rotX((PI / 2).toFloat()); cylinder(0.05f, halfSpan * 2f + 0.1f, 10); pop()
+        col = c(255, 196, 40)
+        for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * halfSpan, SWING_LENGTH - 0.1f); cylinder(0.075f, 0.08f, 10); pop() }
+        col = c(30, 34, 42); push(); translate(0f, 0f, SWING_LENGTH); sphere(0.07f, 10, 8); pop()
+    }.build()
+
+    /** The swinging seat: a round platform with hazard stripes, hung by four chains from the pivot at the origin (it hangs along -z). */
+    fun swingSeat(discR: Float) = PM().apply {
+        val chain = c(150, 156, 170)
+        col = chain
+        for (k in 0 until 4) {
+            val a = k * (PI / 2).toFloat() + (PI / 4).toFloat()
+            tube(listOf(Vec3(0f, 0f, 0f), Vec3(cos(a) * discR * 0.9f, sin(a) * discR * 0.9f, -SWING_LENGTH + 0.04f)), 0.014f, 5)
+        }
+        push(); translate(0f, 0f, -SWING_LENGTH)
+        for (i in 0 until 12) { col = if (i % 2 == 0) c(250, 200, 30) else c(40, 40, 46)
+            push(); rotZ(i * (PI / 6).toFloat()); translate(discR * 0.93f, 0f, 0.0f); box(discR * 0.16f, discR * 0.5f, 0.07f); pop() }
+        col = c(88, 94, 108); cylinder(discR, 0.06f, 32)
+        col = c(255, 196, 40); push(); translate(0f, 0f, 0.058f); torus(discR * 0.55f, 0.012f, 28, 5); pop()
+        col = c(255, 60, 40) * 1.6f; push(); translate(0f, 0f, 0.058f); cylinder(discR * 0.14f, 0.02f, 16); pop()
         pop()
     }.build()
 }

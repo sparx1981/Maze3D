@@ -8,7 +8,7 @@ import kotlin.math.sin
  * Per-level moving hazards: sliding doors on open passages and floor holes that open and close.
  * The timing formulas are mirrored in the shaders (SCENE_VS for doors, HOLE_FS for holes).
  */
-class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f) {
+class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false) {
     val doorEdges: IntArray
     val doorPhase: FloatArray
     val holeCells: IntArray
@@ -23,6 +23,11 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     val hammerDir: Array<Vec3>
     val hammerPhase: FloatArray
     private val bridgeIndex = IntArray(maze.cellCount) { -1 }
+    /** Swings over wide pits: a round platform rides back and forth along three straight cells. */
+    val swingCells: IntArray
+    val swingDir: Array<Vec3>
+    val swingPhase: FloatArray
+    private val swingIndex = IntArray(maze.cellCount) { -1 }
     val doorSet = HashSet<Int>()
     val holeRadius = maze.cellSize * 0.40f
 
@@ -93,6 +98,20 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         }
         val used = ArrayList<Int>()
         for (k in 0 until path.size step 1) if (path[k] in holes) used.add(k)
+        // swings need three straight corridor cells in a row
+        val swingSpots = ArrayList<Int>()
+        if (withSwings) for (k in 2 until path.size - 2) {
+            val tri = listOf(path[k - 1], path[k], path[k + 1])
+            if (tri.any { it in taken || maze.links[it].size != 2 } || holes.any { h -> tri.any { (maze.centers[h] - maze.centers[it]).length() < maze.cellSize * 3f } }) continue
+            val a = maze.centers[path[k - 1]]; val c = maze.centers[path[k]]; val b = maze.centers[path[k + 1]]
+            if (((c - a).normalized() dot (b - c).normalized()) > 0.97f) swingSpots.add(k)
+        }
+        val sks = ArrayList<Int>()
+        for (k in swingSpots.shuffled(rnd)) {
+            if (sks.size >= ((maze.cellCount / 150f) * scale).toInt().coerceIn(1, 4)) break
+            if (used.any { kotlin.math.abs(it - k) < 5 } || sks.any { kotlin.math.abs(it - k) < 6 }) continue
+            sks.add(k); used.add(k)
+        }
         val bks = if (withBridges) pick(((maze.cellCount / 90f) * scale).toInt().coerceIn(2, 7), used) else emptyList()
         val hks = if (withHammers) pick(((maze.cellCount / 110f) * scale).toInt().coerceIn(2, 6), used) else emptyList()
         fun dirAt(k: Int) = (maze.centers[path[k + 1]] - maze.centers[path[k - 1]]).normalized()
@@ -103,7 +122,17 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         hammerDir = Array(hks.size) { dirAt(hks[it]) }
         hammerPhase = FloatArray(hks.size) { rnd.nextFloat() }
         bridgeCells.forEachIndexed { i, c -> bridgeIndex[c] = i }
+        swingCells = IntArray(sks.size) { path[sks[it]] }
+        swingDir = Array(sks.size) { dirAt(sks[it]) }
+        swingPhase = FloatArray(sks.size) { rnd.nextFloat() }
+        swingCells.forEachIndexed { i, c -> swingIndex[c] = i }
     }
+
+    val hasSwings get() = swingCells.isNotEmpty()
+    fun swingAt(cell: Int) = swingIndex[cell]
+    /** Platform position along the corridor in cells, 0 = centre of the pit. */
+    fun swingX(i: Int, t: Float) = SWING_AMP * sin(SWING_W * t + swingPhase[i] * 2 * PI.toFloat())
+    fun swingV(i: Int, t: Float) = SWING_AMP * SWING_W * kotlin.math.cos(SWING_W * t + swingPhase[i] * 2 * PI.toFloat())
 
     val hasBridges get() = bridgeCells.isNotEmpty()
     val hasHammers get() = hammerCells.isNotEmpty()
@@ -145,6 +174,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         const val HOLE_W = 0.9f
         const val BRIDGE_W = 1.1f; const val BRIDGE_AMP = 0.07f; const val BOARD_W = 1.5f; const val BOARDS = 7
         const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
+        const val SWING_AMP = 0.7f; const val SWING_W = 0.95f; const val SWING_DISC = 0.5f; const val SWING_PIT = 1.15f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)
             return t * t * (3 - 2 * t)

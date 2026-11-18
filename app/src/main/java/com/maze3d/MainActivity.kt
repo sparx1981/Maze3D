@@ -59,9 +59,12 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var gameStarted = false
     private var selShape = 0      // 0 random, 1 sphere, 2 torus, 3 cube
     private var selSurface = 0    // 0 random, 1 standard, 2 sand, 3 mud
-    private var selDifficulty = 1    // 0 easy, 1 medium, 2 hard
+    private var selDifficulty = 1    // 0 easy, 1 medium, 2 hard, 3 ultra
     private lateinit var menuDiff: LinearLayout
     private lateinit var menuBest: LinearLayout
+    private lateinit var menuBall: LinearLayout
+    private lateinit var menuStats: LinearLayout
+    private lateinit var menuRace: LinearLayout
     private var settingsHolder: View? = null
     private var selHazards = 0    // 0 random, 1 none
     @Volatile private var rendererReady = false
@@ -97,6 +100,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             override fun put(key: String, value: String) { progPrefs.edit().putString(key, value).apply() }
         })
         renderer.progress = progress
+        stats = com.maze3d.core.Stats(object : com.maze3d.core.ProgressStore {
+            override fun get(key: String) = progPrefs.getString(key, null)
+            override fun put(key: String, value: String) { progPrefs.edit().putString(key, value).apply() }
+        })
+        stats.add("sessions", 1.0)
         bestTimes = com.maze3d.core.BestTimes(object : com.maze3d.core.ProgressStore {
             override fun get(key: String) = progPrefs.getString(key, null)
             override fun put(key: String, value: String) { progPrefs.edit().putString(key, value).apply() }
@@ -637,10 +645,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuMain.addView(header("3D marble ball maze"))
         resumeBtn = bigButton("Resume", primary = true) { hideMenu(); glView.queueEvent { renderer.paused = false } }
         menuMain.addView(resumeBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        changeBallBtn = bigButton("Change ball") { showBall() }
+        menuMain.addView(changeBallBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Quick start", primary = true) { showDifficulty() },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Select level") { showLevelSelect() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Race") { showRace() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Best times") { showBest() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Stats") { showStats() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Settings") { showSettings() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Exit") { finishAffinity() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(6f)) })
 
@@ -668,6 +680,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         }
         menuDiff.addView(bigButton("Back") { showMainMenu() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, dp(10f), 0, 0) })
 
+        // ---- change ball / stats / race screens (filled when shown)
+        menuBall = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuBall.setPadding(0, dp(36f), 0, dp(32f))
+        menuStats = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuStats.setPadding(0, dp(36f), 0, dp(32f))
+        menuRace = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
+        menuRace.setPadding(0, dp(36f), 0, dp(32f))
+
         // ---- best times
         menuBest = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; visibility = View.GONE }
         menuBest.setPadding(0, dp(36f), 0, dp(32f))
@@ -682,13 +702,22 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         holder.addView(menuDiff, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuSettings, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         holder.addView(menuBest, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        holder.addView(menuBall, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        holder.addView(menuStats, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        holder.addView(menuRace, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         val menuScroll = android.widget.ScrollView(this).apply { isVerticalScrollBarEnabled = false; isFillViewport = true; addView(holder, FrameLayout.LayoutParams(-1, -2)) }
         menuLayer.addView(menuScroll, FrameLayout.LayoutParams(-1, -1))
         return menuLayer
     }
 
+    private var changeBallBtn: TextView? = null
+
     private fun showMainMenu() {
         resumeBtn?.visibility = if (gameStarted) View.VISIBLE else View.GONE
+        changeBallBtn?.visibility = if (gameStarted) View.VISIBLE else View.GONE
+        menuBall.visibility = View.GONE
+        menuStats.visibility = View.GONE
+        menuRace.visibility = View.GONE
         menuLevels.visibility = View.GONE
         menuSettings.visibility = View.GONE
         menuDiff.visibility = View.GONE
@@ -697,17 +726,16 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuMain.post { for (k in 0 until menuMain.childCount) { val v = menuMain.getChildAt(k); if (v.isFocusable && v.visibility == View.VISIBLE) { v.requestFocus(); break } } }
     }
 
-    private fun rebuildBallPicker() {
-        val box = ballBox ?: return
-        box.removeAllViews()
+    /** The grid of ball styles (locked ones show a padlock); used on Select level and on the in-game Change ball screen. */
+    private fun ballGrid(cols: Int): View {
         val names = listOf("Automatic") + com.maze3d.core.Progress.SKIN_NAMES
         noPreview = true
-        box.addView(chipGrid(names, if (settingsNarrow) 2 else 3, { renderer.ballChoice + 1 }, { i ->
+        return chipGrid(names, cols, { renderer.ballChoice + 1 }, { i ->
             renderer.ballChoice = i - 1
             getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("ball", i - 1).apply()
         }, { i ->
             if (i == 0 || progress.ballUnlocked(i - 1)) null else "Finish a maze on this surface to unlock this ball"
-        }))
+        })
     }
 
     // ---- settings layout: grouped cards of label / control rows, one or two columns depending on width ------------------
@@ -807,9 +835,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             settingRow("Sound effects", segmented(listOf("On", "Off"), { if (engine.sfxOn) 0 else 1 }, { engine.setSfx(it == 0) })),
             settingRow("Impact sounds", segmented(listOf("On", "Off"), { if (engine.impactOn) 0 else 1 }, { engine.setImpact(it == 0) })),
             settingRow("Haptics on impacts", segmented(listOf("On", "Off"), { if (hapticsOn) 0 else 1 }, { hapticsOn = it == 0; prefs.edit().putBoolean("haptics", hapticsOn).apply() })))
-        ballBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        rebuildBallPicker()
-        val ball = settingsCard("Ball", ballBox!!)
         presetBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         customPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = if (presetIndex() == 3) View.VISIBLE else View.GONE }
         buildPresetRow()
@@ -830,13 +855,13 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             left.addView(controls, gap); left.addView(sound, gap); left.addView(sim, gap)
-            right.addView(graphics, gap); right.addView(ball, gap)
+            right.addView(graphics, gap)
             cols.addView(left, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(8f), 0) })
             cols.addView(right, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(8f), 0, 0, 0) })
             menuSettings.addView(cols, LinearLayout.LayoutParams(panelW, -2))
         } else {
             val one = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            for (v in listOf(controls, sound, graphics, ball, sim)) one.addView(v, gap)
+            for (v in listOf(controls, sound, graphics, sim)) one.addView(v, gap)
             menuSettings.addView(one, LinearLayout.LayoutParams(panelW, -2))
         }
     }
@@ -876,6 +901,81 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuBest.visibility = View.VISIBLE
     }
 
+    private fun backHeader(title: String, w: Int): View {
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(TextView(this).apply {
+            text = "\u2039  BACK"; setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.12f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
+            setPadding(dp(16f), dp(11f), dp(18f), dp(11f)); background = glass(false); isFocusable = true
+            setOnClickListener { engine.uiClick(); showMainMenu() }
+        }, LinearLayout.LayoutParams(-2, -2))
+        top.addView(TextView(this).apply { text = title.uppercase(); setTextColor(Color.WHITE); textSize = 22f; letterSpacing = 0.2f; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); setPadding(dp(16f), 0, 0, 0) }, LinearLayout.LayoutParams(-2, -2))
+        return top
+    }
+
+    private fun showBall() {
+        menuBall.removeAllViews()
+        val w = minOf(dp(420f), resources.displayMetrics.widthPixels - dp(32f))
+        menuBall.addView(backHeader("Change ball", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(20f)) })
+        menuBall.addView(settingsCard("Choose a style", ballGrid(2)), LinearLayout.LayoutParams(w, -2))
+        menuBall.addView(TextView(this).apply { text = "Locked balls unlock when you finish a maze on their surface."; setTextColor(Color.argb(140, 255, 255, 255)); textSize = 11f; gravity = Gravity.CENTER; setPadding(0, dp(14f), 0, 0) }, LinearLayout.LayoutParams(w, -2))
+        menuMain.visibility = View.GONE
+        menuBall.visibility = View.VISIBLE
+    }
+
+    private fun statRow(label: String, value: String): View {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        row.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14f }, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(TextView(this).apply { text = value; setTextColor(Color.WHITE); textSize = 18f; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); gravity = Gravity.END }, LinearLayout.LayoutParams(-2, -2))
+        return row
+    }
+
+    private fun showStats() {
+        synchronized(stats) { stats.flush() }
+        menuStats.removeAllViews()
+        val w = minOf(dp(460f), resources.displayMetrics.widthPixels - dp(32f))
+        menuStats.addView(backHeader("Stats", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(20f)) })
+        fun n(v: Double) = "%,d".format(v.toLong())
+        val gap = LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(16f)) }
+        val dm = com.maze3d.core.Difficulty.values()
+        val surfacesOpen = com.maze3d.core.Progress.SURFACE_CHAIN.count { progress.surfaceUnlocked(it) }
+        val shapesOpen = ShapeKind.values().count { progress.shapeUnlocked(it) }
+        val ballsOpen = (0..14).count { progress.ballUnlocked(it) }
+        menuStats.addView(settingsCard("Play",
+            statRow("Play time", com.maze3d.core.Stats.duration(stats.get("playSeconds"))),
+            statRow("Sessions", n(stats.get("sessions"))),
+            statRow("Mazes finished", n(progress.completed.toDouble())),
+            statRow("Distance rolled", n(stats.get("distance") * 0.1) + " m"),
+            statRow("Ball resets", n(stats.get("resets"))),
+            statRow("Falls", n(stats.get("falls"))),
+            statRow("Hammer hits", n(stats.get("hammer"))),
+            statRow("Checkpoints reached", n(stats.get("checkpoints")))), gap)
+        menuStats.addView(settingsCard("Unlocked",
+            statRow("Surfaces", "$surfacesOpen / ${com.maze3d.core.Progress.SURFACE_CHAIN.size}"),
+            statRow("Shapes", "$shapesOpen / ${ShapeKind.values().size}"),
+            statRow("Difficulties", "${dm.count { progress.difficultyUnlocked(it) }} / ${dm.size}"),
+            statRow("Balls", "$ballsOpen / 15")), gap)
+        val played = stats.surfacesPlayed()
+        val rows = if (played.isEmpty()) listOf(TextView(this).apply { text = "No levels played yet."; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 13f }) else
+            played.mapIndexed { i, (key, count) ->
+                val idx = com.maze3d.core.Progress.MENU_KEYS.indexOf(key)
+                statRow("${i + 1}.  ${if (idx > 0) surfaceNames[idx] else key}", "$count")
+            }
+        menuStats.addView(settingsCard("Surfaces played", *rows.toTypedArray()), gap)
+        menuMain.visibility = View.GONE
+        menuStats.visibility = View.VISIBLE
+    }
+
+    private fun showRace() {
+        // filled in with the ghost list below
+        menuRace.removeAllViews()
+        val w = minOf(dp(460f), resources.displayMetrics.widthPixels - dp(32f))
+        menuRace.addView(backHeader("Race", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(20f)) })
+        menuRace.addView(TextView(this).apply { text = "Finish a maze to save a ghost to race."; setTextColor(Color.argb(170, 255, 255, 255)); textSize = 14f; gravity = Gravity.CENTER; setPadding(0, dp(40f), 0, 0) }, LinearLayout.LayoutParams(w, -2))
+        menuMain.visibility = View.GONE
+        menuRace.visibility = View.VISIBLE
+    }
+
     private fun showSettings() {
         buildSettings()
         menuMain.visibility = View.GONE
@@ -893,7 +993,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var levelPanel: LinearLayout
     private lateinit var progress: com.maze3d.core.Progress
     private lateinit var bestTimes: com.maze3d.core.BestTimes
-    private var ballBox: LinearLayout? = null
+    private lateinit var stats: com.maze3d.core.Stats
+    private var lastStatFlush = 0L
     private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
@@ -912,13 +1013,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             if (key == "random" || progress.surfaceUnlocked(key)) null else mazesText(progress.surfaceMazesToGo(key)) + " to unlock this surface"
         }))
         levelPanel.addView(sectionLabel("Difficulty"))
-        levelPanel.addView(chipRow(listOf("Easy", "Medium", "Hard"), { selDifficulty }, { selDifficulty = it; previewSelection() }, { i -> difficultyLock(com.maze3d.core.Difficulty.values()[i]) }))
+        levelPanel.addView(chipRow(listOf("Easy", "Medium", "Hard", "Ultra"), { selDifficulty }, { selDifficulty = it; previewSelection() }, { i -> difficultyLock(com.maze3d.core.Difficulty.values()[i]) }))
+        levelPanel.addView(sectionLabel("Ball"))
+        levelPanel.addView(ballGrid(2))
         levelPanel.addView(sectionLabel("Hazards"))
         levelPanel.addView(chipRow(listOf("Random", "None"), { selHazards }, { selHazards = it }))
     }
 
     private fun difficultyLock(d: com.maze3d.core.Difficulty): String? =
-        if (progress.difficultyUnlocked(d)) null else if (d == com.maze3d.core.Difficulty.MEDIUM) "Finish a maze to unlock Medium" else "Finish a Medium maze to unlock Hard"
+        if (progress.difficultyUnlocked(d)) null else when (d) { com.maze3d.core.Difficulty.MEDIUM -> "Finish a maze to unlock Medium"; com.maze3d.core.Difficulty.HARD -> "Finish a Medium maze to unlock Hard"; else -> "Finish a Hard maze to unlock Ultra" }
 
     private fun showLevelSelect() {
         rebuildLevelPanel()
@@ -952,7 +1055,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
-            menuLayer.visibility == View.VISIBLE && (menuLevels.visibility == View.VISIBLE || menuSettings.visibility == View.VISIBLE || menuDiff.visibility == View.VISIBLE || menuBest.visibility == View.VISIBLE) -> showMainMenu()
+            menuLayer.visibility == View.VISIBLE && (menuLevels.visibility == View.VISIBLE || menuSettings.visibility == View.VISIBLE || menuDiff.visibility == View.VISIBLE || menuBest.visibility == View.VISIBLE || menuBall.visibility == View.VISIBLE || menuStats.visibility == View.VISIBLE || menuRace.visibility == View.VISIBLE) -> showMainMenu()
             menuLayer.visibility == View.VISIBLE && gameStarted -> { hideMenu(); glView.queueEvent { renderer.paused = false } }
             menuLayer.visibility == View.VISIBLE -> finishAffinity()
             else -> showMenu()
@@ -968,6 +1071,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     override fun onPause() {
         super.onPause()
+        synchronized(stats) { stats.flush() }
         engine.onPause()
         sensors.unregisterListener(this)
         glView.onPause()
@@ -979,11 +1083,15 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     // ---- renderer callbacks (GL thread) -------------------------------------------------
-    override fun onHud(shape: String, seconds: Int, solved: Boolean, percent: Int) {
+    override fun onHud(shape: String, seconds: Int, solved: Boolean, percent: Int, stray: Int) {
         runOnUiThread {
             title.text = shape.uppercase()
             clock.text = "%d:%02d".format(seconds / 60, seconds % 60)
             pctText.text = "$percent%"
+            // easy mode: the further you stray from the route, the hotter the percentage glows
+            val (col, glow) = when { stray >= 12 -> Color.rgb(255, 70, 60) to 1f; stray >= 6 -> Color.rgb(255, 150, 40) to 0.8f; stray >= 2 -> Color.rgb(255, 214, 64) to 0.6f; else -> Color.argb(210, 255, 255, 255) to 0f }
+            pctText.setTextColor(col)
+            pctText.setShadowLayer(if (glow > 0f) 22f * glow else 10f, 0f, 0f, if (glow > 0f) col else Color.argb(170, 0, 0, 0))
             banner.animate().alpha(if (solved) 1f else 0f).setDuration(350).start()
         }
     }
@@ -1028,6 +1136,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         u.difficulty?.let { parts.add("${it.label} difficulty") }
         u.ball?.let { k -> parts.add("ball: ${com.maze3d.core.Progress.SKIN_NAMES[com.maze3d.core.Progress.skinForKey(k)]}") }
         onToast((recordText?.let { it + "\n" } ?: "") + "Unlocked  " + parts.joinToString("  ·  "), 4200)
+    }
+
+    override fun onStat(key: String, amount: Float) {
+        synchronized(stats) {
+            stats.add(key, amount.toDouble())
+            val now = System.currentTimeMillis()
+            if (now - lastStatFlush > 15000L) { lastStatFlush = now; stats.flush() }
+        }
     }
 
     override fun onToast(message: String) = onToast(message, 1400)
