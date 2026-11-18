@@ -139,7 +139,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var lampIdxList: List<Int> = emptyList()
     private val lampIdxUniform = FloatArray(12)
     private var sporeAcc = 0f
-    private val leaves = TrailBuffer(800)
+    private val leaves = TrailBuffer(4000)
     private var glowProg = 0
     private var leafProg = 0
     private var glowStampAt: Vec3? = null
@@ -757,7 +757,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         if (pal.themeId == 12) {                                       // a first carpet of fallen leaves
             val vs = m.mesh.vertices
-            for (i in 0 until minOf(m.cellCount * 3, 600)) {
+            for (i in 0 until minOf(m.cellCount * 8, 2400)) {
                 val c = rnd.nextInt(m.cellCount)
                 val a = vs[m.mesh.cellVertex(c, 0)]; val bq = vs[m.mesh.cellVertex(c, 1)]; val cq = vs[m.mesh.cellVertex(c, 3)]
                 val p = m.mesh.surface.project(a + (bq - a) * rnd.nextFloat() + (cq - a) * rnd.nextFloat())
@@ -1709,7 +1709,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             pp.aoAmt = 0.85f; pp.dofAmt = 0.85f
             pp.bloomAmt = if (!qp.bloom) 0f else if (qp.shadows >= 2) 0.34f else 0.26f
             pp.fxaa = qp.fxaa
-            pp.grain = if (qp.grain) 0.035f else 0f
+            pp.grain = 0f
             pp.motion = if (qp.motion) ease01(chaseBlend) * chaseSpeed * 0.9f else 0f
             post.finish(pp)
         } else if (cloudsOn) {
@@ -1787,7 +1787,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val under = mb.position - mb.surface.normal(mb.position) * mb.radius
             leaves.nudge(under, mb.radius * 2.6f, mb.radius * (0.18f + 0.5f * spd.coerceAtMost(1f)), time, 3.6f) { mb.surface.project(it) }
         }
-        leafAcc += dt * 7f
+        leafAcc += dt * 16f
         while (leafAcc >= 1f) {
             leafAcc -= 1f
             val n = mb.surface.normal(mb.position)

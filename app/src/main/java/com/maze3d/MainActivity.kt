@@ -556,7 +556,6 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         onOff("Bloom glow", { profile.bloom }) { profile.copy(bloom = it) }
         onOff("Depth of field", { profile.dof }) { profile.copy(dof = it) }
         onOff("Edge smoothing", { profile.fxaa }) { profile.copy(fxaa = it) }
-        onOff("Film grain", { profile.grain }) { profile.copy(grain = it) }
         levels("Particles & rain", listOf("Fewer", "Normal"), { profile.particles }) { profile.copy(particles = it) }
         levels("Resolution", listOf("Auto", "75%", "Full"), { profile.resolution }) { profile.copy(resolution = it) }
         levels("Frame rate", listOf("30", "60", "Max"), { profile.fps }) { profile.copy(fps = it) }
@@ -1016,6 +1015,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             }
         menuStats.addView(settingsCard("Surfaces played", *rows.toTypedArray()), gap)
         menuMain.visibility = View.GONE; menuNew.visibility = View.GONE
+        menuBest.visibility = View.GONE
         menuStats.visibility = View.VISIBLE
     }
 
