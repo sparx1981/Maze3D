@@ -37,7 +37,8 @@ object PropLibrary {
         14 -> ThemeProps(buttonProp(), spool(), pomPom(), feltTree(), heartPatch(), yarnBall())
         15 -> ThemeProps(boneProp(), eggNest(), fern(), volcanoProp(), ammonite(), jungleTree())
         16 -> ThemeProps(boltProp(), toolbox(), wrench(), hammerProp(), gearProp(), boltProp())
-        else -> ThemeProps(emberSpire(), lavaRocks(), obsidianCrystal(), brazier(), volcanoProp(), emberSpire())
+        17 -> ThemeProps(emberSpire(), lavaRocks(), obsidianCrystal(), brazier(), volcanoProp(), emberSpire())
+        else -> ThemeProps(gummyBear(), pudding(), jellyBean(), jellyDrop(), cherryProp(), gummyBear())
     }
 
     // ---------------------------------------------------------------- candy
@@ -780,5 +781,37 @@ object PropLibrary {
         col = c(46, 38, 40); cylinder(0.04f, 0.4f, 8); at(z = 0.4f) { cylinder(0.24f, 0.1f, 14, 0.16f) }
         col = c(255, 90, 20) * 2.6f; at(z = 0.5f) { cone(0.16f, 0.4f, 8) }
         col = c(255, 190, 50) * 2.8f; at(z = 0.52f) { cone(0.09f, 0.3f, 8) }
+    }.build()
+
+    // ---------------------------------------------------------------- jelly
+    private fun gummyBear() = PM().apply {
+        col = c(255, 60, 90) * 1.25f
+        at(z = 0.3f) { scale(1f, 0.85f, 1.2f); sphere(0.3f, 20, 12) }
+        at(z = 0.66f) { sphere(0.22f, 18, 12) }
+        for (s in intArrayOf(-1, 1)) { at(s * 0.16f, 0f, 0.84f) { sphere(0.08f, 12, 8) }; at(s * 0.3f, 0f, 0.42f) { sphere(0.1f, 12, 8) }; at(s * 0.14f, 0f, 0.06f) { sphere(0.1f, 12, 8) } }
+        col = c(255, 235, 240); for (s in intArrayOf(-1, 1)) at(s * 0.08f, 0.19f, 0.7f) { sphere(0.035f, 8, 6) }
+    }.build()
+
+    private fun pudding() = PM().apply {
+        col = c(255, 200, 70) * 1.15f; cylinder(0.32f, 0.5f, 26, 0.2f)
+        col = c(120, 56, 30); at(z = 0.5f) { cylinder(0.2f, 0.04f, 24) }
+        col = c(235, 40, 70) * 1.3f; at(z = 0.62f) { sphere(0.1f, 14, 10) }
+        col = c(250, 250, 250); at(0f, 0f, 0.0f) { cylinder(0.36f, 0.04f, 26) }
+    }.build()
+
+    private fun jellyBean() = PM().apply {
+        col = c(70, 220, 90) * 1.2f; at(z = 0.22f) { scale(0.7f, 1.2f, 0.7f); sphere(0.26f, 18, 12) }
+        col = c(255, 255, 255); at(0.1f, 0.14f, 0.34f) { scale(1f, 1.4f, 0.5f); sphere(0.05f, 8, 6) }
+    }.build()
+
+    private fun jellyDrop() = PM().apply {
+        col = c(80, 200, 255) * 1.2f; cone(0.28f, 0.55f, 22)
+        col = c(255, 255, 255); for (k in 0 until 10) { val a = k * 0.628f; at(0.22f * kotlin.math.cos(a) * (1f - k * 0.05f), 0.22f * kotlin.math.sin(a) * (1f - k * 0.05f), 0.04f + k * 0.045f) { sphere(0.03f, 6, 5) } }
+    }.build()
+
+    private fun cherryProp() = PM().apply {
+        col = c(220, 30, 60) * 1.25f; at(0f, 0f, 0.22f) { sphere(0.22f, 18, 12) }
+        col = c(60, 140, 50); tube(listOf(Vec3(0f, 0f, 0.42f), Vec3(0.06f, 0.02f, 0.62f), Vec3(0.2f, 0f, 0.78f)), 0.018f, 6)
+        col = c(255, 230, 235); at(-0.08f, 0.14f, 0.3f) { sphere(0.04f, 8, 6) }
     }.build()
 }

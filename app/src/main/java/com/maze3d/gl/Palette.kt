@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24; const val TOY = 25; const val FELT = 26; const val ROCK = 27; const val PLATE = 28; const val LAVA = 29
+    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24; const val TOY = 25; const val FELT = 26; const val ROCK = 27; const val PLATE = 28; const val LAVA = 29; const val JELLY = 30
 }
 
 /** Wall cross-sections. */
@@ -140,7 +140,12 @@ class Palette(
             // 17 Lava: black basalt veined with fire, obsidian walls with glowing edges
             Palette("Lava", c(18, 12, 14), Mat.LAVA, 0.6f, c(30, 22, 24), Mat.ENAMEL, 0.15f,
                 c(46, 8, 4), c(168, 44, 8), c(255, 110, 20), c(255, 200, 60),
-                wall2 = c(36, 24, 26), wallTop = c(255, 100, 20), profile = Profile.BLOCK, backdrop = Backdrop.STARS, wallMetal = 0f, glow = 1.3f, themeId = 17)
+                wall2 = c(36, 24, 26), wallTop = c(255, 100, 20), profile = Profile.BLOCK, backdrop = Backdrop.STARS, wallMetal = 0f, glow = 1.3f, themeId = 17),
+            // 18 Jelly: wobbly gel floor in two bright colours, gummy tube walls, springy jelly pads
+            Palette("Jelly", c(255, 90, 160), Mat.JELLY, 0.1f, c(110, 226, 190), Mat.ENAMEL, 0.08f,
+                c(255, 190, 232), c(120, 40, 140), c(255, 230, 80), c(80, 220, 255),
+                floor2 = c(120, 220, 90), wall2 = c(255, 150, 40), profile = Profile.TUBE, stripes = true, knobs = true,
+                backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 18)
         )
 
         val all = classic + themes

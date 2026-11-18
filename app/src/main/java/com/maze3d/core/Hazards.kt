@@ -8,7 +8,7 @@ import kotlin.math.sin
  * Per-level moving hazards: sliding doors on open passages and floor holes that open and close.
  * The timing formulas are mirrored in the shaders (SCENE_VS for doors, HOLE_FS for holes).
  */
-class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false, fxRnd: Random? = null) {
+class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false, fxRnd: Random? = null, fxKinds: List<Int>? = null, fxWant: Int = -1) {
     val doorEdges: IntArray
     val doorPhase: FloatArray
     val holeCells: IntArray
@@ -138,9 +138,9 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
             for (c in taken) busy.add(maze.centers[c])
             for (c in bridgeCells) busy.add(maze.centers[c]); for (c in hammerCells) busy.add(maze.centers[c])
             for (c in swingCells) { busy.add(maze.centers[c]); for (o in maze.links[c]) busy.add(maze.centers[o]) }
-            val want = ((maze.cellCount / 55f) * scale).toInt().coerceIn(3, 9)
+            val want = if (fxWant > 0) fxWant else ((maze.cellCount / 55f) * scale).toInt().coerceIn(3, 9)
             val placed = ArrayList<Vec3>()
-            val order = ArrayList<Int>().apply { repeat(2) { addAll((0 until FX_KINDS).shuffled(fxRnd)) } }
+            val order = ArrayList<Int>().apply { repeat(if (fxKinds != null) 14 else 2) { addAll((fxKinds ?: (0 until FX_KINDS).toList()).shuffled(fxRnd)) } }
             val cells = (0 until maze.cellCount).shuffled(fxRnd)
             for (kind in order) {
                 if (fk.size >= want) break
@@ -156,6 +156,16 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
                         dir = (b - a).normalized()
                         if (kind == FX_CONVEYOR && fxRnd.nextBoolean()) dir = dir * -1f
                     } else if (kind == FX_SWEEPER && maze.links[c].size < 3 && fxRnd.nextInt(3) != 0) continue
+                    if (kind == FX_CONVEYOR) {                          // a long belt: three straight cells in a row, all running the same way
+                        val ls = maze.links[c]
+                        val strip = listOf(ls[0], c, ls[1])
+                        if (strip.any { it in protectedCells || it in fc || maze.links[it].size != 2 } ||
+                            strip.any { q -> busy.any { (it - maze.centers[q]).length() < maze.cellSize * 1.2f } }) continue
+                        if (((maze.centers[ls[0]] - maze.centers[ls[1]]).normalized() dot dir.normalized()).let { kotlin.math.abs(it) } < 0.9f) continue
+                        for (q in strip) { fk.add(kind); fc.add(q); fd.add(dir) }
+                        placed.add(p)
+                        break
+                    }
                     fk.add(kind); fc.add(c); fd.add(dir); placed.add(p)
                     break
                 }
@@ -220,7 +230,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
         const val FX_BUMPER = 0; const val FX_OIL = 1; const val FX_CONVEYOR = 2; const val FX_CRUSHER = 3; const val FX_SWEEPER = 4; const val FX_SEESAW = 5; const val FX_KINDS = 6
         const val CRUSH_W = 1.9f; const val SWEEP_W = 1.35f; const val SWEEP_REACH = 0.44f; const val SEESAW_W = 1.0f; const val SEESAW_MAX = 0.22f
-        const val SWING_AMP = 0.7f; const val SWING_W = 0.95f; const val SWING_DISC = 0.5f; const val SWING_PIT = 1.15f
+        const val SWING_AMP = 0.5f; const val SWING_W = 0.9f; const val SWING_HALF = 0.5f; const val SWING_HALFPIT = 0.5f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)
             return t * t * (3 - 2 * t)

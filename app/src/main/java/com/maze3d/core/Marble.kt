@@ -90,6 +90,29 @@ class Marble(private val maze: Maze) {
 
     /** 0..1 slipperiness (oil slick): cuts rolling drag so the ball keeps sliding. */
     var slick = 0f
+    var gates: KeyGates? = null
+
+    /** Pitch of the Lego-style studs under the ball (0 = a smooth floor); the studs rattle and slow it as it rolls over them. */
+    var studPitch = 0f
+    private fun studH(p: Vec3, n: Vec3): Float {
+        val ax = kotlin.math.abs(n.x); val ay = kotlin.math.abs(n.y); val az = kotlin.math.abs(n.z)
+        val u: Float; val v: Float
+        if (ax >= ay && ax >= az) { u = p.y; v = p.z } else if (ay >= az) { u = p.x; v = p.z } else { u = p.x; v = p.y }
+        val fu = u / studPitch; val fv = v / studPitch
+        val du = fu - kotlin.math.floor(fu) - 0.5f; val dv = fv - kotlin.math.floor(fv) - 0.5f
+        val d = kotlin.math.sqrt(du * du + dv * dv)
+        val t = ((0.42f - d) / 0.2f).coerceIn(0f, 1f)           // a softened stud: the ball is wider than the edge it rides over
+        return t * t * (3f - 2f * t)
+    }
+    private fun studPush(p: Vec3, n: Vec3, h: Float) {
+        val t1 = (if (kotlin.math.abs(n.x) < 0.9f) Vec3(1f, 0f, 0f) else Vec3(0f, 1f, 0f)).let { (it - n * (it dot n)).normalized() }
+        val t2 = n cross t1
+        val e = studPitch * 0.12f
+        val g1 = (studH(p + t1 * e, n) - studH(p - t1 * e, n)) / (2f * e)
+        val g2 = (studH(p + t2 * e, n) - studH(p - t2 * e, n)) / (2f * e)
+        val k = -0.12f * studPitch * 3.2f * 0.714f * h        // stud height 0.12 pitch; downhill pull while on a stud flank
+        velocity += (t1 * g1 + t2 * g2) * k
+    }
 
     fun reset(at: Int = maze.start) {
         cell = at
@@ -111,6 +134,7 @@ class Marble(private val maze: Maze) {
         // 5/7 for a solid ball rolling without slipping.
         velocity += gt * (0.714f * h * terrain.accel)
         velocity -= nrm * (velocity dot nrm)
+        if (studPitch > 0f) studPush(position, nrm, h)
         val rn = rain
         wet = 0f
         var drag = 0.5f + terrain.drag
@@ -164,6 +188,7 @@ class Marble(private val maze: Maze) {
             if (h != null && doorsNear.isNotEmpty()) {
                 for (i in doorsNear[cell]) if (h.doorClosed(i, clock)) hit(h.doorEdges[i], minDist)
             }
+            gates?.let { kg -> for (g in kg.gateEdges.indices) if (!kg.gateOpen[g]) { val e = kg.gateEdges[g]; if (maze.edgeCellL[e] == cell || maze.edgeCellR[e] == cell) hit(e, minDist) } }
             obstacleAt[cell]?.let { ob ->
                 val nrm = surface.normal(position)
                 var d = position - ob.second

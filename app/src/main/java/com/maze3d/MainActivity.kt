@@ -62,6 +62,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var gameStarted = false
     private var selShape = 0      // 0 random, 1 sphere, 2 torus, 3 cube
     private var selSurface = 0    // 0 random, 1 standard, 2 sand, 3 mud
+    private var diffMode = 0         // 0 = normal start, 1 = Keys & Gates
     private var selDifficulty = 1    // 0 easy, 1 medium, 2 hard, 3 ultra
     private lateinit var menuDiff: LinearLayout
     private lateinit var menuBest: LinearLayout
@@ -670,9 +671,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         menuMain.addView(resumeBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         changeBallBtn = bigButton("Change ball") { showBall() }
         menuMain.addView(changeBallBtn, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
-        menuMain.addView(bigButton("Quick start", primary = true) { showDifficulty() },
+        menuMain.addView(bigButton("Quick start", primary = true) { diffMode = 0; showDifficulty() },
             LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Select level") { showLevelSelect() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Keys & Gates") { diffMode = 1; showDifficulty() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
+        menuMain.addView(bigButton("Daily maze") { showDaily() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Race") { showRace() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Best times") { showBest() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
         menuMain.addView(bigButton("Stats") { showStats() }, LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(12f)) })
@@ -695,7 +698,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         for (d in com.maze3d.core.Difficulty.values()) {
             menuDiff.addView(bigButton(d.label, primary = d == com.maze3d.core.Difficulty.MEDIUM) {
                 val lock = difficultyLock(d)
-                if (lock != null) onToast(lock) else { selDifficulty = d.ordinal; startGame(null, null, false) }
+                if (lock != null) onToast(lock) else { selDifficulty = d.ordinal; if (diffMode == 1) startKeys() else startGame(null, null, false) }
             }.also { diffButtons.add(it to d) },
                 LinearLayout.LayoutParams(maxW, -2).apply { setMargins(0, 0, 0, dp(4f)) })
             menuDiff.addView(TextView(this).apply { text = d.blurb; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 11f; gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(12f)) },
@@ -963,7 +966,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val dm = com.maze3d.core.Difficulty.values()
         val surfacesOpen = com.maze3d.core.Progress.SURFACE_CHAIN.count { progress.surfaceUnlocked(it) }
         val shapesOpen = ShapeKind.values().count { progress.shapeUnlocked(it) }
-        val ballsOpen = (0..19).count { progress.ballUnlocked(it) }
+        val ballsOpen = (0..20).count { progress.ballUnlocked(it) }
         menuStats.addView(settingsCard("Play",
             statRow("Play time", com.maze3d.core.Stats.duration(stats.get("playSeconds"))),
             statRow("Sessions", n(stats.get("sessions"))),
@@ -979,7 +982,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             statRow("Surfaces", "$surfacesOpen / ${com.maze3d.core.Progress.SURFACE_CHAIN.size}"),
             statRow("Shapes", "$shapesOpen / ${ShapeKind.values().size}"),
             statRow("Difficulties", "${dm.count { progress.difficultyUnlocked(it) }} / ${dm.size}"),
-            statRow("Balls", "$ballsOpen / 20")), gap)
+            statRow("Balls", "$ballsOpen / 21")), gap)
         val played = stats.surfacesPlayed()
         val rows = if (played.isEmpty()) listOf(TextView(this).apply { text = "No levels played yet."; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 13f }) else
             played.mapIndexed { i, (key, count) ->
@@ -1040,7 +1043,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var stats: com.maze3d.core.Stats
     private lateinit var progPrefsRef: android.content.SharedPreferences
     private var lastStatFlush = 0L
-    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava")
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava", "Jelly")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
 
@@ -1094,7 +1097,106 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         gameStarted = true
         hideMenu()
         val df = com.maze3d.core.Difficulty.values()[selDifficulty]
-        glView.queueEvent { renderer.difficulty = df; renderer.startGame(shape, terrain, plain, theme, medium) }
+        glView.queueEvent { renderer.difficulty = df; renderer.gameMode = 0; renderer.startGame(shape, terrain, plain, theme, medium) }
+    }
+
+    private fun startKeys() {
+        gameStarted = true
+        hideMenu()
+        val df = com.maze3d.core.Difficulty.values()[selDifficulty]
+        glView.queueEvent { renderer.difficulty = df; renderer.gameMode = 1; renderer.startGame(null, null, false) }
+        onToast("Keys & Gates: collect the keys to open the gates, then reach the exit", 3600)
+    }
+
+    private fun startDaily() {
+        gameStarted = true
+        hideMenu()
+        val day = com.maze3d.core.Daily.dayKey()
+        val seed = com.maze3d.core.Daily.seedFor(day)
+        val shape = com.maze3d.core.Daily.shapeFor(seed)
+        val theme = com.maze3d.core.Daily.themeFor(seed, com.maze3d.gl.Palette.themes.size)
+        glView.queueEvent {
+            renderer.difficulty = com.maze3d.core.Difficulty.MEDIUM; renderer.gameMode = 2; renderer.forcedSeed = seed
+            renderer.startGame(shape, Terrain.NONE, false, theme, Medium.NONE)
+        }
+    }
+
+    private fun dailyName(): String = progPrefsRef.getString("daily_name", "") ?: ""
+
+    private fun askName(then: (String) -> Unit) {
+        val input = android.widget.EditText(this).apply {
+            filters = arrayOf(android.text.InputFilter.AllCaps(), android.text.InputFilter.LengthFilter(8))
+            setText(dailyName()); hint = "ARCADE NAME"; setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val dlg = android.app.AlertDialog.Builder(this).setTitle("Enter your name (3-8 letters)").setView(input)
+            .setPositiveButton("OK", null).setNegativeButton("Skip") { _, _ -> then("") }.create()
+        dlg.setOnShowListener {
+            dlg.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val n = input.text.toString().trim().uppercase()
+                if (com.maze3d.core.Daily.validName(n)) { progPrefsRef.edit().putString("daily_name", n).apply(); dlg.dismiss(); then(n) } else onToast("Use 3 to 8 letters or digits")
+            }
+        }
+        dlg.show()
+    }
+
+    private fun showDaily() {
+        menuRace.removeAllViews()
+        val w = minOf(dp(460f), resources.displayMetrics.widthPixels - dp(32f))
+        val day = com.maze3d.core.Daily.dayKey()
+        val seed = com.maze3d.core.Daily.seedFor(day)
+        val shape = com.maze3d.core.Daily.shapeFor(seed)
+        val theme = com.maze3d.gl.Palette.themes[com.maze3d.core.Daily.themeFor(seed, com.maze3d.gl.Palette.themes.size)]
+        menuRace.addView(backHeader("Daily maze", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(14f)) })
+        fun note(t: String, size: Float = 12f, alpha: Int = 170) = TextView(this).apply { text = t; setTextColor(Color.argb(alpha, 255, 255, 255)); textSize = size; gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(10f)) }
+        menuRace.addView(note("$day  ·  ${shape.label}  ·  ${theme.name}", 14f, 230), LinearLayout.LayoutParams(w, -2))
+        menuRace.addView(note("The same maze for everyone today. One fresh maze every day (UTC)."), LinearLayout.LayoutParams(w, -2))
+        val best = progPrefsRef.getFloat("daily_best_$day", -1f)
+        menuRace.addView(bigButton("Play today's maze", primary = true) { startDaily() }, LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(10f)) })
+        if (best > 0f) menuRace.addView(note("Your best today: ${com.maze3d.core.BestTimes.format(best)}"), LinearLayout.LayoutParams(w, -2))
+        val nm = dailyName()
+        menuRace.addView(bigButton(if (nm.isEmpty()) "Set your name" else "Name: $nm  (change)") { askName { showDaily() } }, LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(14f)) })
+        val board = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        menuRace.addView(note("TODAY'S TOP TIMES", 12f, 200), LinearLayout.LayoutParams(w, -2))
+        menuRace.addView(board, LinearLayout.LayoutParams(w, -2))
+        board.addView(note(if (com.maze3d.core.Leaderboard.enabled) "Loading..." else "The online leaderboard is not connected yet."))
+        com.maze3d.core.Leaderboard.top(day) { rows ->
+            runOnUiThread {
+                board.removeAllViews()
+                if (rows == null) board.addView(note("Could not reach the leaderboard."))
+                else if (rows.isEmpty()) board.addView(note("No times yet today. Be the first!"))
+                else rows.take(15).forEachIndexed { i, r ->
+                    board.addView(note("%2d.  %-8s  %s".format(i + 1, r.name, com.maze3d.core.BestTimes.format(r.seconds)), 14f, if (r.name == nm) 255 else 190).apply { typeface = android.graphics.Typeface.MONOSPACE })
+                }
+            }
+        }
+        menuMain.visibility = View.GONE
+        menuRace.visibility = View.VISIBLE
+    }
+
+    override fun onModeSolved(mode: Int, seconds: Float, difficulty: com.maze3d.core.Difficulty, seed: Long) {
+        if (mode == 1) {
+            val key = "keys_best_${difficulty.ordinal}"
+            val prev = progPrefsRef.getFloat(key, -1f)
+            val better = prev <= 0f || seconds < prev
+            if (better) progPrefsRef.edit().putFloat(key, seconds).apply()
+            onStat("keysDone", 1f)
+            onToast("Exit reached in ${com.maze3d.core.BestTimes.format(seconds)}" + if (prev <= 0f) "  (first time)" else if (better) "  (new best, was ${com.maze3d.core.BestTimes.format(prev)})" else "  (best ${com.maze3d.core.BestTimes.format(prev)})", 3600)
+        } else if (mode == 2) {
+            val day = com.maze3d.core.Daily.dayKey()
+            val prev = progPrefsRef.getFloat("daily_best_$day", -1f)
+            val better = prev <= 0f || seconds < prev
+            if (better) progPrefsRef.edit().putFloat("daily_best_$day", seconds).apply()
+            onStat("dailyDone", 1f)
+            runOnUiThread {
+                val finish = { name: String? ->
+                    if (!name.isNullOrEmpty() && better) com.maze3d.core.Leaderboard.submit(day, name, seconds) { }
+                    showMenu(); showDaily()
+                    onToast("Daily maze: ${com.maze3d.core.BestTimes.format(seconds)}" + if (better) "" else "  (best ${com.maze3d.core.BestTimes.format(prev)})", 3600)
+                }
+                val nm = dailyName()
+                if (nm.isEmpty() && com.maze3d.core.Leaderboard.enabled && better) askName { finish(it) } else finish(nm.ifEmpty { null })
+            }
+        }
     }
 
     @Deprecated("Deprecated in Java")

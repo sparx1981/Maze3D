@@ -101,6 +101,39 @@ class MazeTest {
     }
 
     @Test
+    fun keysAndGatesAreAlwaysFinishable() {
+        for (kind in ShapeKind.values()) for (seed in 1L..4L) for (count in 1..3) {
+            val maze = Maze(kind.createMesh(0.8f), seed)
+            val kg = KeyGates(maze, Random(seed), count, emptySet())
+            assertTrue("${kind.label} has gates", kg.count >= 1)
+            fun reach(shut: Set<Int>): Set<Int> {
+                val seen = HashSet<Int>(); val q = ArrayDeque<Int>(); seen.add(maze.start); q.add(maze.start)
+                while (q.isNotEmpty()) {
+                    val c = q.removeFirst()
+                    for (o in maze.links[c]) {
+                        if (o in seen) continue
+                        var blocked = false
+                        for (g in shut) { val e = kg.gateEdges[g]; if ((maze.edgeCellL[e] == c && maze.edgeCellR[e] == o) || (maze.edgeCellR[e] == c && maze.edgeCellL[e] == o)) blocked = true }
+                        if (!blocked) { seen.add(o); q.add(o) }
+                    }
+                }
+                return seen
+            }
+            for (j in 0 until kg.count) assertTrue("${kind.label}: key $j reachable before gate $j", kg.keyCells[j] in reach((j until kg.count).toSet()))
+            assertTrue("goal blocked while gates are shut", maze.goal !in reach((0 until kg.count).toSet()))
+            assertTrue("goal reachable once all open", maze.goal in reach(emptySet()))
+            assertEquals(kg.count, kg.keyCells.toSet().size)
+        }
+    }
+
+    @Test
+    fun dailySeedIsStable() {
+        assertEquals(Daily.seedFor("2026-11-18"), Daily.seedFor("2026-11-18"))
+        assertTrue(Daily.seedFor("2026-11-18") != Daily.seedFor("2026-11-19"))
+        assertTrue(Daily.validName("ABC12") && !Daily.validName("ab") && !Daily.validName("TOOLONGNAME"))
+    }
+
+    @Test
     fun floorEffectsAreSafelyPlaced() {
         for (kind in ShapeKind.values()) for (seed in 1L..4L) {
             val maze = Maze(kind.createMesh(), seed)
@@ -261,7 +294,7 @@ class MazeTest {
         assertTrue(p.difficultyUnlocked(Difficulty.EASY) && !p.difficultyUnlocked(Difficulty.MEDIUM))
         val u = p.record("sand", ShapeKind.SPHERE, Difficulty.EASY)
         assertEquals("mud", u.surface); assertEquals("sand", u.ball); assertEquals(Difficulty.MEDIUM, u.difficulty)
-        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(19) && !p.difficultyUnlocked(Difficulty.HARD))
+        assertTrue(p.surfaceUnlocked("mud") && p.ballUnlocked(20) && !p.difficultyUnlocked(Difficulty.HARD))
         p.record("classic", ShapeKind.SPHERE, Difficulty.MEDIUM)
         assertTrue(p.difficultyUnlocked(Difficulty.HARD) && p.shapeUnlocked(ShapeKind.CAPSULE))
         assertEquals(2, Progress(store).completed)                 // survives a restart

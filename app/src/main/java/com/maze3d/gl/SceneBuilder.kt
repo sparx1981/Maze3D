@@ -118,6 +118,18 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
+    /** Gates for Keys & Gates: solid coloured bars across the shut passages. */
+    fun gates(edges: IntArray, open: BooleanArray, cols: Array<Vec3>): MeshBuilder {
+        val mb = MeshBuilder()
+        val prof = profileData(Profile.ROUND)
+        for (i in edges.indices) {
+            if (open[i]) continue
+            val c = (cols[i % cols.size] * 0.55f) to (cols[i % cols.size] * 1.15f)
+            addWall(mb, edges[i], 0.25f, prof, c, c, 0)
+        }
+        return mb
+    }
+
     /** Sliding doors on open passages. Their "delay" attribute carries the animation phase (0..1). */
     fun doors(edges: IntArray, phases: FloatArray): MeshBuilder {
         val mb = MeshBuilder()
@@ -131,8 +143,9 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     /** mode: 0 = colour set 1, 2 = colour set 2, 1 = alternate the two along the wall (stripes). */
     private fun addWall(mb: MeshBuilder, e: Int, delay: Float, pd: ProfileData, c1: Pair<Vec3, Vec3>, c2: Pair<Vec3, Vec3>, mode: Int) {
         val prof = pd.pts
-        val t = wallHalfThickness * pd.ws
-        val hgt = wallHeight * pd.hs
+        // each wall differs by a hair in width and height so overlapping joints never share a coplanar surface (z-fight flicker)
+        val t = wallHalfThickness * pd.ws * (1f + 0.014f * hash(e + 4242))
+        val hgt = wallHeight * pd.hs * (1f + 0.007f * hash(e + 5151))
         val a0 = maze.mesh.vertices[maze.edgeA[e]]
         val b0 = maze.mesh.vertices[maze.edgeB[e]]
         val dir = (b0 - a0).normalized()
@@ -223,47 +236,46 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     /** Shaft wall, glowing bottom and hazard rim for each hole (see Shaders.PIT_FS for the vertex encoding). */
-    fun pits(cells: IntArray, phases: FloatArray, radius: Float, depth: Float, centres: List<Vec3>? = null): MeshBuilder {
+    fun pits(cells: IntArray, phases: FloatArray, radius: Float, depth: Float, centres: List<Vec3>? = null, axes: List<Vec3>? = null, halfLen: Float = 0f): MeshBuilder {
         val mb = MeshBuilder()
-        val seg = 28
+        val half = 14
+        val stad = halfLen > 0f && axes != null
+        val seg = if (stad) 2 * half + 2 else 28
         for (i in cells.indices) {
             val c = cells[i]
             val ctr = centres?.get(i) ?: maze.centers[c]
             val n = surface.normal(ctr)
-            var t1 = maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
+            var t1 = if (stad) axes!![i] else maze.mesh.vertices[maze.mesh.cellVertex(c, 1)] - maze.mesh.vertices[maze.mesh.cellVertex(c, 0)]
             t1 = (t1 - n * (t1 dot n)).normalized()
             val t2 = n cross t1
             val ph = phases[i]
-            fun rimPt(k: Int, rr: Float): Vec3 {
-                val ang = (2 * PI * k / seg).toFloat()
-                val p = surface.project(ctr + (t1 * cos(ang) + t2 * sin(ang)) * rr)
-                return p
+            // outline point k at radius rr, and the outward direction there (a stadium has two half-circles joined by straight sides)
+            fun outDir(k: Int): Vec3 {
+                val kk = k % seg
+                val ang = if (!stad) (2 * PI * kk / seg).toFloat() else if (kk <= half) (-PI / 2 + PI * kk / half).toFloat() else (PI / 2 + PI * (kk - half - 1) / half).toFloat()
+                return t1 * cos(ang) + t2 * sin(ang)
             }
-            // shaft: three rings so the gradient and seam lines sample smoothly
+            fun outOff(k: Int): Vec3 = if (!stad) Vec3.ZERO else t1 * (if (k % seg <= half) halfLen else -halfLen)
+            fun rimPt(k: Int, rr: Float): Vec3 = surface.project(ctr + outOff(k) + outDir(k) * rr)
             val rings = 6
             val wall = Array(rings + 1) { j ->
                 IntArray(seg + 1) { k ->
-                    val ang = (2 * PI * k / seg).toFloat()
-                    val dir = t1 * cos(ang) + t2 * sin(ang)
+                    val dir = outDir(k)
                     val top = rimPt(k, radius)
                     val d01 = j / rings.toFloat()
-                    val pos = top - n * (depth * d01) - dir * (0f)
-                    mb.vertex(pos, -dir, Vec3(d01, 0f, ph))
+                    mb.vertex(top - n * (depth * d01), -dir, Vec3(d01, 0f, ph))
                 }
             }
             for (j in 0 until rings) for (k in 0 until seg) mb.quad(wall[j][k], wall[j][k + 1], wall[j + 1][k + 1], wall[j + 1][k])
-            // bottom disc
+            // bottom
             val centre = mb.vertex(ctr - n * depth, n, Vec3(0f, 1f, ph))
-            val bot = IntArray(seg + 1) { k ->
-                val ang = (2 * PI * k / seg).toFloat()
-                mb.vertex(ctr - n * depth + (t1 * cos(ang) + t2 * sin(ang)) * radius, n, Vec3(1f, 1f, ph))
-            }
+            val bot = IntArray(seg + 1) { k -> mb.vertex(ctr - n * depth + outOff(k) + outDir(k) * radius, n, Vec3(1f, 1f, ph)) }
             for (k in 0 until seg) mb.tri(centre, bot[k], bot[k + 1])
             // hazard rim (an annulus lying on the floor)
             val inner = IntArray(seg + 1); val outer = IntArray(seg + 1)
             for (k in 0..seg) {
                 val a01 = k / seg.toFloat()
-                val pi0 = rimPt(k % seg, radius * 0.98f); val po = rimPt(k % seg, radius * 1.34f)
+                val pi0 = rimPt(k, radius * 0.98f); val po = rimPt(k, radius * 1.34f)
                 inner[k] = mb.vertex(pi0 + surface.normal(pi0) * (cs * 0.012f), surface.normal(pi0), Vec3(a01, 2.0f, ph))
                 outer[k] = mb.vertex(po + surface.normal(po) * (cs * 0.012f), surface.normal(po), Vec3(a01, 2.99f, ph))
             }
@@ -271,6 +283,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         }
         return mb
     }
+
 
     /** Two half-disc lids per hole that slide apart along t1; aLift carries the slide vector, aDelay the phase. */
     fun lids(cells: IntArray, phases: FloatArray, radius: Float): MeshBuilder {

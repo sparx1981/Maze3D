@@ -126,7 +126,10 @@ uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood,
 uniform float uRough;
 uniform float uMetal;
 uniform int uHoleN;
-uniform vec4 uHoleC[32];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
+uniform vec4 uTrail[16];       // turf: recent ball positions (local space) with strength 0..1
+uniform float uTrailR;
+uniform vec2 uStud;          // toy studs: x = 1 / pitch, y = stud height
+uniform vec4 uHoleC[48];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
 uniform vec3 uFloor2;       // second floor colour for patterned themes (sRGB)
 uniform float uShadowOn;
 uniform vec3 uMarbleL;      // marble position (world) for its glow and contact shadow
@@ -278,7 +281,7 @@ float sandH(vec2 uv, float cell) {
 }
 
 void main() {
-    for (int i = 0; i < 32; i++) {                         // real holes: the floor is cut away
+    for (int i = 0; i < 48; i++) {                         // real holes: the floor is cut away
         if (i >= uHoleN) break;
         if (distance(vLocal, uHoleC[i].xyz) < uHoleC[i].w) discard;
     }
@@ -360,10 +363,22 @@ void main() {
         albedo *= 0.78 + 0.4 * blade * fade3(P) + 0.2 * (1.0 - fade3(P));
         hgt = (blade - 0.5) * 0.0006 * fade3(P);
         rough = 0.92;
+        float press = 0.0; vec3 leanW = vec3(0.0);           // grass flattened and pushed aside along the ball's path
+        for (int ti = 0; ti < 16; ti++) {
+            vec4 tp = uTrail[ti];
+            if (tp.w <= 0.0) continue;
+            vec3 dv = P - tp.xyz;
+            float dd = length(dv) / uTrailR;
+            float f = exp(-dd * dd * 1.4) * tp.w;
+            press = max(press, f);
+            leanW += dv / (length(dv) + 1e-5) * f;
+        }
+        albedo *= 1.0 + 0.3 * press;
         if (uShell > 0.0) {                                  // one layer of the short grass: each blade is a thin tapering column
-            vec2 gq = vec2(dot(P, vec3(150.0, 85.0, 120.0)), dot(P, vec3(-80.0, 140.0, 95.0)));
+            vec3 shiftW = leanW * uTrailR * 0.45 * uShell;
+            vec2 gq = vec2(dot(P - shiftW, vec3(150.0, 85.0, 120.0)), dot(P - shiftW, vec3(-80.0, 140.0, 95.0)));
             vec2 gc = floor(gq), gf = fract(gq) - 0.5;
-            float bh = 0.4 + 0.6 * hash21(gc + 3.7);
+            float bh = (0.4 + 0.6 * hash21(gc + 3.7)) * (1.0 - 0.7 * min(press, 1.0));
             vec2 off = (vec2(hash21(gc + 1.3), hash21(gc + 8.1)) - 0.5) * 0.5;
             if (uShell > bh || length(gf - off) > 0.46 * (1.0 - 0.75 * uShell / bh)) discard;
             albedo *= 0.45 + 0.85 * uShell;                   // darker at the root, brighter at the tip
@@ -445,15 +460,17 @@ void main() {
         hgt = (lb - 0.5) * 0.0012 + (lc - 0.5) * 0.0005;
         rough = 0.82;
     } else if (uMat == 25) {    // toy world: a studded baseplate in bright primary patches
-        vec2 q = vec2(dot(P, vec3(34.0, 20.0, 28.0)), dot(P, vec3(-18.0, 33.0, 22.0)));
+        vec3 an = abs(normalize(vNL));
+        vec2 sq = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);   // round studs: project along the dominant axis
+        vec2 q = sq * uStud.x;
         vec2 fp = fract(q) - 0.5;
         float stud = smoothstep(0.36, 0.30, length(fp));
-        float ring = smoothstep(0.30, 0.26, length(fp)) * smoothstep(0.16, 0.2, length(fp)) * 0.0;
         float hp = hash21(floor(q * 0.18));
         vec3 pcol = hp < 0.25 ? vec3(0.9, 0.12, 0.1) : hp < 0.5 ? vec3(0.1, 0.35, 0.9) : hp < 0.75 ? vec3(0.98, 0.78, 0.08) : vec3(0.1, 0.65, 0.25);
         albedo = mix(albedo, pcol * 0.8, 0.55);
-        albedo *= 0.88 + 0.22 * stud;
-        hgt = stud * 0.0022 + 0.0002 * (1.0 - stud);
+        albedo *= 0.86 + 0.26 * stud;
+        albedo *= 1.0 - 0.25 * smoothstep(0.30, 0.40, length(fp)) * (1.0 - stud);
+        hgt = stud * uStud.y;
         rough = 0.28; coat = 0.7;
     } else if (uMat == 26) {    // craft felt with stitching
         vec2 q = vec2(dot(P, vec3(30.0, 18.0, 24.0)), dot(P, vec3(-16.0, 29.0, 20.0)));
@@ -494,6 +511,15 @@ void main() {
         emit = vec3(1.0, 0.34, 0.05) * vein * (1.5 + 0.7 * sin(uTime * 1.4 + a * 30.0)) + vec3(0.4, 0.08, 0.0) * smoothstep(0.2, 0.0, a) * 0.4;
         hgt = (rockN - 0.5) * 0.0010 - vein * 0.0014;
         rough = 0.55;
+    } else if (uMat == 30) {    // jelly: glossy gel in colour blobs with an inner glow, rippling away from the ball
+        float ja = vnoise(vec2(dot(P, vec3(26.0, 15.0, 21.0)), dot(P, vec3(-14.0, 25.0, 17.0))));
+        albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.42, 0.62, ja));
+        float jd = uMarbleR > 0.0 ? length(vWorld - uMarbleL) / uMarbleR : 30.0;
+        float rip = sin(jd * 2.6 - uTime * 7.0) * exp(-jd * 0.28) * smoothstep(0.0, 1.5, jd);
+        float idle = sin(dot(P, vec3(70.0, 50.0, 60.0)) + uTime * 2.0) * 0.15;
+        hgt = (rip * 0.35 + idle) * (uMarbleR > 0.0 ? uMarbleR : 0.02) * 0.1;
+        emit = albedo * (0.16 + 0.1 * ja);
+        rough = 0.08; coat = 1.0;
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
         float vm = max(vCol.r, max(vCol.g, vCol.b));
         vec3 baseC = vm > 1.0 ? vCol / vm : vCol;                // keep the hue of a glowing colour instead of clipping it to white
@@ -967,7 +993,14 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         vec3 emit = vec3(1.0, 0.36, 0.06) * vein * (1.8 + 0.8 * sin(uTime * 2.0 + f1 * 20.0)) + vec3(0.5, 0.1, 0.0) * 0.08;
         return shadeBall(vec3(0.02, 0.015, 0.015), 0.5, 0.0, emit, 0.5, N, V);
     }
-    // 19: beach ball: six panels, white pole caps
+    if (uSkin == 19) {           // gummy ball: translucent jelly with a bright core and a soft wobble
+        float gw = fb3(p * 3.0 + vec3(0.0, uTime * 0.2, 0.0), 1.5);
+        vec3 gc = mix(vec3(1.0, 0.15, 0.4), vec3(1.0, 0.55, 0.1), smoothstep(0.35, 0.65, gw));
+        float core = pow(max(dot(N, V), 0.0), 1.6);
+        vec3 emit = gc * (0.35 + 0.8 * core);
+        return shadeBall(pow(gc, vec3(2.2)) * 0.6, 0.06, 0.0, emit, 1.0, N, V);
+    }
+    // 20: beach ball: six panels, white pole caps
     float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
     vec3 c = seg < 1.0 ? vec3(0.95, 0.15, 0.15) : seg < 2.0 ? vec3(1.0) : seg < 3.0 ? vec3(1.0, 0.85, 0.1) : seg < 4.0 ? vec3(1.0) : seg < 5.0 ? vec3(0.1, 0.45, 0.95) : vec3(1.0);
     float seamL = smoothstep(0.02, 0.0, abs(fract((lon / 6.2831853 + 0.5) * 6.0) - 0.5) - 0.48);

@@ -66,21 +66,28 @@ object HazardModels {
         col = c(30, 34, 42); push(); translate(0f, 0f, SWING_LENGTH); sphere(0.07f, 10, 8); pop()
     }.build()
 
-    /** The swinging seat: a round platform with hazard stripes, hung by four chains from the pivot at the origin (it hangs along -z). */
-    fun swingSeat(discR: Float) = PM().apply {
+    /** The swinging platform: a square striped deck (side 2 * half) hung by four chains from the pivot at the origin (it hangs along -z). */
+    fun swingSeat(half: Float) = PM().apply {
         val chain = c(150, 156, 170)
         col = chain
-        for (k in 0 until 4) {
-            val a = k * (PI / 2).toFloat() + (PI / 4).toFloat()
-            tube(listOf(Vec3(0f, 0f, 0f), Vec3(cos(a) * discR * 0.9f, sin(a) * discR * 0.9f, -SWING_LENGTH + 0.04f)), 0.014f, 5)
-        }
+        for (sx in intArrayOf(-1, 1)) for (sy in intArrayOf(-1, 1))
+            tube(listOf(Vec3(0f, 0f, 0f), Vec3(sx * half * 0.85f, sy * half * 0.85f, -SWING_LENGTH + 0.04f)), 0.014f, 5)
         push(); translate(0f, 0f, -SWING_LENGTH)
-        for (i in 0 until 12) { col = if (i % 2 == 0) c(250, 200, 30) else c(40, 40, 46)
-            push(); rotZ(i * (PI / 6).toFloat()); translate(discR * 0.93f, 0f, 0.0f); box(discR * 0.16f, discR * 0.5f, 0.07f); pop() }
-        col = c(88, 94, 108); cylinder(discR, 0.06f, 32)
-        col = c(255, 196, 40); push(); translate(0f, 0f, 0.058f); torus(discR * 0.55f, 0.012f, 28, 5); pop()
-        col = c(255, 60, 40) * 1.6f; push(); translate(0f, 0f, 0.058f); cylinder(discR * 0.14f, 0.02f, 16); pop()
+        col = c(88, 94, 108); push(); translate(0f, 0f, 0.0f); box(half * 2f, half * 1.96f, 0.06f); pop()
+        for (i in 0 until 8) { col = if (i % 2 == 0) c(250, 200, 30) else c(40, 40, 46)
+            for (sy in intArrayOf(-1, 1)) { push(); translate(-half + (i + 0.5f) * half * 2f / 8f, sy * half * 0.96f, 0.0f); box(half * 2f / 8f, half * 0.1f, 0.075f); pop() } }
+        col = c(255, 196, 40); push(); translate(0f, 0f, 0.032f); torus(half * 0.5f, 0.012f, 28, 5); pop()
+        col = c(255, 60, 40) * 1.6f; push(); translate(0f, 0f, 0.032f); cylinder(half * 0.12f, 0.02f, 16); pop()
         pop()
+    }.build()
+
+    /** A key in cell units, lying flat-ish: a ring bow, a shaft and two teeth. */
+    fun keyModel(r: Int, g: Int, b: Int) = PM().apply {
+        col = c(r, g, b) * 1.15f
+        push(); translate(-0.17f, 0f, 0f); torus(0.1f, 0.03f, 22, 8); pop()
+        push(); translate(0.07f, 0f, 0f); rotY((PI / 2).toFloat()); cylinder(0.028f, 0.3f, 10); pop()
+        for (k in 0..1) { push(); translate(0.17f + k * 0.07f, 0f, -0.045f); box(0.04f, 0.03f, 0.09f); pop() }
+        col = c(255, 255, 255); push(); translate(-0.17f, 0f, 0.0f); torus(0.1f, 0.012f, 22, 5); pop()
     }.build()
 
     // ---- floor effects (cell units; x along the corridor, y across, z up) ----
@@ -102,9 +109,9 @@ object HazardModels {
 
     /** Conveyor belt bed with yellow side rails (the moving chevrons are separate). */
     fun belt() = PM().apply {
-        col = c(46, 48, 56); push(); translate(0f, 0f, 0.015f); box(0.96f, 0.62f, 0.03f); pop()
+        col = c(46, 48, 56); push(); translate(0f, 0f, 0.015f); box(1.0f, 0.62f, 0.03f); pop()
         col = c(255, 196, 40)
-        for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * 0.32f, 0.03f); box(0.96f, 0.04f, 0.05f); pop() }
+        for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * 0.32f, 0.03f); box(1.0f, 0.04f, 0.05f); pop() }
         col = c(120, 126, 140)
         for (e in intArrayOf(-1, 1)) { push(); translate(e * 0.48f, 0f, 0.03f); rotX((PI / 2).toFloat()); cylinder(0.03f, 0.62f, 10); pop() }
     }.build()

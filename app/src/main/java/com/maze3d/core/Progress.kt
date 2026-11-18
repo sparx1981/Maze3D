@@ -41,13 +41,13 @@ class Progress(private val store: ProgressStore) {
 
     companion object {
         /** Order in which surfaces open. */
-        val SURFACE_CHAIN = listOf("classic", "sand", "mud", "t0", "water", "t3", "t2", "fog", "t5", "t1", "t6", "t4", "t7", "t8", "t9", "t10", "t11", "t12", "t13", "t14", "t15", "t16", "t17", "gas")
+        val SURFACE_CHAIN = listOf("classic", "sand", "mud", "t0", "water", "t3", "t2", "fog", "t5", "t1", "t6", "t4", "t7", "t8", "t9", "t10", "t11", "t12", "t13", "t14", "t15", "t16", "t17", "t18", "gas")
         val SHAPE_CHAIN = listOf(ShapeKind.SPHERE, ShapeKind.CUBE, ShapeKind.CAPSULE, ShapeKind.BARREL, ShapeKind.TORUS, ShapeKind.BRICK,
             ShapeKind.COIN, ShapeKind.PYRAMID, ShapeKind.GEM, ShapeKind.KNOT)
         /** Menu surface chip index (1 = Classic ...) to key. */
-        val MENU_KEYS = listOf("random", "classic", "sand", "mud", "water", "fog", "gas", "t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12", "t13", "t14", "t15", "t16", "t17")
-        fun skinForKey(key: String): Int = when { key.startsWith("t") -> key.drop(1).toInt() + 1; key == "sand" || key == "water" -> 19; else -> 0 }
-        fun keysForSkin(skin: Int): List<String> = if (skin == 19) listOf("sand", "water") else listOf("t${skin - 1}")
-        val SKIN_NAMES = listOf("Glass marble", "Gobstopper", "Sugar skull", "Tyre", "Soccer ball", "Plasma ball", "Bun", "Science orb", "Snowball", "Gold scarab", "Neon globe", "Mossy stone", "Glow orb", "Autumn leaf", "Toy ball", "Yarn ball", "Amber", "Ball bearing", "Molten core", "Beach ball")
+        val MENU_KEYS = listOf("random", "classic", "sand", "mud", "water", "fog", "gas", "t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12", "t13", "t14", "t15", "t16", "t17", "t18")
+        fun skinForKey(key: String): Int = when { key.startsWith("t") -> key.drop(1).toInt() + 1; key == "sand" || key == "water" -> 20; else -> 0 }
+        fun keysForSkin(skin: Int): List<String> = if (skin == 20) listOf("sand", "water") else listOf("t${skin - 1}")
+        val SKIN_NAMES = listOf("Glass marble", "Gobstopper", "Sugar skull", "Tyre", "Soccer ball", "Plasma ball", "Bun", "Science orb", "Snowball", "Gold scarab", "Neon globe", "Mossy stone", "Glow orb", "Autumn leaf", "Toy ball", "Yarn ball", "Amber", "Ball bearing", "Molten core", "Gummy ball", "Beach ball")
     }
 }
