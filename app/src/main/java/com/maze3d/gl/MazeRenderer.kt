@@ -39,7 +39,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         /** Lifetime statistics: [key] such as "distance", "resets", "falls", "started:<surface>". */
         fun onStat(key: String, amount: Float)
         /** A maze was completed: [surfaceKey] is the surface it was played on. */
-        fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty, seconds: Float)
+        fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty, seconds: Float, ghost: com.maze3d.core.Ghost, ghostSeconds: Float)
         /** [cooldown] seconds until the next hint (0 = ready); [active] while the thread is showing. */
         fun onHint(cooldown: Int, active: Boolean)
         val audio: Audio
@@ -222,7 +222,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var threadMesh: GlMesh? = null
 
     // ---- game state -----------------------------------------------------------------------
-    private val rnd = Random()
+    private var rnd = Random()
     private var kind = ShapeKind.SPHERE
     private var maze: Maze? = null
     private var marble: Marble? = null
@@ -485,9 +485,33 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun chaseYawBy(angle: Float) { pendingYaw += angle }
 
     // ---- game control (GL thread) ---------------------------------------------------------
+    private class RaceSetup(val ghost: com.maze3d.core.Ghost)
+    @Volatile private var raceSetup: RaceSetup? = null
+    private var raceGhost: com.maze3d.core.Ghost? = null
+    private var lvlSeed = 0L
+    private var lvlPalIndex = 0
+    private var lvlPlain = false
+    private val runSamples = ArrayList<Float>()
+
+    /** Starts a race against a saved run: the same maze again, with the ghost running alongside. */
+    fun startRace(g: com.maze3d.core.Ghost) {
+        raceSetup = RaceSetup(g)
+        difficulty = g.difficulty
+        startGame(g.shape, g.terrain, g.plain, null, g.medium)
+    }
+
     fun newLabyrinth(k: ShapeKind, forcedTerrain: Terrain? = null, plain: Boolean = false, forcedTheme: Int? = null, forcedMedium: Medium? = null) {
+        val setup = raceSetup; raceSetup = null
+        raceGhost = setup?.ghost
+        val seed = setup?.ghost?.seed ?: rnd.nextLong()
+        val saved = rnd
+        rnd = Random(seed)
+        try { newLabyrinthImpl(k, forcedTerrain, plain, forcedTheme, forcedMedium, seed, setup) } finally { rnd = saved }
+    }
+
+    private fun newLabyrinthImpl(k: ShapeKind, forcedTerrain: Terrain?, plain: Boolean, forcedTheme: Int?, forcedMedium: Medium?, seed: Long, setup: RaceSetup?) {
         kind = k
-        val seed = rnd.nextLong()
+        lvlSeed = seed; lvlPlain = plain; runSamples.clear()
         val m = Maze(k.createMesh(difficulty.scale), seed)
         maze = m
         marble = Marble(m)
@@ -499,14 +523,15 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (forcedMedium == null && medium != Medium.NONE && !open(medium.name.lowercase())) medium = Medium.NONE
         terrain = forcedTerrain ?: (if (medium != Medium.NONE) Terrain.NONE else if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
         if (forcedTerrain == null && terrain != Terrain.NONE && !open(terrain.name.lowercase())) terrain = Terrain.NONE
-        pal = when {
+        pal = if (setup != null) Palette.all[setup.ghost.palIndex.coerceIn(0, Palette.all.size - 1)] else when {
             terrain != Terrain.NONE -> Palette.random(rnd, pal)                           // sand/mud floors keep a classic wall finish
             forcedTheme == null -> Palette.randomAny(rnd, pal)
             forcedTheme < 0 -> Palette.random(rnd, pal)
             else -> Palette.themes[forcedTheme.coerceIn(0, Palette.themes.size - 1)]
         }
-        if (forcedTheme == null && pal.themeId >= 0 && !open("t${pal.themeId}")) pal = Palette.random(rnd, pal)
+        if (setup == null && forcedTheme == null && pal.themeId >= 0 && !open("t${pal.themeId}")) pal = Palette.random(rnd, pal)
         if (terrain == Terrain.NONE && medium == Medium.NONE && (pal.themeId == 8 || pal.themeId == 7)) terrain = Terrain.SAND     // temple sand / powder snow
+        lvlPalIndex = Palette.all.indexOf(pal).coerceAtLeast(0)
         pal = when (terrain) {
             Terrain.SAND -> pal.withFloor(when (pal.themeId) { 8 -> Vec3(0.88f, 0.70f, 0.44f); 7 -> Vec3(0.76f, 0.84f, 0.95f); else -> Vec3(0.84f, 0.72f, 0.50f) }, Mat.SAND, 0.96f)
             Terrain.MUD -> pal.withFloor(Vec3(0.30f, 0.20f, 0.13f), Mat.MUD, 0.4f)
@@ -531,6 +556,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         propMesh!!.let { val mb = b.props(); if (mb.vertexCount > 0) it.upload(mb.vertices(), mb.indices()) else it.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0)) }
         marble?.setObstacles(b.obstacles.map { Triple(it.cell, it.pos, it.radius) })
+        rnd = Random(seed xor 0x5DEECE66DL)                      // hazards come from their own stream so a race rebuilds them exactly
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = false                                   // clouds, rain and distance haze were removed from the game
@@ -849,6 +875,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     }
                 } else {
                     mb.clock = time
+                    val sIdx = (playSeconds * 10f).toInt()
+                    while (runSamples.size / 3 <= sIdx) { runSamples.add(mb.position.x); runSamples.add(mb.position.y); runSamples.add(mb.position.z) }
                     val before = mb.position
                     mb.step(gLocal, dt)
                     statDist += (mb.position - before).length() / m.cellSize
@@ -971,7 +999,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     }
                     if (mb.atGoal) {
                         phase = Phase.SOLVED; solvedTimer = 0f
-                        if (!solvedReported) { solvedReported = true; host.onSolved(surfaceKey, kind, difficulty, playSeconds) }
+                        if (!solvedReported) { solvedReported = true; host.onSolved(surfaceKey, kind, difficulty, playSeconds,
+                            com.maze3d.core.Ghost(lvlSeed, kind, difficulty, surfaceKey, lvlPalIndex, terrain, medium, lvlPlain, playSeconds, runSamples.toFloatArray()), raceGhost?.seconds ?: 0f) }
                     }
                 }
                 updateDoors(m)
@@ -1492,6 +1521,24 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         else GLES30.glUniform1f(loc(marbleProg, "uCubeOn"), 0f)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         sphere?.draw()
+
+        // the racing ghost: a translucent copy of the ball following the saved run
+        raceGhost?.let { g ->
+            if (phase == Phase.PLAY || phase == Phase.SOLVED) g.positionAt(playSeconds)?.let { gp ->
+                GLES30.glEnable(GLES30.GL_BLEND)
+                GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+                GLES30.glDepthMask(false)
+                GLES30.glUniform3f(loc(marbleProg, "uCenter"), gp.x, gp.y, gp.z)
+                GLES30.glUniform1f(loc(marbleProg, "uRadius"), mb.radius)
+                GLES30.glUniform3f(loc(marbleProg, "uAccent"), 0.55f, 0.85f, 1f)
+                GLES30.glUniform1f(loc(marbleProg, "uGhost"), 1f)
+                sphere?.draw()
+                GLES30.glDepthMask(true)
+                GLES30.glUniform3f(loc(marbleProg, "uAccent"), pal.accent.x, pal.accent.y, pal.accent.z)
+                GLES30.glUniform3f(loc(marbleProg, "uCenter"), drawPos.x, drawPos.y, drawPos.z)
+                GLES30.glUniform1f(loc(marbleProg, "uRadius"), drawR)
+            }
+        }
 
         // ghost where the labyrinth hides the marble
         GLES30.glEnable(GLES30.GL_BLEND)

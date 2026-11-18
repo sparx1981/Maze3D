@@ -300,4 +300,16 @@ class MazeTest {
         assertEquals(listOf("t3", "sand"), Stats(store).surfacesPlayed().map { it.first })
         assertEquals("1h 2m", Stats.duration(3725.0))
     }
+
+    @Test
+    fun ghostRoundTripsAndRebuildsTheSameMaze() {
+        val a = Maze(ShapeKind.CUBE.createMesh(0.55f), 99L); val b = Maze(ShapeKind.CUBE.createMesh(0.55f), 99L)
+        assertTrue(a.solution.contentEquals(b.solution))
+        val h1 = Hazards(a, Random(5), true, true, true, true, 1f, true); val h2 = Hazards(b, Random(5), true, true, true, true, 1f, true)
+        assertTrue(h1.holeCells.contentEquals(h2.holeCells) && h1.bridgeCells.contentEquals(h2.bridgeCells) && h1.swingCells.contentEquals(h2.swingCells) && h1.doorEdges.contentEquals(h2.doorEdges))
+        val g = Ghost(99L, ShapeKind.CUBE, Difficulty.EASY, "sand", 3, Terrain.SAND, Medium.NONE, false, 61.5f, floatArrayOf(0f, 1f, 2f, 0.5f, 1.5f, 2.5f))
+        val d = Ghost.decode(g.encode())!!
+        assertEquals(99L, d.seed); assertEquals(61.5f, d.seconds); assertEquals(6, d.samples.size)
+        assertEquals(0.25f, d.positionAt(0.05f)!!.x, 1e-4f)
+    }
 }

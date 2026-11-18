@@ -98,6 +98,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         renderer = MazeRenderer(this)
         val ui = getSharedPreferences("maze3d_ui", MODE_PRIVATE)
         val progPrefs = getSharedPreferences("maze3d_progress", MODE_PRIVATE)
+        progPrefsRef = progPrefs
         progress = com.maze3d.core.Progress(object : com.maze3d.core.ProgressStore {
             override fun get(key: String) = progPrefs.getString(key, null)
             override fun put(key: String, value: String) { progPrefs.edit().putString(key, value).apply() }
@@ -989,11 +990,30 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     private fun showRace() {
-        // filled in with the ghost list below
         menuRace.removeAllViews()
         val w = minOf(dp(460f), resources.displayMetrics.widthPixels - dp(32f))
-        menuRace.addView(backHeader("Race", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(20f)) })
-        menuRace.addView(TextView(this).apply { text = "Finish a maze to save a ghost to race."; setTextColor(Color.argb(170, 255, 255, 255)); textSize = 14f; gravity = Gravity.CENTER; setPadding(0, dp(40f), 0, 0) }, LinearLayout.LayoutParams(w, -2))
+        menuRace.addView(backHeader("Race", w), LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(14f)) })
+        menuRace.addView(TextView(this).apply { text = "Race the ghost of your fastest run on a maze you have finished."; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 12f; gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(14f)) }, LinearLayout.LayoutParams(w, -2))
+        val entries = bestTimes.all().mapNotNull { e ->
+            com.maze3d.core.Ghost.decode(progPrefsRef.getString(ghostKey(e.surface, e.shape, e.difficulty), null))?.let { e to it }
+        }
+        if (entries.isEmpty()) {
+            menuRace.addView(TextView(this).apply { text = "No ghosts yet. Finish a maze and your run is saved here."; setTextColor(Color.argb(170, 255, 255, 255)); textSize = 14f; gravity = Gravity.CENTER; setPadding(0, dp(30f), 0, 0) }, LinearLayout.LayoutParams(w, -2))
+        } else {
+            val order = com.maze3d.core.Progress.SURFACE_CHAIN
+            for ((e, g) in entries.sortedWith(compareBy({ order.indexOf(it.first.surface) }, { ShapeKind.values().indexOf(it.first.shape) }, { it.first.difficulty.ordinal }))) {
+                val idx = com.maze3d.core.Progress.MENU_KEYS.indexOf(e.surface)
+                val name = if (idx > 0) surfaceNames[idx] else e.surface
+                val row = bigButton("$name \u00B7 ${e.shape.label} \u00B7 ${e.difficulty.label}   ${com.maze3d.core.BestTimes.format(e.seconds)}") {
+                    selDifficulty = e.difficulty.ordinal
+                    gameStarted = true
+                    hideMenu()
+                    glView.queueEvent { renderer.startRace(g) }
+                }
+                row.textSize = 13f; row.letterSpacing = 0.05f
+                menuRace.addView(row, LinearLayout.LayoutParams(w, -2).apply { setMargins(0, 0, 0, dp(8f)) })
+            }
+        }
         menuMain.visibility = View.GONE
         menuRace.visibility = View.VISIBLE
     }
@@ -1016,6 +1036,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var progress: com.maze3d.core.Progress
     private lateinit var bestTimes: com.maze3d.core.BestTimes
     private lateinit var stats: com.maze3d.core.Stats
+    private lateinit var progPrefsRef: android.content.SharedPreferences
     private var lastStatFlush = 0L
     private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall")
 
@@ -1143,9 +1164,16 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     private fun toastText(message: String) = onToast(message)
 
-    override fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty, seconds: Float) {
+    private fun ghostKey(surface: String, shape: ShapeKind, d: com.maze3d.core.Difficulty) = "ghost|$surface|${shape.name}|${d.name}"
+
+    override fun onSolved(surfaceKey: String, shape: ShapeKind, difficulty: com.maze3d.core.Difficulty, seconds: Float, ghost: com.maze3d.core.Ghost, ghostSeconds: Float) {
         val u = progress.record(surfaceKey, shape, difficulty)
         val prev = bestTimes.record(surfaceKey, shape, difficulty, seconds)
+        if (prev == null || prev >= 0f) progPrefsRef.edit().putString(ghostKey(surfaceKey, shape, difficulty), ghost.encode()).apply()   // the fastest run becomes the ghost
+        if (ghostSeconds > 0f) {
+            val diff = seconds - ghostSeconds
+            onToast(if (diff < 0f) "You beat your ghost by %.1fs".format(-diff) else "Your ghost won by %.1fs".format(diff), 4200)
+        }
         val recordText = when {
             prev == null -> "First time set: ${com.maze3d.core.BestTimes.format(seconds)}"
             prev >= 0f -> "New best ${com.maze3d.core.BestTimes.format(seconds)}  (was ${com.maze3d.core.BestTimes.format(prev)})"
