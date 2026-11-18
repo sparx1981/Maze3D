@@ -257,12 +257,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var camDist = 3.2f
     // chase camera state (all in the piece's local space until the final transform)
     private var chaseBlend = 0f
-    private var chaseF = Vec3(0f, 0f, 1f)
-    private var chaseInit = false
-    private var eyeS = Vec3.ZERO
-    private var tgtS = Vec3.ZERO
-    private var upS = Vec3(0f, 1f, 0f)
-    private var chaseSpeed = 0f
+    private val chaseCam = com.maze3d.core.ChaseCam()
+    private var chaseF: Vec3 get() = chaseCam.f; set(v) { chaseCam.f = v }
+    private var chaseInit: Boolean get() = chaseCam.init; set(v) { chaseCam.init = v }
+    private val eyeS get() = chaseCam.eyeS
+    private val tgtS get() = chaseCam.tgtS
+    private val upS get() = chaseCam.upS
+    private val chaseSpeed get() = chaseCam.speed
     private var eye = Vec3(0f, 0f, 3f)
     private var camRight = Vec3(1f, 0f, 0f)
     private var camUp = Vec3(0f, 1f, 0f)
@@ -417,31 +418,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (chaseBlend > 0.002f && mb != null && m != null) {
             val cs = m.cellSize
             val n = mb.surface.normal(mb.position)
-            var f = chaseF - n * (chaseF dot n)
-            f = if (f.lengthSq() < 1e-8f) (Vec3(1f, 0f, 0f) - n * n.x).normalized() else f.normalized()
-            val yaw = pendingYaw
-            if (yaw != 0f) { pendingYaw = 0f; f = Quat.fromAxisAngle(n, yaw).rotate(f) }
-            val v = mb.velocity
-            val vt = v - n * (v dot n)
-            val sp = vt.length()
-            if (sp > cs * 0.25f && dt > 0f) {                      // swing round behind the direction of travel
-                val a = 1f - exp(-3.2f * dt * min(1f, sp / (cs * 1.5f)))
-                f = (f * (1f - a) + (vt / sp) * a).normalized()
-            }
-            chaseF = f
-            chaseSpeed = (sp / (cs * 4f)).coerceIn(0f, 1f)
-            val zf = 2.4f + (0.35f - 2.4f) * zoomV
-            val back = cs * 1.9f * zf + cs * 0.8f * chaseSpeed
-            val h = cs * 1.8f * zf
-            val eyeL = mb.position + n * h - f * back
-            val tgtL = mb.position + f * (cs * 1.15f) - n * (cs * 0.05f)
-            if (!chaseInit) { eyeS = eyeL; tgtS = tgtL; upS = n; chaseInit = true }
-            else if (dt > 0f) {
-                val a = 1f - exp(-9f * dt)
-                eyeS += (eyeL - eyeS) * a
-                tgtS += (tgtL - tgtS) * a
-                upS = (upS + (n - upS) * (1f - exp(-6f * dt))).normalized()
-            }
+            val yaw = pendingYaw; pendingYaw = 0f
+            chaseCam.update(mb.position, n, mb.velocity, cs, zoomV, dt, yaw, aspect)
             val k = ease01(chaseBlend)
             eyeV = Vec3.lerp(eyeV, orient.rotate(eyeS), k)
             tgt = Vec3.lerp(tgt, orient.rotate(tgtS), k)
