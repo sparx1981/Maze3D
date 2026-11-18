@@ -50,7 +50,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private class Door(val mid: Vec3, val normal: Vec3, var closed: Boolean)
 
     // ---- inputs (written from the UI thread) --------------------------------------------
-    @Volatile var tiltMode = false
+    /** 0 = joystick, 1 = tilt (gyro only), 2 = gravity (turn the piece; follow camera only). */
+    @Volatile var controlMode = 0
+    val tiltMode get() = controlMode == 1
+    @Volatile var ballScreenX = 0.5f
+    @Volatile var ballScreenY = 0.5f
+    @Volatile var ballOnScreen = false
     @Volatile var hintActive = false
     /** True while the menu is open mid-game: physics, timers and hazards stand still. */
     @Volatile var paused = false
@@ -127,6 +132,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var trailProg = 0
     private val trail = TrailBuffer()
     private val glowTrail = TrailBuffer(900)
+    private val haloBuf = TrailBuffer(400)
+    private var haloProg = 0
+    private var myceliumMesh: GlMesh? = null
+    private var lampIdxList: List<Int> = emptyList()
+    private val lampIdxUniform = FloatArray(12)
+    private var sporeAcc = 0f
     private val leaves = TrailBuffer(800)
     private var glowProg = 0
     private var leafProg = 0
@@ -229,6 +240,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var angVel = Vec3.ZERO
     private var dragging = false
     private var zoom = 1.6f + (0.55f - 1.6f) * 0.67f
+    private var zoomV = 0.67f
     private var width = 1
     private var height = 1
     private val proj = FloatArray(16)
@@ -288,7 +300,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         puddleProg = Shaders.program(Shaders.SCENE_VS, Shaders.PUDDLE_FS)
         trailProg = Shaders.program(Shaders.TRAIL_VS, Shaders.TRAIL_FS)
         trail.init()
-        glowTrail.init(); leaves.init()
+        glowTrail.init(); leaves.init(); haloBuf.init()
+        haloProg = Shaders.program(Shaders.HALO_VS, Shaders.HALO_FS)
+        myceliumMesh = GlMesh(GlMesh.SCENE)
         glowProg = Shaders.program(Shaders.TRAIL_VS, Shaders.GLOW_FS)
         leafProg = Shaders.program(Shaders.LEAF_VS, Shaders.LEAF_FS)
         rainProg = Shaders.program(Shaders.RAIN_VS, Shaders.RAIN_FS)
@@ -364,8 +378,22 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
      * Builds the camera for this frame. Orbit mode looks at the piece from a distance; chase mode sits behind and
      * above the marble and looks down the track ahead. Switching blends smoothly between the two poses.
      */
+    /** Follow camera: from the whole piece in view (slider low) down to a few cells from the ball (slider high). */
+    private fun followDist(): Float {
+        val mb = marble ?: return camDist
+        val m = maze ?: return camDist
+        val aspect = width.toFloat() / height
+        val tanMin = min(tan(Math.toRadians(19.0)).toFloat(), tan(Math.toRadians(19.0)).toFloat() * aspect)
+        val r = kind.outerRadius * 1.12f
+        val far = (r / tanMin + r) * 1.6f
+        val close = mb.position.length() + m.cellSize * 2.6f
+        val t = zoomV * zoomV * (3f - 2f * zoomV)
+        return far + (close - far) * t
+    }
+
     private fun computeCamera(dt: Float) {
         val aspect = width.toFloat() / height
+        if (cameraMode == 1 && marble != null && phase != Phase.MENU) camDist = followDist()
         val wantChase = cameraMode == 2 && phase != Phase.MENU
         chaseBlend += ((if (wantChase) 1f else 0f) - chaseBlend) * min(1f, dt * 5f)
         if (!wantChase && chaseBlend < 0.003f) chaseBlend = 0f
@@ -376,6 +404,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var near = 0.1f
         val mb = marble
         val m = maze
+        if (cameraMode == 1 && m != null && phase != Phase.MENU) near = min(0.1f, m.cellSize * 0.9f)
         if (chaseBlend > 0.002f && mb != null && m != null) {
             val cs = m.cellSize
             val n = mb.surface.normal(mb.position)
@@ -392,7 +421,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             chaseF = f
             chaseSpeed = (sp / (cs * 4f)).coerceIn(0f, 1f)
-            val zf = (zoom / 0.9f).coerceIn(0.6f, 1.7f)
+            val zf = 2.4f + (0.35f - 2.4f) * zoomV
             val back = cs * 1.9f * zf + cs * 0.8f * chaseSpeed
             val h = cs * 1.8f * zf
             val eyeL = mb.position + n * h - f * back
@@ -420,6 +449,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         Matrix.setLookAtM(view, 0, eyeV.x, eyeV.y, eyeV.z, tgt.x, tgt.y, tgt.z, camUp.x, camUp.y, camUp.z)
         Matrix.multiplyMM(vp, 0, proj, 0, view, 0)
         p00 = proj[0]; p11 = proj[5]
+        marble?.let { mbc ->
+            val w4 = orient.rotate(mbc.position)
+            val inp = floatArrayOf(w4.x, w4.y, w4.z, 1f); val out = FloatArray(4)
+            Matrix.multiplyMV(out, 0, vp, 0, inp, 0)
+            if (out[3] > 1e-4f) { ballScreenX = out[0] / out[3] * 0.5f + 0.5f; ballScreenY = 0.5f - out[1] / out[3] * 0.5f; ballOnScreen = true } else ballOnScreen = false
+        }
     }
 
     // ---- camera / chase controls (any thread) ---------------------------------------------
@@ -437,12 +472,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Game-pad stick: steers in chase view, turns the piece like a drag in the other views. */
     fun padInput(x: Float, y: Float, on: Boolean) {
         padX = x; padY = y; padOn = on
-        if (cameraMode == 2) { chaseIx = x; chaseIy = -y; joyActive = on }
+        if (cameraMode == 2 || controlMode != 2) { chaseIx = x; chaseIy = -y; joyActive = on }
     }
 
     fun padLook(x: Float) { padLookX = x }
 
-    fun nudgeZoom(d: Float) { zoom = (zoom - d).coerceIn(0.55f, 1.6f); updateCamera() }
+    fun nudgeZoom(d: Float) { zoomV = (zoomV + d).coerceIn(0f, 1f); zoom = 1.6f + (0.55f - 1.6f) * zoomV; updateCamera() }
 
     fun setChaseInput(ix: Float, iy: Float, active: Boolean) { chaseIx = ix; chaseIy = iy; joyActive = active }
 
@@ -486,6 +521,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         wallMesh!!.let { val mb = b.walls(); it.upload(mb.vertices(), mb.indices()) }
         b.planProps(kind.outerRadius)
         lamps = b.lamps.toList()
+        lampIdxList = b.lampIdx.toList()
+        haloBuf.clear()
+        myceliumMesh!!.let { mm ->
+            if (pal.themeId == 11) {
+                for ((i, lp) in lamps.withIndex()) { val fp = m.mesh.surface.project(lp); haloBuf.add(fp, m.mesh.surface.normal(fp), m.cellSize * 1.45f, lampIdxList.getOrElse(i) { 0 }.toFloat()) }
+                val mb = b.mycelium(); if (mb.vertexCount > 0) mm.upload(mb.vertices(), mb.indices()) else mm.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0))
+            } else mm.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0))
+        }
         propMesh!!.let { val mb = b.props(); if (mb.vertexCount > 0) it.upload(mb.vertices(), mb.indices()) else it.upload(FloatArray(MeshBuilder.STRIDE), IntArray(0)) }
         marble?.setObstacles(b.obstacles.map { Triple(it.cell, it.pos, it.radius) })
         var wantDoors = rnd.nextFloat() < 0.5f
@@ -700,7 +743,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     fun applyProfileSetting(p: QualityProfile) { profile = p }
 
     /** [v] in 0..1: 1 is closest. */
-    fun setZoomLevel(v: Float) { zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
+    fun setZoomLevel(v: Float) { zoomV = v; zoom = 1.6f + (0.55f - 1.6f) * v; updateCamera() }
 
     /** Rotate about the view axis (two-finger twist). */
     fun twist(angle: Float) { lastTouchAt = time; orient = (Quat.fromAxisAngle(Vec3(0f, 0f, 1f), angle) * orient).normalized() }
@@ -730,7 +773,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         time += dt
         adaptResolution(raw.coerceIn(0.001f, 0.2f))
         if (padLookX != 0f && cameraMode == 2) pendingYaw += padLookX * dt * 2.2f
-        if (padOn && cameraMode != 2 && phase == Phase.PLAY && !paused) drag(padX * dt * 700f, padY * dt * 700f, dt)
+        if (padOn && cameraMode != 2 && controlMode == 2 && phase == Phase.PLAY && !paused) drag(padX * dt * 700f, padY * dt * 700f, dt)
         update(dt)
         computeCamera(dt)
         draw()
@@ -790,8 +833,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             }
             Phase.PLAY -> if (paused) { audio.roll(0f, 0) } else {
                 playSeconds += dt
-                val worldG = if (tiltMode) deviceGravity else Vec3(0f, -1f, 0f)
-                val gLocal = if (cameraMode == 2) chaseGravity(mb) else orient.inverseRotate(worldG.normalized()) * GRAVITY
+                val gLocal = when {
+                    cameraMode == 2 -> chaseGravity(mb)
+                    controlMode == 2 -> orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY         // gravity mode: the piece's own tilt moves the ball
+                    else -> orient.inverseRotate(screenSteer()) * GRAVITY                             // joystick or tilt, in the screen's frame
+                }
                 if (fallTimer > 0f) {
                     // marble is dropping into a hole; physics paused
                     fallTimer -= dt
@@ -817,7 +863,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         sparks.emit(under, Vec3.ZERO, 0.38f, pal.accent, 0.012f + 0.01f * spd)
                     }
                     if (pal.themeId == 7) snowfall(mb, m)
-                    if (pal.themeId == 11) glowStamp(mb)
+                    if (pal.themeId == 11) { glowStamp(mb); glowAtmosphere(mb, m, dt) }
                     if (pal.themeId == 12) fallLeaves(mb, m, dt)
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
@@ -1019,12 +1065,25 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     /** Steering force for chase mode: joystick (or tilt) in the camera's frame, laid along the surface. */
-    private fun chaseGravity(mb: Marble): Vec3 {
-        var ix = chaseIx; var iy = chaseIy
-        if (!joyActive && tiltMode) {
+    /** Steering input (right, forward) from the joystick or, in tilt mode, from the gyro alone. */
+    private fun steerInput(): Pair<Float, Float> {
+        if (controlMode == 1) {
             val d = deviceGravity - Vec3(0f, -1f, 0f)
-            ix = (d.x * 1.4f * gyroSens).coerceIn(-1f, 1f); iy = (tiltPitch * 1.4f).coerceIn(-1f, 1f)
+            return (d.x * 1.4f * gyroSens).coerceIn(-1f, 1f) to (tiltPitch * 1.4f).coerceIn(-1f, 1f)
         }
+        return if (joyActive) chaseIx to chaseIy else 0f to 0f
+    }
+
+    /** Follow camera: a push in the screen plane, so the piece itself never needs to turn. */
+    private fun screenSteer(): Vec3 {
+        var (ix, iy) = steerInput()
+        val len = kotlin.math.sqrt(ix * ix + iy * iy)
+        if (len > 1f) { ix /= len; iy /= len }
+        return camRight * ix + camUp * iy
+    }
+
+    private fun chaseGravity(mb: Marble): Vec3 {
+        var (ix, iy) = steerInput()
         val len = kotlin.math.sqrt(ix * ix + iy * iy)
         if (len > 1f) { ix /= len; iy /= len }
         val n = mb.surface.normal(mb.position)
@@ -1257,10 +1316,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         lampUniform.fill(0f)
         if (night) {
             val from = marble?.position ?: Vec3.ZERO
-            val near = lamps.sortedBy { (it - from).lengthSq() }.take(12)
-            val reach = (maze?.cellSize ?: 0.1f) * 4.2f
-            near.forEachIndexed { i, p -> lampUniform[i * 4] = p.x; lampUniform[i * 4 + 1] = p.y; lampUniform[i * 4 + 2] = p.z; lampUniform[i * 4 + 3] = reach }
+            val order = lamps.indices.sortedBy { (lamps[it] - from).lengthSq() }.take(12)
+            val reach = (maze?.cellSize ?: 0.1f) * (if (pal.themeId == 11) 5.2f else 4.2f)
+            lampIdxUniform.fill(0f)
+            order.forEachIndexed { i, li -> val p = lamps[li]; lampUniform[i * 4] = p.x; lampUniform[i * 4 + 1] = p.y; lampUniform[i * 4 + 2] = p.z; lampUniform[i * 4 + 3] = reach; lampIdxUniform[i] = lampIdxList.getOrElse(li) { 0 }.toFloat() }
         }
+        GLES30.glUniform1f(loc(sceneProg, "uLampMode"), if (pal.themeId == 11) 1f else 0f)
+        GLES30.glUniform1fv(loc(sceneProg, "uLampIdx"), 12, lampIdxUniform, 0)
         GLES30.glUniform4fv(loc(sceneProg, "uLamp"), 12, lampUniform, 0)
         run {
             val sf = sandField
@@ -1307,6 +1369,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
         scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
+        if (pal.themeId == 11) { scene(Mat.FLAT, 0.5f, 0f, 0.55f); myceliumMesh?.draw() }
         if (hintLeft > 0f) {
             val alpha = min(min((HINT_SECONDS - hintLeft) / 0.35f, hintLeft / 1.3f), 1f).coerceIn(0f, 1f)
             GLES30.glEnable(GLES30.GL_BLEND)
@@ -1546,6 +1609,29 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
+    /** Spores drifting up from the mushrooms and a few fireflies, as in the spore demo. */
+    private fun glowAtmosphere(mb: Marble, m: Maze, dt: Float) {
+        sporeAcc += dt
+        if (sporeAcc < 0.09f) return
+        sporeAcc = 0f
+        val n = mb.surface.normal(mb.position)
+        if (lamps.isNotEmpty()) {
+            val lp = lamps[rnd.nextInt(lamps.size)]
+            if ((lp - mb.position).length() < m.cellSize * 9f) {
+                val pn = mb.surface.normal(lp)
+                val col = when (lampIdxList.getOrElse(0) { 0 }.let { rnd.nextInt(4) }) { 0 -> Vec3(0.55f, 1f, 0.36f); 1 -> Vec3(0.3f, 1f, 0.75f); 2 -> Vec3(0.85f, 1f, 0.35f); else -> Vec3(0.25f, 0.88f, 1f) }
+                val drift = pn * (m.cellSize * 0.18f) + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * (m.cellSize * 0.1f)
+                sparks.emit(lp, drift, 4f, col, 0.005f)
+            }
+        }
+        if (rnd.nextFloat() < 0.3f) {                               // a firefly
+            val a = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+            val off = (a - n * (a dot n)).normalized() * (m.cellSize * 7f * rnd.nextFloat())
+            val p = mb.surface.project(mb.position + off) + n * (m.cellSize * (0.3f + 0.8f * rnd.nextFloat()))
+            sparks.emit(p, Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * (m.cellSize * 0.12f), 5f, Vec3(0.91f, 1f, 0.54f), 0.0065f)
+        }
+    }
+
     /** Leaves keep falling around the ball and pile up where they land. */
     private fun fallLeaves(mb: Marble, m: Maze, dt: Float) {
         // the rolling ball sweeps fallen leaves aside
@@ -1566,6 +1652,17 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     }
 
     private fun drawGlowAndLeaves(vpm: FloatArray, cam: Vec3) {
+        if (pal.themeId == 11 && haloBuf.count > 0) {
+            GLES30.glUseProgram(haloProg)
+            GLES30.glUniformMatrix4fv(loc(haloProg, "uVP"), 1, false, vpm, 0)
+            GLES30.glUniformMatrix4fv(loc(haloProg, "uModel"), 1, false, model, 0)
+            GLES30.glUniform1f(loc(haloProg, "uTime"), time)
+            GLES30.glEnable(GLES30.GL_BLEND); GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+            GLES30.glDepthMask(false)
+            haloBuf.draw(haloProg, loc(haloProg, "uPass"))
+            GLES30.glDepthMask(true); GLES30.glDisable(GLES30.GL_BLEND)
+            GLES30.glUseProgram(sceneProg)
+        }
         if (pal.themeId != 11 && pal.themeId != 12) return
         val prog = if (pal.themeId == 11) glowProg else leafProg
         val buf = if (pal.themeId == 11) glowTrail else leaves

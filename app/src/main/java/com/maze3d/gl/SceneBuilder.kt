@@ -441,10 +441,13 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     val obstacles = ArrayList<Obstacle>()
     /** Local-space positions of lamp posts (winter level) that light the floor around them. */
     val lamps = ArrayList<Vec3>()
+    /** Colour slot (0..3) of each lamp: the four spore colours on the Glow level. */
+    val lampIdx = ArrayList<Int>()
+    private fun addLamp(v: Vec3) { lamps.add(v); lampIdx.add((hash(lamps.size * 7 + 3) * 4f).toInt().coerceIn(0, 3)) }
 
     /** Decides where theme props go. Called once per level; does nothing for classic finishes. */
     fun planProps(outerRadius: Float) {
-        placed.clear(); obstacles.clear(); lamps.clear()
+        placed.clear(); obstacles.clear(); lamps.clear(); lampIdx.clear()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return
         val prof = profileData(pal.profile)
         val topH = wallHeight * prof.hs
@@ -470,7 +473,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
                 placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
-                if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11) lamps.add(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
+                if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11) addLamp(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
             }
         }
@@ -489,7 +492,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
             placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
             obstacles.add(Obstacle(c, p, size * 0.4f))
-            if (pal.themeId == 9 || pal.themeId == 11) lamps.add(p + surface.normal(p) * (size * 0.55f))
+            if (pal.themeId == 9 || pal.themeId == 11) addLamp(p + surface.normal(p) * (size * 0.55f))
             deads++
         }
         // 3. landmarks floating around the shape
@@ -516,6 +519,36 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 mb.vertex(Vec3(m.pos[i * 3] + ox, m.pos[i * 3 + 1], m.pos[i * 3 + 2]), Vec3(m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]), Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]))
             var q = 0
             while (q < m.idx.size) { mb.tri(base + m.idx[q], base + m.idx[q + 1], base + m.idx[q + 2]); q += 3 }
+        }
+        return mb
+    }
+
+    /** Glowing mycelium threads along the floor between nearby glowing mushrooms (Glow level). */
+    fun mycelium(): MeshBuilder {
+        val mb = MeshBuilder()
+        val pts = lamps.map { surface.project(it) }
+        var segs = 0
+        for (i in pts.indices) for (j in i + 1 until pts.size) {
+            if (segs > 160) break
+            val d = (pts[i] - pts[j]).length()
+            if (d > cs * 3.4f || d < cs * 0.4f) continue
+            if (hash(i * 131 + j) > 0.55f) continue
+            segs++
+            val steps = 9
+            var prevL = -1; var prevR = -1
+            for (k in 0..steps) {
+                val f = k / steps.toFloat()
+                var q = surface.project(Vec3.lerp(pts[i], pts[j], f))
+                val nn = surface.normal(q)
+                val side = ((pts[j] - pts[i]) cross nn).normalized()
+                q = surface.project(q + side * (kotlin.math.sin(f * 9f + i.toFloat()) * cs * 0.05f))
+                val w = cs * 0.022f * (0.35f + 0.65f * kotlin.math.sin(f * PI.toFloat()))
+                val lift = nn * (cs * 0.01f)
+                val col = Vec3(0.30f, 1.0f, 0.75f) * (0.8f + 0.5f * kotlin.math.sin(f * 6f))
+                val l = mb.vertex(q - side * w + lift, nn, col); val r = mb.vertex(q + side * w + lift, nn, col)
+                if (prevL >= 0) mb.quad(prevL, prevR, r, l)
+                prevL = l; prevR = r
+            }
         }
         return mb
     }

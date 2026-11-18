@@ -49,6 +49,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var simLevel = 1
     private lateinit var menuSettings: LinearLayout
     private var camPill: TextView? = null
+    private var ctrlPill: TextView? = null
+    private var controlMode = 0
+    private lateinit var pulseView: PulseView
     private var joyOriginX = 0f
     private var joyOriginY = 0f
     private lateinit var hudLayer: View
@@ -117,6 +120,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         qualityLevel = ui.getInt("quality", 2)
         simLevel = ui.getInt("sim", 1)
         renderer.simQuality = simLevel
+        controlMode = ui.getInt("ctrl", 0).let { if (cameraMode == 2 && it == 2) 0 else it }
+        renderer.controlMode = controlMode
         renderer.setCameraMode(cameraMode)
         renderer.touchSens = touchSens
         renderer.gyroSens = gyroSens
@@ -136,6 +141,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         root.addView(hudLayer)
         joystick = JoystickView(this)
         root.addView(joystick, FrameLayout.LayoutParams(-1, -1))
+        pulseView = PulseView(this, { Triple(renderer.ballScreenX, renderer.ballScreenY, renderer.ballOnScreen) }, { accent })
+        root.addView(pulseView, FrameLayout.LayoutParams(-1, -1))
         root.addView(buildMenu())
         loading = LoadingView(this).also { root.addView(it, FrameLayout.LayoutParams(-1, -1)) }
         setContentView(root)
@@ -256,11 +263,19 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
         val menuBtn = pill("Menu") { showMenu() }
-        for (v in listOf(menuBtn)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
+        val findBtn = pill("Find ball") { pulseView.start() }
+        for (v in listOf(menuBtn, findBtn)) column.addView(v, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 0, dp(8f)) })
         layer.addView(column, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(36f), dp(18f), 0) })
 
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        val tilt = pill("Tilt", { renderer.tiltMode }) { setTilt(!renderer.tiltMode) }
+        val ctrlNames = arrayOf("Joystick", "Tilt", "Gravity")
+        val tilt = pill("Ctrl: " + ctrlNames[controlMode], { controlMode != 0 }) { v ->
+            val allowed = if (cameraMode == 2) intArrayOf(0, 1) else intArrayOf(0, 1, 2)
+            controlMode = allowed[(allowed.indexOf(controlMode) + 1) % allowed.size]
+            applyControl(); (v as TextView).text = ("Ctrl: " + ctrlNames[controlMode]).uppercase()
+            toastText(when (controlMode) { 0 -> "Joystick: drag anywhere to steer"; 1 -> "Tilt: steer with the gyro, the piece stays put"; else -> "Gravity: drag to turn the piece and the ball rolls downhill" })
+        }
+        ctrlPill = tilt
         val hint = pill("Hint", { renderer.hintActive }) { glView.queueEvent { renderer.requestHint() } }
         hintPill = hint
         val camNames = arrayOf("Cam: Follow", "Cam: Follow", "Cam: Chase")
@@ -271,6 +286,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             val m = cameraMode
             glView.queueEvent { renderer.setCameraMode(m) }
             if (m != 2) joystick.hide()
+            if (m == 2 && controlMode == 2) { controlMode = 0; applyControl() }
+            ctrlPill?.text = ("Ctrl: " + ctrlNames[controlMode]).uppercase()
             toastText(if (m == 1) "Follow camera: the view tracks the ball" else "Chase camera: drag to steer, twist to look around")
         }
         camPill = follow
@@ -284,7 +301,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
 
     // ---- touch: drag to rotate, pinch to zoom -------------------------------------------
     private fun onTouch(e: MotionEvent): Boolean {
-        if (cameraMode == 2) return onChaseTouch(e)
+        if (cameraMode == 2 || controlMode != 2) return onChaseTouch(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = e.x; lastY = e.y; lastT = e.eventTime; multiTouch = false
@@ -324,8 +341,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             MotionEvent.ACTION_DOWN -> {
                 multiTouch = false
                 joyOriginX = e.x; joyOriginY = e.y
-                joystick.show(e.x, e.y)
-                glView.queueEvent { renderer.setChaseInput(0f, 0f, true) }
+                if (controlMode == 0) { joystick.show(e.x, e.y); glView.queueEvent { renderer.setChaseInput(0f, 0f, true) } }
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 multiTouch = true
@@ -340,8 +356,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                     if (d > Math.PI) d -= (2 * Math.PI).toFloat()
                     if (d < -Math.PI) d += (2 * Math.PI).toFloat()
                     twistAngle = a
-                    glView.queueEvent { renderer.chaseYawBy(d) }
-                } else if (!multiTouch) {
+                    if (cameraMode == 2) glView.queueEvent { renderer.chaseYawBy(d) } else glView.queueEvent { renderer.twist(-d) }
+                } else if (!multiTouch && controlMode == 0) {
                     val r = joystick.radius / touchSens
                     var ix = (e.x - joyOriginX) / r
                     var iy = -(e.y - joyOriginY) / r
@@ -362,8 +378,14 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private fun pointerAngle(e: MotionEvent) = atan2(e.getY(1) - e.getY(0), e.getX(1) - e.getX(0))
 
     // ---- tilt control -------------------------------------------------------------------
+    private fun applyControl() {
+        getSharedPreferences("maze3d_ui", MODE_PRIVATE).edit().putInt("ctrl", controlMode).apply()
+        renderer.controlMode = controlMode
+        if (controlMode != 0) joystick.hide()
+        setTilt(controlMode == 1)
+    }
+
     private fun setTilt(on: Boolean) {
-        renderer.tiltMode = on
         // Tilting must not rotate the screen: hold whatever orientation we are in when tilt is switched on.
         requestedOrientation = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         sensors.unregisterListener(this)
@@ -1066,7 +1088,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         super.onResume()
         engine.onResume()
         glView.onResume()
-        if (renderer.tiltMode) setTilt(true)
+        if (controlMode == 1) setTilt(true)
     }
 
     override fun onPause() {

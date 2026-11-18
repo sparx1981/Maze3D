@@ -31,7 +31,7 @@ object PropLibrary {
         8 -> ThemeProps(obelisk(), canopicJar(), sphinx(), pyramidProp())
         9 -> ThemeProps(neonSign(), terminal(), hologram(), cityTower(), neonRing(), neonStar())
         10 -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
-        11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), sporePod(), glowBell())
+        11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), bonnets(), inkcap())
         else -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
     }
 
@@ -525,17 +525,29 @@ object PropLibrary {
     private val CYAN = c(63, 224, 255)
     private val LIME = c(216, 255, 90)
 
-    /** A mushroom: pale stem, glowing cap and gills. Colours above 1.0 glow. */
+    /** A mushroom after the spore demo: pale stem, a cap that is only faintly lit on top, brightly glowing gills underneath, and dew beads. */
     private fun PM.shroom(stem: Float, capR: Float, glowCol: Vec3, k: Float = 2.4f, x: Float = 0f, y: Float = 0f) {
         push(); translate(x, y, 0f)
-        col = c(176, 190, 170); cylinder(stem * 0.14f / 0.5f * 0.5f + 0.02f, stem, 10, 0.03f)
-        // cap: a bell lathe that glows brighter toward the rim, with a bright underside ring (gills)
-        val prof = listOf(floatArrayOf(0.02f, stem * 0.92f), floatArrayOf(capR * 0.55f, stem * 0.9f), floatArrayOf(capR, stem * 1.02f), floatArrayOf(capR * 0.9f, stem * 1.25f), floatArrayOf(capR * 0.5f, stem * 1.45f), floatArrayOf(0.01f, stem * 1.52f))
-        lathe(prof, 18, true) { _, v -> glowCol * (k * (0.55 + 0.7 * (1f - v)).toFloat()) }
-        col = glowCol * (k * 1.3f); at(z = stem * 0.9f) { torus(capR * 0.82f, 0.018f, 20, 6) }
-        for (i in 0 until 5) { col = c(235, 255, 225) * 1.2f; val a = i * 1.257f; push(); translate(cos(a) * capR * 0.5f, sin(a) * capR * 0.5f, stem * 1.33f); sphere(0.025f, 6, 4); pop() }
+        col = c(184, 196, 176); cylinder(0.022f + capR * 0.07f, stem, 10, 0.02f + capR * 0.045f)
+        val capTop = c(200, 255, 154)
+        val prof = listOf(floatArrayOf(0.02f, stem * 0.9f), floatArrayOf(capR * 0.6f, stem * 0.88f), floatArrayOf(capR, stem * 1.0f), floatArrayOf(capR * 0.92f, stem * 1.22f), floatArrayOf(capR * 0.5f, stem * 1.42f), floatArrayOf(0.01f, stem * 1.5f))
+        lathe(prof, 18, true) { _, v -> Vec3.lerp(capTop * 0.85f, glowCol * 1.1f, 1f - v) }
+        col = glowCol * (k * 1.5f); at(z = stem * 0.9f) { cylinder(capR * 0.97f, 0.012f, 20) }           // the glowing gills under the cap
+        col = glowCol * (k * 1.2f); at(z = stem * 0.9f) { torus(capR * 0.86f, 0.016f, 22, 6) }
+        for (i in 0 until 7) { col = c(235, 255, 235); val a = i * 0.9f; val r = capR * (0.25f + 0.5f * ((i * 5) % 3) / 3f)
+            push(); translate(cos(a) * r, sin(a) * r, stem * (1.28f - r / capR * 0.25f)); sphere(0.016f, 6, 4); pop() }   // dew
         pop()
     }
+
+    private fun inkcap() = PM().apply {
+        col = c(214, 222, 208); cylinder(0.035f, 0.78f, 10, 0.03f)
+        col = Vec3.lerp(c(220, 235, 210), c(77, 255, 192), 0.4f) * 1.4f
+        lathe(listOf(floatArrayOf(0.04f, 0.7f), floatArrayOf(0.14f, 0.68f), floatArrayOf(0.15f, 0.82f), floatArrayOf(0.1f, 1.0f), floatArrayOf(0.02f, 1.08f)), 16, true) { _, v -> c(77, 255, 192) * (0.5f + 2.0f * (1f - v)) }
+    }.build()
+
+    private fun bonnets() = PM().apply {
+        for (i in 0 until 9) { val a = i * 2.4f; val r = 0.04f + 0.24f * ((i * 7) % 9) / 9f; shroom(0.12f + 0.1f * ((i * 3) % 4) / 4f, 0.05f + 0.025f * (i % 3), if (i % 2 == 0) c(63, 224, 255) else c(216, 255, 90), 2.8f, cos(a) * r, sin(a) * r) }
+    }.build()
 
     private fun glowBell() = PM().apply { shroom(0.38f, 0.3f, FOX, 1.8f) }.build()
 

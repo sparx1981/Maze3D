@@ -134,7 +134,9 @@ uniform float uFog;         // distance haze density (chase view)
 uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the lighting
 uniform vec3 uLampCol;
 uniform float uHedgeSnow;   // 1 = snow dusts the hedges
-uniform vec4 uLamp[12];      // local-space lamp positions (xyz) and reach (w)
+uniform vec4 uLamp[12];
+uniform float uLampIdx[12];
+uniform float uLampMode;     // 1 = each lamp takes one of the four spore colours      // local-space lamp positions (xyz) and reach (w)
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uSandOn;     // 1 = sand / mud height field is bound
@@ -532,7 +534,12 @@ void main() {
             float dd = length(dl);
             float att = 1.0 / (1.0 + 9.0 * (dd / uLamp[i].w) * (dd / uLamp[i].w)) * (1.0 - smoothstep(0.6, 1.0, dd / uLamp[i].w));
             float nl = max(dot(N, normalize(dl)), 0.0) * 0.8 + 0.2;
-            col += (diffC * 2.0 + 0.02) * uLampCol * att * nl * 0.55;
+            vec3 lc = uLampCol;
+            if (uLampMode > 0.5) {
+                int k = int(uLampIdx[i] + 0.5);
+                lc = k == 0 ? vec3(0.55, 1.0, 0.36) : k == 1 ? vec3(0.30, 1.0, 0.75) : k == 2 ? vec3(0.85, 1.0, 0.35) : vec3(0.25, 0.88, 1.0);
+            }
+            col += (diffC * 2.0 + 0.02) * lc * att * nl * 0.55;
         }
     }
     // rim light
@@ -1006,6 +1013,46 @@ void main() {
     col += vec3(0.30, 0.40, 0.50) * (1.0 - smoothstep(0.0, 0.06, abs(r - R + 0.03))) * 0.55;   // meniscus glint
     float alpha = inside * mix(0.94, 0.78, rim);
     outColor = vec4(finish(col, gl_FragCoord.xy), max(alpha, halo));
+}
+"""
+
+    /** Soft light pools on the floor under glowing mushrooms: additive decals whose colour slot rides in the time channel. */
+    const val HALO_VS = """#version 300 es
+uniform mat4 uVP;
+uniform mat4 uModel;
+layout(location=0) in vec4 aPA;     // xyz = floor position, w = colour slot
+layout(location=1) in vec4 aNS;     // xyz = normal, w = half size
+out vec2 vUv;
+out float vSeed;
+void main() {
+    const vec2 C[6] = vec2[6](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
+    vec2 c = C[gl_VertexID];
+    vec3 n = normalize(aNS.xyz);
+    vec3 a = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 t1 = normalize(cross(a, n));
+    vec3 t2 = cross(n, t1);
+    vec3 p = aPA.xyz + (t1 * c.x + t2 * c.y) * aNS.w + n * 0.003;
+    vUv = c; vSeed = aPA.w;
+    gl_Position = uVP * uModel * vec4(p, 1.0);
+}
+"""
+
+    const val HALO_FS = """#version 300 es
+precision highp float;
+uniform float uTime;
+uniform float uPass;
+in vec2 vUv;
+in float vSeed;
+out vec4 outColor;
+void main() {
+    if (uPass > 0.5) discard;
+    float r = length(vUv);
+    if (r > 1.0) discard;
+    int k = int(vSeed + 0.5);
+    vec3 col = k == 0 ? vec3(0.55, 1.0, 0.36) : k == 1 ? vec3(0.30, 1.0, 0.75) : k == 2 ? vec3(0.85, 1.0, 0.35) : vec3(0.25, 0.88, 1.0);
+    float g = pow(1.0 - r, 2.2);
+    float breath = 0.82 + 0.18 * sin(uTime * 1.7 + vSeed * 2.3 + vUv.x * 0.0);
+    outColor = vec4(col * g * 0.55 * breath, 1.0);
 }
 """
 
