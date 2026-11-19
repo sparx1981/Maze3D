@@ -109,8 +109,9 @@ vec3 fresnel(vec3 F0, float VoH) { return F0 + (1.0 - F0) * pow(1.0 - VoH, 5.0);
 vec3 aces(vec3 x) {
     return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
+uniform float uExposure;     // per-level exposure (0 = unset = 1)
 vec3 finish(vec3 c, vec2 frag) {
-    c = aces(c);
+    c = aces(c * (uExposure > 0.0 ? uExposure : 1.0));
     c = pow(c, vec3(1.0 / 2.2));
     return c + (hash21(frag) - 0.5) / 255.0; // dither: no banding in gradients
 }
@@ -126,7 +127,6 @@ uniform int uMat;          // 0 enamel, 1 carbon fibre, 2 brushed metal, 3 wood,
 uniform float uRough;
 uniform float uMetal;
 uniform int uHoleN;
-uniform vec4 uTrail[16];       // turf: recent ball positions (local space) with strength 0..1
 uniform float uTrailR;
 uniform vec2 uStud;          // toy studs: x = 1 / pitch, y = stud height
 uniform vec4 uHoleC[48];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
@@ -280,7 +280,21 @@ float sandH(vec2 uv, float cell) {
     return texture(uSandTex, (org + 1.0 + clamp(uv, -hl, 1.0 + hl) * uSandP.x) / uSandAtlas).r;
 }
 
+uniform vec4 uCutA;          // follow view see-through: xyz = camera (world), w = 1 when on
+uniform vec4 uCutB;          // xyz = ball (world), w = radius of the cut-away tunnel
 void main() {
+    if (uCutA.w > 0.5) {                                   // anything between the camera and the ball is cut away like a clipping tunnel
+        vec3 ab = uCutB.xyz - uCutA.xyz;
+        float L = length(ab);
+        vec3 d = ab / max(L, 1e-5);
+        float t = dot(vWorld - uCutA.xyz, d);
+        float keep = uCutB.w * 1.1;                          // the ball's own neighbourhood stays
+        if (t > 0.0 && t < L - keep) {
+            float r = length(vWorld - uCutA.xyz - d * t);
+            float rad = uCutB.w * (0.55 + 0.45 * smoothstep(0.0, L * 0.6, t));
+            if (r < rad) discard;
+        }
+    }
     for (int i = 0; i < 48; i++) {                         // real holes: the floor is cut away
         if (i >= uHoleN) break;
         if (distance(vLocal, uHoleC[i].xyz) < uHoleC[i].w) discard;
@@ -365,17 +379,7 @@ void main() {
         albedo *= 0.78 + 0.4 * blade * fade3(P) + 0.2 * (1.0 - fade3(P));
         hgt = (blade - 0.5) * 0.0006 * fade3(P);
         rough = 0.92;
-        float press = 0.0; vec3 leanW = vec3(0.0);           // grass flattened and pushed aside along the ball's path
-        for (int ti = 0; ti < 16; ti++) {
-            vec4 tp = uTrail[ti];
-            if (tp.w <= 0.0) continue;
-            vec3 dv = P - tp.xyz;
-            float dd = length(dv) / uTrailR;
-            float f = exp(-dd * dd * 1.4) * tp.w;
-            press = max(press, f);
-            leanW += dv / (length(dv) + 1e-5) * f;
-        }
-        albedo *= 1.0 + 0.3 * press;
+        float press = 0.0; vec3 leanW = vec3(0.0);           // (the grass no longer reacts to the ball: too costly per fragment)
         if (uShell > 0.0) {                                  // one layer of the short grass: each blade is a thin tapering column
             vec3 shiftW = leanW * uTrailR * 0.45 * uShell;
             vec2 gq = vec2(dot(P - shiftW, vec3(150.0, 85.0, 120.0)), dot(P - shiftW, vec3(-80.0, 140.0, 95.0)));
@@ -1308,6 +1312,7 @@ uniform vec3 uCam;
 uniform float uTime;
 uniform float uKind;        // 1 water, 2 gas, 3 fog
 uniform float uLayers;      // number of fog / gas slices
+uniform float uFogT;        // fog clock: only advances while the ball moves, so still air stays still
 uniform float uScale;       // 1 / cell size
 uniform float uNear;        // sheets fade out close to the camera so the ball stays visible
 uniform vec3 uMarbleP;
@@ -1338,7 +1343,8 @@ float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 7.3) + 0.15
 void main() {
     float lv = vCol.x;
     float layer = vCol.y * 3.0;
-    if (lv < 0.01) discard;
+    if (lv < 0.01 && uKind < 2.5) discard;                     // fog covers the whole level
+    if (uKind > 2.5) lv = 1.0;
     vec3 N = normalize(vNrm);
     vec3 V = normalize(uCam - vWorld);
     vec3 t1 = normalize(cross(N, vec3(0.31, 0.93, 0.19)));
@@ -1356,7 +1362,7 @@ void main() {
         float d = length(vLocal - uMarbleP) * uScale;
         float ring = 0.0;
         float crest = 0.0;
-        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.045 * (0.4 + lv));
+        N = normalize(N - (t1 * grad.x + t2 * grad.y) * 0.09 * (0.5 + lv));
         if (uWaveOn > 0.5) {
             // simulated surface: gradient of the wave height field, in cell units, mapped to the world
             float cellId = vTile.z; vec2 uv = vTile.xy;
@@ -1376,34 +1382,55 @@ void main() {
                 N = normalize(N - wg);
             }
         }
-        N = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.3));          // water lies flat: soften the slope of the floor beneath it
         float NoV = max(dot(N, V), 1e-3);
         float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-        float Fv = 0.03 + 0.40 * F;
-        float shallow = 1.0 - smoothstep(0.1, 0.65, lv);
-        vec3 deep = mix(vec3(0.020, 0.040, 0.058), vec3(0.075, 0.12, 0.15), shallow);
-        vec3 col = deep * (1.0 - Fv) + envMap(reflect(-V, N), 0.03) * vec3(0.32, 0.38, 0.46) * Fv;
-        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 1100.0) * vec3(4.0, 3.8, 3.4);
-        float foam = smoothstep(0.22, 0.04, lv) * 0.25 * smoothstep(0.5, 0.8, vnoise(p * 7.0 + uTime * 0.2));
+        // clear pool water: almost colourless where shallow, deepening to teal-blue; you see the floor through it
+        float depth = smoothstep(0.0, 0.9, lv);
+        vec3 tint = mix(vec3(0.10, 0.75, 0.80), vec3(0.01, 0.28, 0.55), depth);
+        // caustics: the bright rippling web of light focused onto the floor below
+        vec2 cp = p * 3.2;
+        float c1 = vnoise(cp + vec2(uTime * 0.45, uTime * 0.3));
+        float c2 = vnoise(cp * 1.27 - vec2(uTime * 0.38, -uTime * 0.27) + 4.1);
+        float c3 = vnoise(cp * 0.7 + vec2(-uTime * 0.2, uTime * 0.25) + 9.3);
+        float caus = pow(1.0 - abs(c1 - c2), 22.0) * 1.6 + pow(1.0 - abs(c2 - c3), 30.0) * 0.9;
+        caus *= (1.0 - 0.6 * depth) * (0.6 + 0.4 * max(dot(vec3(0.0, 1.0, 0.0), uLightDir), 0.0));
+        vec3 body = tint * (0.75 + 0.35 * (1.0 - depth)) + vec3(0.8, 1.0, 1.0) * caus * 0.9;
+        vec3 refl = envMap(reflect(-V, N), 0.02) * vec3(0.6, 0.8, 0.95) + vec3(0.05, 0.12, 0.18);
+        vec3 col = mix(body, refl, F * 0.7);
+        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 900.0) * vec3(5.0, 4.8, 4.4);       // sun glints
+        col += pow(max(dot(N, normalize(uLightDir + V)), 0.0), 60.0) * vec3(0.25, 0.28, 0.3);
+        float foam = smoothstep(0.2, 0.03, lv) * 0.35 * smoothstep(0.45, 0.8, vnoise(p * 7.0 + uTime * 0.25));
         float wake = 0.0;
         if (uWaveOn > 0.5) {
             float fv = foamH(vTile.xy, vTile.z);
             float lace = 0.55 + 0.45 * vnoise(p * 9.0 + vec2(uTime * 0.3, -uTime * 0.2));
             wake = smoothstep(0.08, 0.6, fv * lace) * (0.35 + 0.65 * smoothstep(0.1, 0.4, lv));
         }
-        col = mix(col, vec3(0.8, 0.88, 0.95), clamp(foam, 0.0, 0.5));
-        col = mix(col, vec3(0.96, 0.99, 1.0), wake * 0.92);
-        float alpha = max(smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near), wake * 0.95);
-        outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
+        col = mix(col, vec3(0.88, 0.94, 0.98), clamp(foam, 0.0, 0.5));
+        col = mix(col, vec3(0.97, 0.99, 1.0), wake * 0.9);
+        // see-through: low alpha in the shallows, more opaque when deep or seen at a grazing angle (Fresnel)
+        float alpha = smoothstep(0.0, 0.08, lv) * mix(0.5, 0.86, depth);
+        alpha = max(alpha, F * 0.85 * smoothstep(0.0, 0.08, lv));
+        alpha = max(alpha, max(wake * 0.95, foam));
+        alpha = clamp(alpha + caus * 0.12, 0.0, 0.92) * (0.7 + 0.3 * near);
+        outColor = vec4(finish(col, gl_FragCoord.xy), alpha);
     } else {                                                    // ---- gas and fog: slices through a drifting, billowing 3D density field
         bool gas = uKind < 2.5;
         float h = vCol.y;                                       // 0 at the floor .. 1 at the top of the volume
         float sc = gas ? 1.6 : 0.9;
-        float drift = uTime * (gas ? 0.08 : 0.045);
+        float ft = gas ? uTime : uFogT;                          // fog only stirs while the ball moves
+        float drift = ft * (gas ? 0.08 : 0.06);
         vec2 q = p * sc + vec2(drift, -drift * 0.7);
-        vec2 warp = 0.9 * vec2(fbm(q * 0.7 + vec2(uTime * 0.05, 1.7)), fbm(q * 0.7 - vec2(3.1, uTime * 0.04)));
-        // pseudo-3D: neighbouring slices of the field blended by height, rolling slowly upward
-        float hz = h * (gas ? 2.6 : 3.2) - uTime * (gas ? 0.06 : 0.03);
+        if (!gas) {                                             // the moving ball stirs the fog: a swirl that is strongest beside it
+            vec3 dl = vLocal - uMarbleP;
+            vec2 rel = vec2(dot(dl, t1), dot(dl, t2)) * uScale;
+            float rd = length(rel);
+            float sw = uMarbleSp * 2.2 * exp(-rd * 0.9);
+            float ca = cos(sw), sa = sin(sw);
+            q += (vec2(ca * rel.x - sa * rel.y, sa * rel.x + ca * rel.y) - rel) * sc;
+        }
+        vec2 warp = 0.9 * vec2(fbm(q * 0.7 + vec2(ft * 0.05, 1.7)), fbm(q * 0.7 - vec2(3.1, ft * 0.04)));
+        float hz = h * (gas ? 2.6 : 3.2) - ft * (gas ? 0.06 : 0.03);
         float zf = floor(hz);
         float n0 = fbm(q + warp + vec2(zf * 5.37, zf * 2.11));
         float n1 = fbm(q + warp + vec2((zf + 1.0) * 5.37, (zf + 1.0) * 2.11));
@@ -1411,7 +1438,8 @@ void main() {
         // heavy gas pools low; fog sits in a thick bank that thins out above the walls
         float prof = gas ? (1.0 - smoothstep(0.25, 1.0, h)) * (0.75 + 0.25 * smoothstep(0.0, 0.1, h))
                          : smoothstep(0.0, 0.1, h) * (1.0 - smoothstep(0.45, 1.0, h));
-        float dens = clamp((n - (gas ? 0.16 : 0.18)) * 2.8, 0.0, 1.0) * prof * smoothstep(0.0, 0.22, lv) * (0.8 + 0.2 * lv);
+        float dens = gas ? clamp((n - 0.16) * 2.8, 0.0, 1.0) * prof * smoothstep(0.0, 0.22, lv) * (0.8 + 0.2 * lv)
+                         : clamp(0.55 + (n - 0.45) * 1.6, 0.25, 1.0) * prof;      // fog is a thick blanket everywhere, lumpy rather than patchy
         // light: lower slices sit in the shade of the ones above; looking toward the sun the edges glow (forward scattering)
         float shade = mix(0.5, 1.08, h) * (0.8 + 0.2 * n);
         float fwd = pow(max(dot(-V, uLightDir), 0.0), 5.0) * 0.55 * (1.0 - dens * 0.5);
@@ -1422,7 +1450,8 @@ void main() {
         float alpha = 1.0 - pow(1.0 - total, 1.0 / max(uLayers * 0.55, 1.0));  // the stack of slices adds up to the target density
         alpha *= mix(0.35, 1.0, smoothstep(0.02, 0.3, abs(dot(N, V))));       // slices seen edge-on would show as bands: thin them out
         float nearV = smoothstep(uNear * 0.12, uNear * 0.6, distance(uCam, vWorld));          // only the slices right at the lens fade
-        float bubble = mix(0.3, 1.0, smoothstep(0.5, 1.8, length(vLocal - uMarbleP) * uScale));   // the rolling ball clears a pocket around itself
+        float bubble = gas ? mix(0.3, 1.0, smoothstep(0.5, 1.8, length(vLocal - uMarbleP) * uScale))
+                           : mix(0.06, 1.0, smoothstep(0.7 + 0.5 * uMarbleSp, 2.3 + 0.6 * uMarbleSp, length(vLocal - uMarbleP) * uScale));   // a clear pocket around the ball
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.95) * nearV * bubble);
     }
 }

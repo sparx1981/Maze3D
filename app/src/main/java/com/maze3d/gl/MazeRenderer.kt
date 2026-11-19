@@ -1412,6 +1412,16 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
         val night = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17
         GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uExposure"), exposure())
+        run {                                                   // follow view: see through the shape where it hides the ball
+            val mbc = marble
+            if (cameraMode == 1 && mbc != null && phase != Phase.MENU && chaseBlend < 0.5f) {
+                val w = orient.rotate(mbc.position)
+                val cs = maze?.cellSize ?: 0.1f
+                GLES30.glUniform4f(loc(sceneProg, "uCutA"), eye.x, eye.y, eye.z, 1f)
+                GLES30.glUniform4f(loc(sceneProg, "uCutB"), w.x, w.y, w.z, cs * 2.2f)
+            } else GLES30.glUniform4f(loc(sceneProg, "uCutA"), 0f, 0f, 0f, 0f)
+        }
         run { val sp = studPitch(); GLES30.glUniform2f(loc(sceneProg, "uStud"), 1f / sp, sp * 0.12f) }
         GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
         lampUniform.fill(0f); lampColUniform.fill(0f)
@@ -1445,18 +1455,6 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             } else GLES30.glUniform1i(loc(sceneProg, "uSandTex"), 5)
         }
         val mbL = marble
-        if (pal.floorMat == Mat.TURF && mbL != null) {
-            val dtT = (time - turfT).coerceIn(0f, 0.2f); turfT = time
-            for (i in 0 until 16) turfTrail[i * 4 + 3] = maxOf(0f, turfTrail[i * 4 + 3] - dtT * 0.22f)             // the grass slowly springs back
-            val p = mbL.position
-            val dx = p.x - turfTrail[turfHead * 4]; val dy = p.y - turfTrail[turfHead * 4 + 1]; val dz = p.z - turfTrail[turfHead * 4 + 2]
-            if (turfTrail[turfHead * 4 + 3] <= 0f || dx * dx + dy * dy + dz * dz > (mbL.radius * 0.8f) * (mbL.radius * 0.8f)) {
-                turfHead = (turfHead + 1) % 16
-                turfTrail[turfHead * 4] = p.x; turfTrail[turfHead * 4 + 1] = p.y; turfTrail[turfHead * 4 + 2] = p.z; turfTrail[turfHead * 4 + 3] = 1f
-            } else turfTrail[turfHead * 4 + 3] = 1f
-            GLES30.glUniform4fv(loc(sceneProg, "uTrail"), 16, turfTrail, 0)
-            GLES30.glUniform1f(loc(sceneProg, "uTrailR"), mbL.radius * 1.5f)
-        } else if (pal.floorMat == Mat.TURF) { java.util.Arrays.fill(turfTrail, 0f); GLES30.glUniform4fv(loc(sceneProg, "uTrail"), 16, turfTrail, 0); GLES30.glUniform1f(loc(sceneProg, "uTrailR"), 1f) }
         if (mbL != null && phase != Phase.MENU) {
             val wp = orient.rotate(mbL.position)
             GLES30.glUniform3f(loc(sceneProg, "uMarbleL"), wp.x, wp.y, wp.z)
@@ -1575,6 +1573,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         // ---- backdrop ---------------------------------------------------------------------
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glUseProgram(bgProg)
+        GLES30.glUniform1f(loc(bgProg, "uExposure"), exposure())
         GLES30.glUniform3f(loc(bgProg, "uTop"), pal.bgTop.x, pal.bgTop.y, pal.bgTop.z)
         GLES30.glUniform3f(loc(bgProg, "uBottom"), pal.bgBottom.x, pal.bgBottom.y, pal.bgBottom.z)
         GLES30.glUniform1f(loc(bgProg, "uAspect"), width.toFloat() / height)
@@ -1590,6 +1589,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
         // ---- marble -----------------------------------------------------------------------
         GLES30.glUseProgram(marbleProg)
+        GLES30.glUniform1f(loc(marbleProg, "uExposure"), exposure())
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uVP"), 1, false, vp, 0)
         GLES30.glUniformMatrix4fv(loc(marbleProg, "uModel"), 1, false, model, 0)
         GLES30.glUniform3f(loc(marbleProg, "uCam"), eye.x, eye.y, eye.z)
@@ -1975,6 +1975,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(mediumProg, "uDoorMode"), 0f)
         GLES30.glUniform3f(loc(mediumProg, "uCam"), cam.x, cam.y, cam.z)
         GLES30.glUniform3f(loc(mediumProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glUniform1f(loc(mediumProg, "uExposure"), exposure())
+        run {                                                  // the fog only stirs while the ball rolls
+            val dtF = (time - fogLast).coerceIn(0f, 0.1f); fogLast = time
+            val spd = ((mb?.velocity?.length() ?: 0f) / ((maze?.cellSize ?: 0.1f) * 3f)).coerceIn(0f, 1.5f)
+            if (!paused) fogClock += dtF * spd * 2.5f
+            GLES30.glUniform1f(loc(mediumProg, "uFogT"), fogClock)
+        }
         GLES30.glUniform1f(loc(mediumProg, "uLayers"), (mediumGeo?.layers ?: 1).toFloat())
         GLES30.glUniform1f(loc(mediumProg, "uKind"), when (f.kind) { Medium.WATER -> 1f; Medium.GAS -> 2f; else -> 3f })
         val cs = maze?.cellSize ?: 0.1f
@@ -2062,7 +2069,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     sparks.burst(c, n, 8, 0.4f, Vec3(1f, 0.5f, 0.4f))
                 }
                 Hazards.FX_OIL -> if (rel.length() < cs * 0.34f) slick = 1f
-                Hazards.FX_CONVEYOR -> if (kotlin.math.abs(along) < 0.5f && kotlin.math.abs(lat) < 0.31f) mb.kick(d * (GRAVITY * 0.9f * dt))
+                Hazards.FX_CONVEYOR -> if (kotlin.math.abs(along) < 0.5f && kotlin.math.abs(lat) < 0.31f) mb.kick(d * (GRAVITY * 0.38f * dt))
                 Hazards.FX_SEESAW -> if (kotlin.math.abs(along) < 0.5f && kotlin.math.abs(lat) < 0.3f)
                     mb.kick(d * (kotlin.math.sin(hz.seesawAngle(i, time)) * GRAVITY * 2.5f * dt))
                 Hazards.FX_SWEEPER -> {
@@ -2168,6 +2175,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         Matrix.scaleM(aL, 0, 1f + k, 1f + k, 1f - k * 1.8f)
                         Matrix.rotateM(aL, 0, sp.amp * 3f * kotlin.math.sin(t * sp.speed * 2.1f + ph), 1f, 0f, 0f)
                     }
+                    PropLibrary.Anim.SCREW -> {
+                        // the nut winds up the thread and back down: height and turn stay locked together like a real screw
+                        val u = 0.5f - 0.5f * kotlin.math.cos(t * sp.speed + ph)
+                        Matrix.translateM(aL, 0, 0f, 0f, u * sp.amp)
+                        Matrix.rotateM(aL, 0, u * sp.amp * 2400f, 0f, 0f, 1f)
+                    }
                     PropLibrary.Anim.NOD -> {
                         Matrix.rotateM(aL, 0, 18f * sp.amp * kotlin.math.sin(t * sp.speed * 0.5f + ph), 0f, 0f, 1f)
                         Matrix.rotateM(aL, 0, 6f * sp.amp * kotlin.math.sin(t * sp.speed * 1.6f + ph), 0f, 1f, 0f)
@@ -2180,6 +2193,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         GLES30.glUniformMatrix4fv(uModel, 1, false, model, 0)
     }
+
+    /** Bright pastel levels are toned down so they do not wash out. */
+    private var fogClock = 0f
+    private var fogLast = 0f
+
+    private fun exposure() = when (pal.themeId) { 0 -> 0.74f; 6 -> 0.72f; 18 -> 0.74f; else -> 1f }
 
     private fun studPitch() = (maze?.marbleRadius ?: 0.02f) * 1.7f
 
@@ -2284,7 +2303,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     scene(Mat.PROP, 0.6f, 0.1f, 0f); put(f, id, fxMeshes[2])
                     scene(Mat.PROP, 0.5f, 0f, 0.6f)
                     for (k in 0 until 3) {
-                        val ph = ((time * 1.1f + k / 3f) % 1f)
+                        val ph = ((time * 0.55f + k / 3f) % 1f)
                         val sc = kotlin.math.sin(ph * Math.PI.toFloat()).coerceIn(0f, 1f)
                         System.arraycopy(id, 0, m2, 0, 16)
                         m2[12] = -0.4f + ph * 0.8f; m2[0] = sc; m2[5] = sc

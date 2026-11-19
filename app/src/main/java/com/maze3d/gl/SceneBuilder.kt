@@ -147,7 +147,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     private val wallStyle = when (pal.themeId) {
         7, 12 -> WallStyle.HEDGE          // snowy hedges, autumn hedgerows
         10, 11 -> WallStyle.ROOT          // jungle roots and vines, glowing mycelium logs
-        15 -> WallStyle.ROCK              // piled boulders
+        15, 17 -> WallStyle.ROCK          // piled boulders, cooled lava rock
+        4, 13, 16 -> WallStyle.BLOCKS     // hull panels, toy bricks, riveted steel sections
         8 -> WallStyle.BLOCKS             // dressed temple stone
         0, 18 -> WallStyle.BEADS          // candy ropes and gummy strings
         14 -> WallStyle.PILLOW            // stuffed, stitched fabric rolls
@@ -668,7 +669,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val dir = (toward - n * (toward dot n)).normalized()
             val p = surface.project(centre - dir * (cs * 0.14f))
             val size = cs * 0.78f
-            val opts = listOfNotNull(lib.deadA, lib.deadB, lib.deadC)
+            val opts = listOfNotNull(lib.deadA, lib.deadB, lib.deadC) + lib.more
             val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
             val dd = maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f
             val dw = animate(lib, mesh, p, surface.normal(p), -dir, size, dd, c + 50000)
@@ -705,7 +706,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     fun gallery(): MeshBuilder {
         val mb = MeshBuilder()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return mb
-        val list = listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2)
+        val list = listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2) + lib.more
         fun put(m: PropMesh, o: Vec3, sc: Float = 1f) {
             val base = mb.vertexCount
             for (i in 0 until m.vertexCount)
