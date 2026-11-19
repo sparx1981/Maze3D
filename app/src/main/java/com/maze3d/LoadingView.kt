@@ -192,6 +192,7 @@ class LoadingView(context: Context, private val title: String = "MARBLIX", priva
             floatArrayOf(0.85f, 0.87f, 0.9f, 0.5f, 0.52f, 0.56f, 1f),    // ball bearing
             floatArrayOf(1f, 0.4f, 0.05f, 0.05f, 0.03f, 0.03f, 1f),      // molten core
             floatArrayOf(1f, 0.25f, 0.5f, 1f, 0.7f, 0.15f, 0f),          // gummy
+            floatArrayOf(0.45f, 0.46f, 0.5f, 0.7f, 0.08f, 0.06f, 1f),    // knight's orb
             floatArrayOf(0.95f, 0.15f, 0.15f, 1f, 0.85f, 0.1f, 1f))      // beach ball
         val b = balls[rnd.nextInt(balls.size)]
         floatArrayOf(pal.floor.x, pal.floor.y, pal.floor.z, pal.wall.x, pal.wall.y, pal.wall.z, top.x, top.y, top.z, b[0], b[1], b[2], b[3], b[4], b[5], b[6])

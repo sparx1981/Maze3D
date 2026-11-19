@@ -1065,7 +1065,18 @@ vec3 skinColor(vec3 p, vec3 N, vec3 V) {
         vec3 emit = gc * (0.35 + 0.8 * core);
         return shadeBall(pow(gc, vec3(2.2)) * 0.6, 0.06, 0.0, emit, 1.0, N, V);
     }
-    // 20: beach ball: six panels, white pole caps
+    if (uSkin == 20) {           // knight's orb: hammered iron with a red-and-gold heraldic cross and rivets
+        float hammer = fb3(p * 9.0, 1.2);
+        vec3 c = vec3(0.42, 0.43, 0.46) * (0.8 + 0.35 * hammer);
+        float cross = max(smoothstep(0.14, 0.11, abs(p.x)), smoothstep(0.14, 0.11, abs(p.y))) * step(0.0, p.z);
+        c = mix(c, vec3(0.7, 0.08, 0.06), cross);
+        float trim = smoothstep(0.03, 0.0, abs(abs(p.x) - 0.14)) + smoothstep(0.03, 0.0, abs(abs(p.y) - 0.14));
+        c = mix(c, vec3(0.95, 0.75, 0.25), clamp(trim, 0.0, 1.0) * step(0.0, p.z) * 0.9);
+        float riv = smoothstep(0.05, 0.03, length(fract(vec2(atan(p.y, p.x) * 2.5, p.z * 4.0)) - 0.5));
+        c = mix(c, vec3(0.7, 0.7, 0.72), riv * 0.6);
+        return shadeBall(pow(c, vec3(2.2)), 0.35, 0.85 * (1.0 - cross), vec3(0.0), 0.4, N, V);
+    }
+    // 21: beach ball: six panels, white pole caps
     float seg = floor((lon / 6.2831853 + 0.5) * 6.0);
     vec3 c = seg < 1.0 ? vec3(0.95, 0.15, 0.15) : seg < 2.0 ? vec3(1.0) : seg < 3.0 ? vec3(1.0, 0.85, 0.1) : seg < 4.0 ? vec3(1.0) : seg < 5.0 ? vec3(0.1, 0.45, 0.95) : vec3(1.0);
     float seamL = smoothstep(0.02, 0.0, abs(fract((lon / 6.2831853 + 0.5) * 6.0) - 0.5) - 0.48);
@@ -1325,6 +1336,7 @@ void main() {
 precision highp float;
 uniform vec3 uLightDir;
 uniform float uPass;
+uniform float uLeafKind;     // 0 autumn leaves, 1 jungle leaves and twigs
 in vec2 vUv;
 in float vAge;
 in vec3 vNrm;
@@ -1333,8 +1345,20 @@ in float vSeed;
 out vec4 outColor;
 void main() {
     if (uPass > 0.5) discard;
-    // pointed leaf outline with a stalk, midrib and side veins
     float x = vUv.x, y = vUv.y;
+    if (uLeafKind > 0.5 && fract(vSeed * 3.17) > 0.72) {          // a fallen twig: a thin crooked stick with a side shoot
+        float bend = 0.08 * sin(x * 3.0 + vSeed * 9.0);
+        float stick = 0.06 - abs(y - bend);
+        float shoot = 0.035 - abs((y - bend) - (x - 0.2) * 0.9) ;
+        shoot *= step(0.2, x) * step(x, 0.7);
+        if (max(stick, shoot) < 0.0 || abs(x) > 0.95) discard;
+        vec3 bark = mix(vec3(0.32, 0.22, 0.13), vec3(0.45, 0.34, 0.2), fract(vSeed * 11.3));
+        bark *= 0.8 + 0.25 * sin(x * 40.0 + vSeed * 5.0);
+        float lit = 0.45 + 0.75 * abs(dot(normalize(vNrm), uLightDir));
+        outColor = vec4(bark * lit, smoothstep(0.0, 0.35, vAge));
+        return;
+    }
+    // pointed leaf outline with a stalk, midrib and side veins
     float w = 0.64 * pow(max(1.0 - x * x, 0.0), 0.65) * (0.75 + 0.25 * x);
     float body = w - abs(y);
     float stalk = step(0.82, -x) * step(abs(y), 0.05) * step(-1.0, x);
@@ -1342,6 +1366,7 @@ void main() {
     vec3 gold = vec3(0.96, 0.72, 0.16), orange = vec3(0.92, 0.42, 0.08), red = vec3(0.68, 0.14, 0.06), brown = vec3(0.50, 0.30, 0.10);
     float k = fract(vSeed * 7.31);
     vec3 col = k < 0.35 ? gold : k < 0.65 ? orange : k < 0.85 ? red : brown;
+    if (uLeafKind > 0.5) col = k < 0.4 ? vec3(0.16, 0.42, 0.12) : k < 0.7 ? vec3(0.32, 0.58, 0.16) : k < 0.88 ? vec3(0.55, 0.62, 0.2) : vec3(0.42, 0.3, 0.12);
     col = mix(col, col * vec3(1.1, 0.9, 0.7), smoothstep(-0.9, 0.9, x) * 0.5);
     float rib = smoothstep(0.045, 0.0, abs(y));
     float veins = smoothstep(0.05, 0.0, abs(fract((abs(y) * 5.0 - x * 2.6) + 0.5) - 0.5) * 0.4) * step(abs(y), w);

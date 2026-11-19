@@ -67,7 +67,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 for (k in 1..6) { val th = (PI / 2 * k / 6).toFloat(); p(cos(th), 0.42f + 0.58f * sin(th)) }
             }
             Profile.BLOCK -> { ws = 1.35f; hs = 0.9f; p(1f, -0.08f); p(1f, 0.9f); p(0.96f, 0.975f); p(0.9f, 1f); p(0f, 1f) }
-            Profile.FLAT -> { ws = 2.1f; hs = 0.8f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
+            Profile.FLAT -> { ws = 1.2f; hs = 0.8f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
             Profile.ARMCO -> {                        // W-beam crash barrier: two corrugations on a rail, a lip at the top
                 ws = 1.5f; hs = 0.9f
                 p(0.55f, -0.08f); p(0.55f, 0.22f); p(0.95f, 0.32f); p(1f, 0.42f); p(0.75f, 0.52f); p(0.75f, 0.58f); p(1f, 0.68f); p(0.95f, 0.78f); p(0.6f, 0.86f); p(0.5f, 1f); p(0f, 1f)
@@ -145,7 +145,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     // ---- themed wall shapes: walls need not be straight bars
-    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6 }
+    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7 }
     /** 1 = full wall detail; lower quality settings use fewer segments along the shaped walls. */
     var wallDetail = 1f
     private val wallStyle = when (pal.themeId) {
@@ -153,11 +153,14 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         10, 11 -> WallStyle.ROOT          // jungle roots and vines, glowing mycelium logs
         15, 17 -> WallStyle.ROCK          // piled boulders, cooled lava rock
         4, 13, 16 -> WallStyle.BLOCKS     // hull panels, toy bricks, riveted steel sections
+        19 -> WallStyle.CASTLE            // crenellated battlements
         8 -> WallStyle.BLOCKS             // dressed temple stone
         0, 18 -> WallStyle.BEADS          // candy ropes and gummy strings
         14 -> WallStyle.PILLOW            // stuffed, stitched fabric rolls
         else -> WallStyle.NONE
     }
+
+    private fun smoothstep01(a: Float, b: Float, x: Float): Float { val t = ((x - a) / (b - a)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 
     private fun lattice(x: Int, y: Int, z: Int): Float {
         var h = x * 374761393 + y * 668265263 + z * 1274126177
@@ -228,6 +231,11 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                     hsc = hOf(ci) * (1f - (1f - sink) * maxOf(blendL, blendR)); wsc = wOf(ci) * (1f - 0.25f * maxOf(blendL, blendR))
                     seam[r] = maxOf(blendL, blendR)
                 }
+                WallStyle.CASTLE -> {                                  // merlons and gaps along the top: a square-wave in height
+                    val cf = f * beads * 1.5f; val fr = cf - kotlin.math.floor(cf)
+                    val up = smoothstep01(0.08f, 0.14f, fr) * (1f - smoothstep01(0.56f, 0.62f, fr))
+                    hsc = 1.0f + 0.32f * up; wsc = 1.08f; seam[r] = 1f - up
+                }
                 WallStyle.BEADS -> { val b = 0.5f + 0.5f * kotlin.math.cos(f * beads * 2f * PI.toFloat()); wsc = 0.95f + 0.3f * b; hsc = 1f + 0.12f * b }
                 WallStyle.PILLOW -> { val b = kotlin.math.abs(kotlin.math.sin(f * beads * PI.toFloat())); wsc = 0.94f + 0.28f * b; hsc = 1f + 0.14f * b; seam[r] = 1f - b }
             }
@@ -251,6 +259,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                     tint[r][k] = 0.84f + 0.3f * vnoise(p * (freq * 1.3f) + Vec3(e.toFloat() * 0.1f, 0f, 0f))
                 }
                 if (style == WallStyle.BLOCKS || style == WallStyle.PILLOW) tint[r][k] = 1f - (if (style == WallStyle.BLOCKS) 0.35f else 0.25f) * seam[r]
+                if (style == WallStyle.CASTLE) tint[r][k] = 0.85f + 0.25f * vnoise(p * (freq * 2f) + Vec3(k * 0.5f, 3f, 1f))
                 basePos[r][k] = p + side * (lat + bend * t)
                 liftV[r][k] = n * up
             }

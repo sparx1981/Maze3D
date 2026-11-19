@@ -991,7 +991,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         val dm = com.maze3d.core.Difficulty.values()
         val surfacesOpen = com.maze3d.core.Progress.SURFACE_CHAIN.count { progress.surfaceUnlocked(it) }
         val shapesOpen = ShapeKind.values().count { progress.shapeUnlocked(it) }
-        val ballsOpen = (0..20).count { progress.ballUnlocked(it) }
+        val ballsOpen = (0..21).count { progress.ballUnlocked(it) }
         menuStats.addView(settingsCard("Play",
             statRow("Play time", com.maze3d.core.Stats.duration(stats.get("playSeconds"))),
             statRow("Sessions", n(stats.get("sessions"))),
@@ -1007,7 +1007,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             statRow("Surfaces", "$surfacesOpen / ${com.maze3d.core.Progress.SURFACE_CHAIN.size}"),
             statRow("Shapes", "$shapesOpen / ${ShapeKind.values().size}"),
             statRow("Difficulties", "${dm.count { progress.difficultyUnlocked(it) }} / ${dm.size}"),
-            statRow("Balls", "$ballsOpen / 21")), gap)
+            statRow("Balls", "$ballsOpen / 22")), gap)
         val played = stats.surfacesPlayed()
         val rows = if (played.isEmpty()) listOf(TextView(this).apply { text = "No levels played yet."; setTextColor(Color.argb(150, 255, 255, 255)); textSize = 13f }) else
             played.mapIndexed { i, (key, count) ->
@@ -1077,7 +1077,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var stats: com.maze3d.core.Stats
     private lateinit var progPrefsRef: android.content.SharedPreferences
     private var lastStatFlush = 0L
-    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava", "Jelly", "Storm")
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava", "Jelly", "Medieval", "Storm")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
 
@@ -1105,13 +1105,16 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         levelPanel.removeAllViews()
         val shapes = ShapeKind.values()
         val shapeNames = listOf("Random") + shapes.map { it.label.replace("Rounded ", "").replace("Trefoil knot", "Knot") }
+        val shOrder = listOf(0) + (1 until shapeNames.size).sortedBy { shapeNames[it].lowercase() }
         levelPanel.addView(collapsible("Shape", { shapeNames[selShape] }) { done ->
-            chipGrid(shapeNames, 4, { selShape }, { selShape = it; done() }, { i ->
+            chipGrid(shOrder.map { shapeNames[it] }, 4, { shOrder.indexOf(selShape) }, { selShape = shOrder[it]; done() }, { i0 -> val i = shOrder[i0]
                 if (i == 0 || progress.shapeUnlocked(shapes[i - 1])) null else mazesText(progress.shapeMazesToGo(shapes[i - 1])) + " to unlock this shape"
             })
         })
+        val sOrder = listOf(0) + (1 until surfaceNames.size).sortedBy { surfaceNames[it].lowercase() }      // Random first, then A to Z
         levelPanel.addView(collapsible("Surface", { surfaceNames[selSurface] }) { done ->
-            chipGrid(surfaceNames, 4, { selSurface }, { selSurface = it; done() }, { i ->
+            chipGrid(sOrder.map { surfaceNames[it] }, 4, { sOrder.indexOf(selSurface) }, { selSurface = sOrder[it]; done() }, { i0 ->
+                val i = sOrder[i0]
                 val key = com.maze3d.core.Progress.MENU_KEYS[i]
                 if (key == "random" || progress.surfaceUnlocked(key)) null else mazesText(progress.surfaceMazesToGo(key)) + " to unlock this surface"
             })

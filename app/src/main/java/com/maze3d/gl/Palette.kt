@@ -92,7 +92,7 @@ class Palette(
                 backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 5),
             // 6 Science: white lab tiles, glass tubes of coloured liquid with bead joints
             Palette("Science", c(236, 241, 246), Mat.LAB, 0.14f, c(120, 232, 255), Mat.ENAMEL, 0.04f,
-                c(206, 228, 248), c(64, 84, 112), c(60, 200, 255), c(255, 90, 90),
+                c(58, 74, 104), c(10, 14, 26), c(60, 200, 255), c(255, 90, 90),
                 wall2 = c(150, 255, 160), profile = Profile.TUBE, stripes = true, knobs = true,
                 backdrop = Backdrop.STUDIO, wallMetal = 0f, glow = 1.1f, themeId = 6),
             // 7 Winter night: powder snow, snow-capped hedges, blue fog and lamps (after the mrdoob labyrinth look)
@@ -145,7 +145,11 @@ class Palette(
             Palette("Jelly", c(255, 90, 160), Mat.JELLY, 0.1f, c(110, 226, 190), Mat.ENAMEL, 0.08f,
                 c(255, 190, 232), c(120, 40, 140), c(255, 230, 80), c(80, 220, 255),
                 floor2 = c(120, 220, 90), wall2 = c(255, 150, 40), profile = Profile.TUBE, stripes = true, knobs = true,
-                backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 18)
+                backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 18),
+            // 19 Medieval: worn flagstones, crenellated castle walls, campfires, banners and dragons overhead
+            Palette("Medieval", c(120, 112, 100), Mat.STONE, 0.85f, c(150, 144, 132), Mat.STONE, 0.85f,
+                c(140, 170, 205), c(40, 46, 60), c(255, 170, 60), c(150, 30, 30),
+                wall2 = c(132, 126, 116), profile = Profile.BLOCK, knobs = false, backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 19)
         )
 
         val all = classic + themes

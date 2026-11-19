@@ -749,7 +749,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             checkpoints = picks.sortedBy { c -> path.indexOf(c) }.toIntArray()
             cpReached = -1
         }
-        if (pal.themeId == 12) {                                       // a first carpet of fallen leaves
+        if (pal.themeId == 12 || pal.themeId == 10) {                  // a first carpet of fallen leaves (and twigs, in the jungle)
             val vs = m.mesh.vertices
             for (i in 0 until minOf(m.cellCount * 8, 2400)) {
                 val c = rnd.nextInt(m.cellCount)
@@ -961,7 +961,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     if (pal.themeId == 7) snowfall(mb, m)
                     if (pal.themeId == 11) { glowStamp(mb); glowAtmosphere(mb, m, dt) }
                     if (pal.themeId == 17) lavaAtmosphere(mb, m, dt)
-                    if (pal.themeId == 12) fallLeaves(mb, m, dt)
+                    if (pal.themeId == 12 || pal.themeId == 10) fallLeaves(mb, m, dt)
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
                     if (terrain != Terrain.NONE) layTrail(mb, m, dt)
@@ -1502,7 +1502,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         scene(pal.floorMat, pal.floorRough, 0f, 0f); floorMesh?.draw()
         if ((pal.floorMat == Mat.TURF && profile.shadows >= 1) || pal.floorMat == Mat.TOY) {      // short 3D grass / raised studs: the ground drawn again as layers climbing up
             val toy = pal.floorMat == Mat.TOY
-            val shells = if (toy) (if (profile.shadows >= 2) 5 else 3) else if (profile.shadows >= 2) 8 else 5
+            val shells = if (toy) (if (profile.shadows >= 2) 5 else 3) else if (profile.shadows >= 2) 5 else 3
             GLES30.glUniform1f(loc(sceneProg, "uShellH"), if (toy) studPitch() * 0.15f else (maze?.cellSize ?: 0.1f) * 0.075f)
             for (k in 1..shells) { GLES30.glUniform1f(loc(sceneProg, "uShell"), k / (shells + 1f)); floorMesh?.draw() }
             GLES30.glUniform1f(loc(sceneProg, "uShell"), 0f)
@@ -1768,7 +1768,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     /** Ball skin for the current level: themed surfaces get a matching ball, sand and water levels a beach ball. */
     private fun ballSkin(): Int = if (ballChoice >= 0) ballChoice else when {
         pal.themeId >= 0 -> pal.themeId + 1
-        terrain == Terrain.SAND || medium == Medium.WATER -> 20
+        terrain == Terrain.SAND || medium == Medium.WATER -> 21
         else -> 0
     }
 
@@ -1858,7 +1858,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val under = mb.position - mb.surface.normal(mb.position) * mb.radius
             leaves.nudge(under, mb.radius * 2.6f, mb.radius * (0.18f + 0.5f * spd.coerceAtMost(1f)), time, 3.6f) { mb.surface.project(it) }
         }
-        leafAcc += dt * 16f
+        leafAcc += dt * (if (pal.themeId == 10) 1.5f else 16f)
         while (leafAcc >= 1f) {
             leafAcc -= 1f
             val n = mb.surface.normal(mb.position)
@@ -1881,7 +1881,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glDepthMask(true); GLES30.glDisable(GLES30.GL_BLEND)
             GLES30.glUseProgram(sceneProg)
         }
-        if (pal.themeId != 11 && pal.themeId != 12) return
+        if (pal.themeId != 11 && pal.themeId != 12 && pal.themeId != 10) return
         val prog = if (pal.themeId == 11) glowProg else leafProg
         val buf = if (pal.themeId == 11) glowTrail else leaves
         if (buf.count == 0) return
@@ -1890,6 +1890,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(loc(prog, "uModel"), 1, false, model, 0)
         GLES30.glUniform1f(loc(prog, "uTime"), time)
         GLES30.glUniform3f(loc(prog, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glUniform1f(loc(prog, "uLeafKind"), if (pal.themeId == 10) 1f else 0f)
         GLES30.glEnable(GLES30.GL_BLEND)
         if (pal.themeId == 11) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE) else GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         GLES30.glDepthMask(false)
@@ -2203,14 +2204,26 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val ball = marble
         val csA = maze?.cellSize ?: 0.1f
         val ballFast = ball != null && ball.velocity.length() > csA * 0.6f
+        // only the single nearest prop (and any bird flock overhead) is startled, so a passing ball does not set off a whole cluster
+        var nearest: SceneBuilder.AnimInst? = null
+        if (ball != null && ballFast && phase == Phase.PLAY) {
+            var bestD = (csA * 1.1f) * (csA * 1.1f)
+            for (a in animInsts) {
+                if (a.bird != null || a.spec?.whole != true || a.react > 0.05f) continue
+                val dx = ball.position.x - a.frame[12]; val dy = ball.position.y - a.frame[13]; val dz = ball.position.z - a.frame[14]
+                val d2 = dx * dx + dy * dy + dz * dz
+                if (d2 < bestD) { bestD = d2; nearest = a }
+            }
+            nearest?.react = 1f
+        }
         for (a in animInsts) {
             val g = ease01((growT - a.delay) / 0.35f)
             if (g <= 0.01f) continue
             val ph = a.phase
             // ball interaction: props shake, hop or (for birds) flap up and away when the ball rolls close by
-            if (ball != null && phase == Phase.PLAY) {
+            if (ball != null && phase == Phase.PLAY && a.bird != null) {
                 val dx = ball.position.x - a.frame[12]; val dy = ball.position.y - a.frame[13]; val dz = ball.position.z - a.frame[14]
-                val reach = csA * (if (a.bird != null) 2.2f else 1.25f)
+                val reach = csA * 2.2f
                 if (ballFast && dx * dx + dy * dy + dz * dz < reach * reach) a.react = 1f
             }
             a.react = maxOf(0f, a.react - dtA * (if (a.bird != null) 0.35f else 1.1f))
@@ -2236,9 +2249,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 Matrix.setIdentityM(aL, 0)
                 Matrix.translateM(aL, 0, off.x, off.y, off.z + sp.pivotZ)
                 if (rk > 0.001f && sp.whole) {                       // startled: a quick hop and a shake
-                    Matrix.translateM(aL, 0, 0f, 0f, 0.12f * rk * kotlin.math.abs(kotlin.math.sin(t * 11f)))
-                    Matrix.rotateM(aL, 0, 14f * rk * kotlin.math.sin(t * 17f + ph), 1f, 0f, 0f)
-                    Matrix.rotateM(aL, 0, 10f * rk * kotlin.math.sin(t * 13f + ph), 0f, 1f, 0f)
+                    Matrix.translateM(aL, 0, 0f, 0f, 0.05f * rk * kotlin.math.abs(kotlin.math.sin(t * 11f)))
+                    Matrix.rotateM(aL, 0, 6f * rk * kotlin.math.sin(t * 15f + ph), 1f, 0f, 0f)
+                    Matrix.rotateM(aL, 0, 4f * rk * kotlin.math.sin(t * 12f + ph), 0f, 1f, 0f)
                 }
                 when (sp.type) {
                     PropLibrary.Anim.SPIN -> Matrix.rotateM(aL, 0, (t * sp.speed * 1.4f + ph) * deg, 0f, 0f, 1f)
@@ -2250,8 +2263,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         Matrix.scaleM(aL, 0, 1f + sq, 1f + sq, 1f - sq * 1.6f)
                     }
                     PropLibrary.Anim.SWAY -> {
-                        Matrix.rotateM(aL, 0, sp.amp * 4.5f * kotlin.math.sin(t * sp.speed * 1.3f + ph), 1f, 0f, 0f)
-                        Matrix.rotateM(aL, 0, sp.amp * 3.5f * kotlin.math.sin(t * sp.speed * 0.9f + ph * 1.7f), 0f, 1f, 0f)
+                        Matrix.rotateM(aL, 0, sp.amp * 2.6f * kotlin.math.sin(t * sp.speed * 1.1f + ph), 1f, 0f, 0f)
+                        Matrix.rotateM(aL, 0, sp.amp * 2f * kotlin.math.sin(t * sp.speed * 0.8f + ph * 1.7f), 0f, 1f, 0f)
                     }
                     PropLibrary.Anim.FLICKER -> {
                         val k = ph + off.x * 13f
@@ -2278,8 +2291,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         Matrix.rotateM(aL, 0, u * sp.amp * 2400f, 0f, 0f, 1f)
                     }
                     PropLibrary.Anim.NOD -> {
-                        Matrix.rotateM(aL, 0, 18f * sp.amp * kotlin.math.sin(t * sp.speed * 0.5f + ph), 0f, 0f, 1f)
-                        Matrix.rotateM(aL, 0, 6f * sp.amp * kotlin.math.sin(t * sp.speed * 1.6f + ph), 0f, 1f, 0f)
+                        Matrix.rotateM(aL, 0, 11f * sp.amp * kotlin.math.sin(t * sp.speed * 0.5f + ph), 0f, 0f, 1f)
+                        Matrix.rotateM(aL, 0, 4f * sp.amp * kotlin.math.sin(t * sp.speed * 1.6f + ph), 0f, 1f, 0f)
                     }
                 }
                 Matrix.translateM(aL, 0, 0f, 0f, -sp.pivotZ)
