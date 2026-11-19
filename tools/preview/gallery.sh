@@ -3,4 +3,4 @@
 S=${TMPDIR:-/tmp}/gal_$1.json
 cd "$(dirname "$0")/../.."
 MAZE_DUMP=$S MAZE_GALLERY=1 MAZE_PAL=$((5+$1)) gradle :app:testDebugUnitTest --offline --rerun-tasks --tests '*DumpSceneTest*' -q >/dev/null 2>&1
-cd tools/preview && node shot.js $S "$2" "w=1800&h=420&orient=1,0,0,-1.5708&zoom=0.5&post=1&grow=2&hint=0&light=0&gal=1&shadow=0"
+cd tools/preview && node shot.js $S "$2" "w=1800&h=420&orient=1,0,0,-1.5708&zoom=0.42&post=1&grow=2&hint=0&light=0&gal=1&shadow=0"

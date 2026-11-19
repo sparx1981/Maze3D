@@ -137,6 +137,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var haloProg = 0
     private var myceliumMesh: GlMesh? = null
     private var lampIdxList: List<Int> = emptyList()
+    private var lampColList: List<Vec3> = emptyList()
+    private var lampReachList: List<Float> = emptyList()
+    private val lampColUniform = FloatArray(36)
     private val lampIdxUniform = FloatArray(12)
     private var sporeAcc = 0f
     private val leaves = TrailBuffer(4000)
@@ -334,6 +337,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         swingPitMesh = GlMesh(GlMesh.SCENE); swingGantryMesh = GlMesh(GlMesh.SCENE); swingSeatMesh = GlMesh(GlMesh.SCENE)
         bridgeMesh = GlMesh(GlMesh.SCENE); bridgeBoardMesh = GlMesh(GlMesh.SCENE); gantryMesh = GlMesh(GlMesh.SCENE); hammerMesh = GlMesh(GlMesh.SCENE)
         lidMesh = GlMesh(GlMesh.SCENE)
+        animMeshes.clear()
         gateMesh = GlMesh(GlMesh.SCENE); for (i in keyMeshes.indices) keyMeshes[i] = GlMesh(GlMesh.SCENE)
         for (i in fxMeshes.indices) fxMeshes[i] = GlMesh(GlMesh.SCENE)
         locs.clear(); shadow = null; appliedQuality = -1; postOn = false
@@ -553,6 +557,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         dirt = 0f
         trail.clear(); glowTrail.clear(); leaves.clear(); glowStampAt = null; leafAcc = 0f
         val b = SceneBuilder(m, pal)
+        b.wallDetail = when { profile.shadows >= 2 -> 1f; profile.shadows >= 1 -> 0.7f; else -> 0.45f }
         builder = b
         floorMesh!!.let { val mb = b.floor(true); it.upload(mb.vertices(), mb.indices()) }
         setupSand(m)
@@ -560,6 +565,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         b.planProps(kind.outerRadius)
         lamps = b.lamps.toList()
         lampIdxList = b.lampIdx.toList()
+        lampColList = b.lampCol.toList(); lampReachList = b.lampReach.toList()
+        animInsts = b.anims.toList()
         haloBuf.clear()
         myceliumMesh!!.let { mm ->
             if (pal.themeId == 11) {
@@ -594,7 +601,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         poison = 0f
         field = if (medium != Medium.NONE) com.maze3d.core.MediumField(m, medium, rnd, k.outerRadius).also { it.warmUp(if (medium == Medium.WATER) 8f else 5f) } else null
         marble!!.field = field
-        mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight) }
+        mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight, when { profile.shadows >= 2 -> 9; profile.shadows >= 1 -> 6; else -> 4 }) }
         mediumGeo?.let { g -> mediumMesh!!.upload(g.update(field!!.level), g.indices, true) }
         surfaceKey = when { pal.themeId >= 0 -> "t${pal.themeId}"; medium != Medium.NONE -> medium.name.lowercase(); terrain == Terrain.SAND -> "sand"; terrain == Terrain.MUD -> "mud"; else -> "classic" }
         solvedReported = false
@@ -1407,17 +1414,23 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else 0f)
         run { val sp = studPitch(); GLES30.glUniform2f(loc(sceneProg, "uStud"), 1f / sp, sp * 0.12f) }
         GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
-        when (pal.themeId) { 11 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.35f, 1f, 0.5f); 9 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 1f, 0.28f, 0.85f); 17 -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 1f, 0.42f, 0.1f); else -> GLES30.glUniform3f(loc(sceneProg, "uLampCol"), 0.38f, 0.62f, 1f) }
-        lampUniform.fill(0f)
-        if (night) {
+        lampUniform.fill(0f); lampColUniform.fill(0f)
+        // the lamps nearest the ball (or the view centre) light the scene; how many depends on the quality setting
+        val lampCap = when { profile.shadows >= 2 -> 12; profile.shadows >= 1 -> 8; else -> 4 }
+        if (lamps.isNotEmpty()) {
             val from = marble?.position ?: Vec3.ZERO
-            val order = lamps.indices.sortedBy { (lamps[it] - from).lengthSq() }.take(12)
-            val reach = (maze?.cellSize ?: 0.1f) * (if (pal.themeId == 11) 5.2f else 4.2f)
-            lampIdxUniform.fill(0f)
-            order.forEachIndexed { i, li -> val p = lamps[li]; lampUniform[i * 4] = p.x; lampUniform[i * 4 + 1] = p.y; lampUniform[i * 4 + 2] = p.z; lampUniform[i * 4 + 3] = reach; lampIdxUniform[i] = lampIdxList.getOrElse(li) { 0 }.toFloat() }
+            val order = lamps.indices.sortedBy { (lamps[it] - from).lengthSq() }.take(lampCap)
+            val cs = maze?.cellSize ?: 0.1f
+            order.forEachIndexed { i, li ->
+                val p = lamps[li]; val c = lampColList.getOrElse(li) { Vec3(0.55f, 0.72f, 1f) }
+                val flick = if (pal.themeId == 17 || pal.themeId == 1) 0.85f + 0.15f * kotlin.math.sin(time * 9f + li * 1.7f) * kotlin.math.sin(time * 5.3f + li) else 1f
+                lampUniform[i * 4] = p.x; lampUniform[i * 4 + 1] = p.y; lampUniform[i * 4 + 2] = p.z
+                lampUniform[i * 4 + 3] = cs * (lampReachList.getOrElse(li) { 4.2f } + (if (pal.themeId == 11) 1f else 0f))
+                lampColUniform[i * 3] = c.x * flick; lampColUniform[i * 3 + 1] = c.y * flick; lampColUniform[i * 3 + 2] = c.z * flick
+            }
         }
-        GLES30.glUniform1f(loc(sceneProg, "uLampMode"), if (pal.themeId == 11) 1f else 0f)
-        GLES30.glUniform1fv(loc(sceneProg, "uLampIdx"), 12, lampIdxUniform, 0)
+        GLES30.glUniform1f(loc(sceneProg, "uLampGain"), if (lamps.isEmpty()) 0f else if (night) 1f else 1.7f)
+        GLES30.glUniform3fv(loc(sceneProg, "uLampC"), 12, lampColUniform, 0)
         GLES30.glUniform4fv(loc(sceneProg, "uLamp"), 12, lampUniform, 0)
         run {
             val sf = sandField
@@ -1471,7 +1484,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1i(loc(sceneProg, "uHoleN"), 0)
         scene(pal.wallMat, pal.wallRough, pal.wallMetal, 0f); wallMesh?.draw()
         if (keyGates != null) { scene(Mat.PROP, 0.35f, 0.1f, 0.25f); gateMesh?.draw() }
-        if (pal.themeId >= 0) { scene(Mat.PROP, 0.42f, 0f, 0f); propMesh?.draw() }
+        if (pal.themeId >= 0) { scene(Mat.PROP, 0.42f, 0f, 0f); propMesh?.draw(); drawAnimProps() }
         drawHazardObjects()
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 1f)
         doorMesh?.draw()
@@ -1962,6 +1975,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(mediumProg, "uDoorMode"), 0f)
         GLES30.glUniform3f(loc(mediumProg, "uCam"), cam.x, cam.y, cam.z)
         GLES30.glUniform3f(loc(mediumProg, "uLightDir"), lightDir.x, lightDir.y, lightDir.z)
+        GLES30.glUniform1f(loc(mediumProg, "uLayers"), (mediumGeo?.layers ?: 1).toFloat())
         GLES30.glUniform1f(loc(mediumProg, "uKind"), when (f.kind) { Medium.WATER -> 1f; Medium.GAS -> 2f; else -> 3f })
         val cs = maze?.cellSize ?: 0.1f
         GLES30.glUniform1f(loc(mediumProg, "uScale"), 1f / cs)
@@ -1982,7 +1996,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             GLES30.glUniform1i(loc(mediumProg, "uFoamTex"), 6)
             GLES30.glUniform4f(loc(mediumProg, "uWaveP"), wf.t.toFloat(), wf.tile.toFloat(), wf.perRow.toFloat(), 0f)
             GLES30.glUniform2f(loc(mediumProg, "uWaveAtlas"), wf.atlasW.toFloat(), wf.atlasH.toFloat())
-        } else GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5)
+        } else { GLES30.glUniform1i(loc(mediumProg, "uWaveTex"), 5); GLES30.glUniform1i(loc(mediumProg, "uFoamTex"), 6) }
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         GLES30.glDepthMask(false)
@@ -2080,6 +2094,92 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private val turfTrail = FloatArray(64)
     private var turfHead = 0
     private var turfT = 0f
+
+    // ---- moving props: spinning machines, swaying plants, bobbing animals, flickering flames and circling birds
+    private var animInsts = emptyList<SceneBuilder.AnimInst>()
+    private val animMeshes = HashMap<PropMesh, GlMesh>()
+    private val aL = FloatArray(16); private val aT = FloatArray(16); private val aW = FloatArray(16); private val aF = FloatArray(16)
+    private fun meshFor(pm: PropMesh): GlMesh = animMeshes.getOrPut(pm) {
+        GlMesh(GlMesh.SCENE).also { g ->
+            val mb = MeshBuilder()
+            for (i in 0 until pm.vertexCount) mb.vertex(Vec3(pm.pos[i * 3], pm.pos[i * 3 + 1], pm.pos[i * 3 + 2]), Vec3(pm.nrm[i * 3], pm.nrm[i * 3 + 1], pm.nrm[i * 3 + 2]), Vec3(pm.col[i * 3], pm.col[i * 3 + 1], pm.col[i * 3 + 2]))
+            var q = 0; while (q < pm.idx.size) { mb.tri(pm.idx[q], pm.idx[q + 1], pm.idx[q + 2]); q += 3 }
+            g.upload(mb.vertices(), mb.indices())
+        }
+    }
+    private fun drawPart(uModel: Int, frame: FloatArray, local: FloatArray, pm: PropMesh) {
+        Matrix.multiplyMM(aT, 0, frame, 0, local, 0)
+        Matrix.multiplyMM(aW, 0, model, 0, aT, 0)
+        GLES30.glUniformMatrix4fv(uModel, 1, false, aW, 0)
+        meshFor(pm).draw()
+    }
+
+    private fun drawAnimProps() {
+        if (animInsts.isEmpty()) return
+        val uModel = loc(sceneProg, "uModel")
+        val t = time
+        val deg = 57.29578f
+        for (a in animInsts) {
+            val g = ease01((growT - a.delay) / 0.35f)
+            if (g <= 0.01f) continue
+            val ph = a.phase
+            val bd = a.bird
+            if (bd != null) {
+                val omega = (if (bd.glide) 0.9f else 1.3f) / a.radius
+                val ang = t * omega * a.dir + ph
+                Matrix.setIdentityM(aL, 0)
+                Matrix.translateM(aL, 0, a.radius * kotlin.math.cos(ang), a.radius * kotlin.math.sin(ang), a.height + 0.25f * kotlin.math.sin(t * 0.8f + ph))
+                Matrix.rotateM(aL, 0, (ang + a.dir * PI.toFloat() / 2f) * deg, 0f, 0f, 1f)
+                Matrix.rotateM(aL, 0, -a.dir * 14f, 1f, 0f, 0f)
+                Matrix.scaleM(aL, 0, bd.size * g, bd.size * g, bd.size * g)
+                drawPart(uModel, a.frame, aL, bd.body)
+                val burst = if (bd.glide) (0.15f + 0.85f * maxOf(0f, kotlin.math.sin(t * 0.7f + ph))) else 1f
+                val flap = if (bd.flap > 0f) 38f * burst * kotlin.math.sin(t * bd.flap + ph) else 0f
+                System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingL)
+                System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, -flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingR)
+                continue
+            }
+            val sp = a.spec ?: continue
+            for (off in sp.at) {
+                Matrix.setIdentityM(aL, 0)
+                Matrix.translateM(aL, 0, off.x, off.y, off.z + sp.pivotZ)
+                when (sp.type) {
+                    PropLibrary.Anim.SPIN -> Matrix.rotateM(aL, 0, (t * sp.speed * 1.4f + ph) * deg, 0f, 0f, 1f)
+                    PropLibrary.Anim.BOB -> {
+                        val hop = kotlin.math.abs(kotlin.math.sin(t * sp.speed * 2.6f + ph))
+                        Matrix.translateM(aL, 0, 0f, 0f, 0.1f * sp.amp * hop)
+                        Matrix.rotateM(aL, 0, 9f * kotlin.math.sin(t * sp.speed * 1.3f + ph), 0f, 0f, 1f)
+                        val sq = 0.07f * sp.amp * (1f - hop)
+                        Matrix.scaleM(aL, 0, 1f + sq, 1f + sq, 1f - sq * 1.6f)
+                    }
+                    PropLibrary.Anim.SWAY -> {
+                        Matrix.rotateM(aL, 0, sp.amp * 4.5f * kotlin.math.sin(t * sp.speed * 1.3f + ph), 1f, 0f, 0f)
+                        Matrix.rotateM(aL, 0, sp.amp * 3.5f * kotlin.math.sin(t * sp.speed * 0.9f + ph * 1.7f), 0f, 1f, 0f)
+                    }
+                    PropLibrary.Anim.FLICKER -> {
+                        val k = ph + off.x * 13f
+                        val xy = 1f + 0.12f * kotlin.math.sin(t * 17f * sp.speed + k)
+                        val z = 1f + 0.22f * kotlin.math.sin(t * 11.3f * sp.speed + k * 2f) * kotlin.math.sin(t * 7.1f + k)
+                        Matrix.rotateM(aL, 0, 6f * kotlin.math.sin(t * 5.3f + k), 1f, 0f, 0f)
+                        Matrix.scaleM(aL, 0, xy, xy, if (sp.amp < 0f) -z else z)
+                    }
+                    PropLibrary.Anim.WOBBLE -> {
+                        val k = 0.07f * sp.amp * kotlin.math.sin(t * sp.speed * 4.2f + ph)
+                        Matrix.scaleM(aL, 0, 1f + k, 1f + k, 1f - k * 1.8f)
+                        Matrix.rotateM(aL, 0, sp.amp * 3f * kotlin.math.sin(t * sp.speed * 2.1f + ph), 1f, 0f, 0f)
+                    }
+                    PropLibrary.Anim.NOD -> {
+                        Matrix.rotateM(aL, 0, 18f * sp.amp * kotlin.math.sin(t * sp.speed * 0.5f + ph), 0f, 0f, 1f)
+                        Matrix.rotateM(aL, 0, 6f * sp.amp * kotlin.math.sin(t * sp.speed * 1.6f + ph), 0f, 1f, 0f)
+                    }
+                }
+                Matrix.translateM(aL, 0, 0f, 0f, -sp.pivotZ)
+                Matrix.scaleM(aL, 0, g, g, g)
+                drawPart(uModel, a.frame, aL, sp.part)
+            }
+        }
+        GLES30.glUniformMatrix4fv(uModel, 1, false, model, 0)
+    }
 
     private fun studPitch() = (maze?.marbleRadius ?: 0.02f) * 1.7f
 

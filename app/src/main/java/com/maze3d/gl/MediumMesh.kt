@@ -8,8 +8,9 @@ import com.maze3d.core.Vec3
  * Renders a [com.maze3d.core.MediumField]. Water is one finely subdivided sheet per cell that follows the curved floor (so it
  * never dips through it) with levels interpolated across cell corners; gas and fog are a few stacked translucent sheets.
  */
-class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeight: Float) {
-    val layers = if (kind == Medium.WATER) 1 else 3
+class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeight: Float, volumeLayers: Int = 6) {
+    /** Water is one sheet; fog and gas are a stack of slices through a drifting 3D density field (more slices = denser, smoother volume). */
+    val layers = if (kind == Medium.WATER) 1 else volumeLayers
     private val sub = if (kind == Medium.WATER) 4 else 1
     private val per = (sub + 1) * (sub + 1)
     private val cells = maze.cellCount
@@ -65,13 +66,13 @@ class MediumMesh(private val maze: Maze, val kind: Medium, private val wallHeigh
             val lv = cl[c * 4] * ((1 - u) * (1 - w)) + cl[c * 4 + 1] * (u * (1 - w)) + cl[c * 4 + 2] * (u * w) + cl[c * 4 + 3] * ((1 - u) * w)
             val lift = when (kind) {
                 Medium.WATER -> cs * 0.03f + lv * wallHeight * 0.5f
-                Medium.GAS -> wallHeight * (0.12f + 0.42f * l)
-                else -> wallHeight * (0.25f + 0.7f * l)
+                Medium.GAS -> wallHeight * (0.04f + 1.25f * l / maxOf(1, layers - 1))
+                else -> wallHeight * (0.06f + 2.1f * l / maxOf(1, layers - 1))
             }
             val g = (c * per + a * (sub + 1) + b) * 3
             verts[o++] = basePos[g] + baseNrm[g] * lift; verts[o++] = basePos[g + 1] + baseNrm[g + 1] * lift; verts[o++] = basePos[g + 2] + baseNrm[g + 2] * lift
             verts[o++] = baseNrm[g]; verts[o++] = baseNrm[g + 1]; verts[o++] = baseNrm[g + 2]
-            verts[o++] = lv; verts[o++] = l / 3f; verts[o++] = 0f
+            verts[o++] = lv; verts[o++] = l / maxOf(1, layers - 1).toFloat(); verts[o++] = 0f
             verts[o++] = 0f; verts[o++] = 0f; verts[o++] = 0f
             verts[o++] = -1f
             verts[o++] = u; verts[o++] = w; verts[o++] = c.toFloat()

@@ -112,7 +112,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val delay = dl * 0.75f + 0.05f * hash(e)
             val altEdge = hash(e + 9000) < 0.5f
             val c1 = wallColors(pal.wall); val c2 = wallColors(pal.wall2)
-            addWall(mb, e, delay, prof, c1, c2, if (pal.stripes) 1 else if (altEdge && pal.wall2 !== pal.wall) 2 else 0)
+            addWall(mb, e, delay, prof, c1, c2, if (pal.stripes) 1 else if (altEdge && pal.wall2 !== pal.wall) 2 else 0, styled = true)
             if (pal.knobs) for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) if (bulbs.add(v)) bulb(mb, v, delay, if (hash(v + 77) < 0.5f) c1 else c2)
         }
         return mb
@@ -140,9 +140,40 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         return mb
     }
 
+    // ---- themed wall shapes: walls need not be straight bars
+    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6 }
+    /** 1 = full wall detail; lower quality settings use fewer segments along the shaped walls. */
+    var wallDetail = 1f
+    private val wallStyle = when (pal.themeId) {
+        7, 12 -> WallStyle.HEDGE          // snowy hedges, autumn hedgerows
+        10, 11 -> WallStyle.ROOT          // jungle roots and vines, glowing mycelium logs
+        15 -> WallStyle.ROCK              // piled boulders
+        8 -> WallStyle.BLOCKS             // dressed temple stone
+        0, 18 -> WallStyle.BEADS          // candy ropes and gummy strings
+        14 -> WallStyle.PILLOW            // stuffed, stitched fabric rolls
+        else -> WallStyle.NONE
+    }
+
+    private fun lattice(x: Int, y: Int, z: Int): Float {
+        var h = x * 374761393 + y * 668265263 + z * 1274126177
+        h = (h xor (h ushr 13)) * 1274126177
+        return ((h xor (h ushr 16)) and 0xffff) / 32767.5f - 1f
+    }
+    /** Smooth value noise in -1..1. */
+    private fun vnoise(p: Vec3): Float {
+        val fx = kotlin.math.floor(p.x); val fy = kotlin.math.floor(p.y); val fz = kotlin.math.floor(p.z)
+        val ix = fx.toInt(); val iy = fy.toInt(); val iz = fz.toInt()
+        fun s(t: Float) = t * t * (3f - 2f * t)
+        val ux = s(p.x - fx); val uy = s(p.y - fy); val uz = s(p.z - fz)
+        fun l(a: Float, b: Float, t: Float) = a + (b - a) * t
+        return l(l(l(lattice(ix, iy, iz), lattice(ix + 1, iy, iz), ux), l(lattice(ix, iy + 1, iz), lattice(ix + 1, iy + 1, iz), ux), uy),
+            l(l(lattice(ix, iy, iz + 1), lattice(ix + 1, iy, iz + 1), ux), l(lattice(ix, iy + 1, iz + 1), lattice(ix + 1, iy + 1, iz + 1), ux), uy), uz)
+    }
+
     /** mode: 0 = colour set 1, 2 = colour set 2, 1 = alternate the two along the wall (stripes). */
-    private fun addWall(mb: MeshBuilder, e: Int, delay: Float, pd: ProfileData, c1: Pair<Vec3, Vec3>, c2: Pair<Vec3, Vec3>, mode: Int) {
+    private fun addWall(mb: MeshBuilder, e: Int, delay: Float, pd: ProfileData, c1: Pair<Vec3, Vec3>, c2: Pair<Vec3, Vec3>, mode: Int, styled: Boolean = false) {
         val prof = pd.pts
+        val style = if (styled) wallStyle else WallStyle.NONE
         // each wall differs by a hair in width and height so overlapping joints never share a coplanar surface (z-fight flicker)
         val t = wallHalfThickness * pd.ws * (1f + 0.014f * hash(e + 4242))
         val hgt = wallHeight * pd.hs * (1f + 0.007f * hash(e + 5151))
@@ -152,35 +183,112 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val ea = a0 - dir * wallHalfThickness
         val eb = b0 + dir * wallHalfThickness
         val len = (eb - ea).length()
-        val segs = if (mode == 1) max(1, Math.round(len / (cs * 0.26f))) else 1
-        fun ringAt(f: Float): Triple<Vec3, Vec3, Vec3> {              // position, normal, side
+        val stripeSegs = if (mode == 1) max(1, Math.round(len / (cs * 0.26f))) else 1
+        val per = if (style == WallStyle.NONE) 1 else max(1, Math.round(len / (cs * (if (style == WallStyle.HEDGE) 0.1f else 0.13f) / wallDetail) / stripeSegs))
+        val segs = stripeSegs * per
+        val nk = prof.size
+        val freq = 1f / (cs * 0.16f)
+        val chunks = max(2, Math.round(len / (cs * (if (style == WallStyle.BLOCKS) 0.34f else 0.24f))))
+        val beads = max(2, Math.round(len / (cs * (if (style == WallStyle.PILLOW) 0.32f else 0.17f))))
+        // shared grid of positions (base + lift) so the surface stays watertight; normals come from the grid itself
+        val basePos = Array(segs + 1) { arrayOfNulls<Vec3>(nk) }
+        val liftV = Array(segs + 1) { arrayOfNulls<Vec3>(nk) }
+        val tint = Array(segs + 1) { FloatArray(nk) { 1f } }
+        val snow = Array(segs + 1) { FloatArray(nk) }
+        val seam = FloatArray(segs + 1)
+        for (r in 0..segs) {
+            val f = r / segs.toFloat()
             val p = if (f <= 0f) ea else if (f >= 1f) eb else surface.project(ea + (eb - ea) * f)
             val n = surface.normal(if (f <= 0f) a0 else if (f >= 1f) b0 else p)
-            return Triple(p, n, (dir cross n).normalized())
+            val side = (dir cross n).normalized()
+            val taper = kotlin.math.sin(f * PI.toFloat())
+            var bend = 0f; var wsc = 1f; var hsc = 1f
+            when (style) {
+                WallStyle.ROOT -> { bend = vnoise(p * (freq * 0.5f) + Vec3(3.1f, 0f, 0f)) * 1.8f * taper; wsc = 1f + 0.35f * vnoise(p * freq); hsc = 1f + 0.15f * vnoise(p * (freq * 0.7f) + Vec3(7f, 1f, 2f)) }
+                WallStyle.HEDGE -> { hsc = 1.05f + 0.16f * vnoise(p * (freq * 0.8f) + Vec3(5f, 2f, 1f)); wsc = 1.12f }
+                WallStyle.ROCK, WallStyle.BLOCKS -> {
+                    val cf = f * chunks; val ci = kotlin.math.floor(cf).toInt().coerceAtMost(chunks - 1); val fr = cf - ci
+                    fun hOf(i: Int) = if (style == WallStyle.ROCK) 0.78f + 0.42f * hash(e * 31 + i) else 0.94f + 0.08f * hash(e * 31 + i)
+                    fun wOf(i: Int) = if (style == WallStyle.ROCK) 0.95f + 0.4f * hash(e * 17 + i + 500) else 1.03f
+                    val edgeK = if (style == WallStyle.ROCK) 0.22f else 0.08f
+                    val blendL = (1f - (fr / edgeK).coerceIn(0f, 1f)).let { it * it }
+                    val blendR = (1f - ((1f - fr) / edgeK).coerceIn(0f, 1f)).let { it * it }
+                    val sink = if (style == WallStyle.ROCK) 0.55f else 0.85f        // stones round off where they meet
+                    hsc = hOf(ci) * (1f - (1f - sink) * maxOf(blendL, blendR)); wsc = wOf(ci) * (1f - 0.25f * maxOf(blendL, blendR))
+                    seam[r] = maxOf(blendL, blendR)
+                }
+                WallStyle.BEADS -> { val b = 0.5f + 0.5f * kotlin.math.cos(f * beads * 2f * PI.toFloat()); wsc = 0.9f + 0.32f * b; hsc = 0.94f + 0.12f * b }
+                WallStyle.PILLOW -> { val b = kotlin.math.abs(kotlin.math.sin(f * beads * PI.toFloat())); wsc = 0.88f + 0.3f * b; hsc = 0.9f + 0.16f * b; seam[r] = 1f - b }
+            }
+            for (k in 0 until nk) {
+                val q = prof[k]
+                var lat = q[0] * t * wsc; var up = q[1] * hgt * hsc
+                if (style == WallStyle.HEDGE && q[1] > 0.05f) {          // bushy, uneven foliage
+                    val bump = vnoise(p * freq + Vec3(k * 0.61f, k * 0.37f, 0f)) * 0.5f + vnoise(p * (freq * 2.3f) + Vec3(0f, k * 0.9f, 3f)) * 0.25f
+                    lat += kotlin.math.sign(q[0]) * t * 0.55f * bump * q[1]
+                    up += hgt * 0.14f * bump * q[1]
+                    tint[r][k] = 0.82f + 0.32f * vnoise(p * (freq * 3f) + Vec3(k * 1.3f, 0f, 9f))
+                    if (pal.themeId == 7) snow[r][k] = ((q[1] - 0.62f - 0.18f * vnoise(p * (freq * 1.7f) + Vec3(k * 0.4f, 4f, 0f))) / 0.18f).coerceIn(0f, 1f)
+                }
+                if (style == WallStyle.ROOT) {
+                    lat += kotlin.math.sign(q[0]) * t * 0.25f * vnoise(p * (freq * 1.8f) + Vec3(k * 0.7f, 2f, 0f)) * q[1]
+                    tint[r][k] = 0.8f + 0.35f * vnoise(p * (freq * 2.5f) + Vec3(0f, k.toFloat(), 4f))
+                }
+                if (style == WallStyle.ROCK) {
+                    val rough = vnoise(p * (freq * 2.2f) + Vec3(k * 0.8f, 0f, 1f))
+                    lat += kotlin.math.sign(q[0]) * t * 0.18f * rough; up += hgt * 0.06f * rough * q[1]
+                    tint[r][k] = 0.84f + 0.3f * vnoise(p * (freq * 1.3f) + Vec3(e.toFloat() * 0.1f, 0f, 0f))
+                }
+                if (style == WallStyle.BLOCKS || style == WallStyle.PILLOW) tint[r][k] = 1f - (if (style == WallStyle.BLOCKS) 0.35f else 0.25f) * seam[r]
+                basePos[r][k] = p + side * (lat + bend * t)
+                liftV[r][k] = n * up
+            }
         }
-        for (sgi in 0 until segs) {
-            val use2 = when (mode) { 2 -> true; 1 -> sgi % 2 == 1; else -> false }
-            val (lowC, topC) = if (use2) c2 else c1
-            val rings = Array(2) { r ->
-                val (base, n, side) = ringAt((sgi + r) / segs.toFloat())
-                IntArray(prof.size) { k ->
-                    val q = prof[k]
-                    val pos = base + side * (q[0] * t)
-                    val nrm = (side * q[2] + n * q[3]).normalized()
-                    val col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1])))
-                    mb.vertex(pos, nrm, col, n * (q[1] * hgt), delay)
+        // normals from the deformed grid (around the profile x along the wall)
+        fun posAt(r: Int, k: Int) = basePos[r][k]!! + liftV[r][k]!!
+        val nrm = Array(segs + 1) { r ->
+            val p0 = if (r <= 0) a0 else if (r >= segs) b0 else basePos[r][0]!!
+            val n = surface.normal(p0)
+            val side = (dir cross n).normalized()
+            Array(nk) { k ->
+                val q = prof[k]
+                val baseN = (side * q[2] + n * q[3]).normalized()
+                if (style == WallStyle.NONE) baseN else {
+                    val ra = (r - 1).coerceAtLeast(0); val rb = (r + 1).coerceAtMost(segs)
+                    val ka = (k - 1).coerceAtLeast(0); val kb = (k + 1).coerceAtMost(nk - 1)
+                    val along = posAt(rb, k) - posAt(ra, k)
+                    val around = posAt(r, kb) - posAt(r, ka)
+                    var g = along cross around
+                    if (g.lengthSq() < 1e-14f) baseN else { g = g.normalized(); if ((g dot baseN) < 0f) g = -g; (g * 0.75f + baseN * 0.25f).normalized() }
                 }
             }
-            for (k in 0 until prof.size - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
+        }
+        val snowC = Vec3(0.93f, 0.96f, 1f)
+        for (sgi in 0 until segs) {
+            val stripe = sgi / per
+            val use2 = when (mode) { 2 -> true; 1 -> stripe % 2 == 1; else -> false }
+            val (lowC, topC) = if (use2) c2 else c1
+            val rings = Array(2) { rr ->
+                val r = sgi + rr
+                IntArray(nk) { k ->
+                    val q = prof[k]
+                    var col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * tint[r][k]
+                    if (snow[r][k] > 0f) col = Vec3.lerp(col, snowC, snow[r][k])
+                    mb.vertex(basePos[r][k]!!, nrm[r][k], col, liftV[r][k]!!, delay)
+                }
+            }
+            for (k in 0 until nk - 1) mb.quad(rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k])
         }
         // end caps (flat)
-        for (r in 0..1) {
-            val (base, n, side) = ringAt(r.toFloat())
-            val cn = if (r == 0) -dir else dir
-            val (lowC, topC) = if (mode == 2 || (mode == 1 && r == 1 && segs % 2 == 0)) c2 else c1
-            val idx = IntArray(prof.size) { k ->
+        for (rr in 0..1) {
+            val r = rr * segs
+            val cn = if (rr == 0) -dir else dir
+            val (lowC, topC) = if (mode == 2 || (mode == 1 && rr == 1 && stripeSegs % 2 == 0)) c2 else c1
+            val idx = IntArray(nk) { k ->
                 val q = prof[k]
-                mb.vertex(base + side * (q[0] * t), cn, Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f, n * (q[1] * hgt), delay)
+                var col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f * tint[r][k]
+                if (snow[r][k] > 0f) col = Vec3.lerp(col, snowC, snow[r][k])
+                mb.vertex(basePos[r][k]!!, cn, col, liftV[r][k]!!, delay)
             }
             for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
         }
@@ -447,7 +555,23 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
 
     // ------------------------------------------------------------------ theme props
     class Obstacle(val cell: Int, val pos: Vec3, val radius: Float)
-    private class Placed(val mesh: PropMesh, val pos: Vec3, val n: Vec3, val t2: Vec3, val size: Float, val delay: Float)
+    private class Placed(val mesh: PropMesh, val pos: Vec3, val n: Vec3, val t2: Vec3, val size: Float, val delay: Float, val skip: Boolean = false)
+
+    /** A moving prop (or moving part of one): [frame] maps prop units to local space (columns t1, t2, n scaled by size, then the origin). */
+    class AnimInst(val spec: PropLibrary.AnimSpec?, val frame: FloatArray, val phase: Float, val delay: Float,
+                   val bird: PropLibrary.Bird? = null, val radius: Float = 0f, val height: Float = 0f, val dir: Float = 1f)
+    val anims = ArrayList<AnimInst>()
+    private fun frameOf(pos: Vec3, n: Vec3, t2in: Vec3, size: Float): FloatArray {
+        val t2 = (t2in - n * (t2in dot n)).normalized(); val t1 = t2 cross n
+        return floatArrayOf(t1.x * size, t1.y * size, t1.z * size, 0f, t2.x * size, t2.y * size, t2.z * size, 0f,
+            n.x * size, n.y * size, n.z * size, 0f, pos.x, pos.y, pos.z, 1f)
+    }
+    /** Records the animation of a placed prop; returns true when the whole prop moves (so it is left out of the static mesh). */
+    private fun animate(lib: PropLibrary.ThemeProps, mesh: PropMesh, pos: Vec3, n: Vec3, t2: Vec3, size: Float, delay: Float, seed: Int): Boolean {
+        val spec = lib.anims[mesh] ?: return false
+        anims.add(AnimInst(spec, frameOf(pos, n, t2, size), hash(seed + 7101) * 6.2831853f, delay))
+        return spec.whole
+    }
 
     private val placed = ArrayList<Placed>()
     /** Dead-end props the marble can bump into. */
@@ -456,11 +580,50 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     val lamps = ArrayList<Vec3>()
     /** Colour slot (0..3) of each lamp: the four spore colours on the Glow level. */
     val lampIdx = ArrayList<Int>()
-    private fun addLamp(v: Vec3) { lamps.add(v); lampIdx.add((hash(lamps.size * 7 + 3) * 4f).toInt().coerceIn(0, 3)) }
+    /** Linear light colour (with strength) of each lamp, and how far it reaches in cells. */
+    val lampCol = ArrayList<Vec3>()
+    val lampReach = ArrayList<Float>()
+    private fun themeLampCol(k: Int): Vec3 = when (pal.themeId) {
+        11 -> when (k) { 0 -> Vec3(0.55f, 1f, 0.36f); 1 -> Vec3(0.30f, 1f, 0.75f); 2 -> Vec3(0.85f, 1f, 0.35f); else -> Vec3(0.25f, 0.88f, 1f) }
+        9 -> if (k % 2 == 0) Vec3(1f, 0.28f, 0.85f) else Vec3(0.2f, 0.9f, 1f)
+        17 -> Vec3(1f, 0.42f, 0.1f)
+        else -> Vec3(0.55f, 0.72f, 1f)
+    }
+    private fun addLamp(v: Vec3, col: Vec3? = null, reach: Float = 4.2f) {
+        val k = (hash(lamps.size * 7 + 3) * 4f).toInt().coerceIn(0, 3)
+        lamps.add(v); lampIdx.add(k); lampCol.add(col ?: themeLampCol(k)); lampReach.add(reach)
+    }
+
+    /** Where a prop glows (vertices brighter than 1) and in what colour; null for a prop with no lit parts. */
+    private val glowCache = HashMap<PropMesh, Pair<Vec3, Vec3>?>()
+    private fun glowOf(m: PropMesh): Pair<Vec3, Vec3>? = glowCache.getOrPut(m) {
+        var w = 0f; var cx = 0f; var cy = 0f; var cz = 0f; var r = 0f; var g = 0f; var b = 0f; var n = 0
+        for (i in 0 until m.vertexCount) {
+            val cr = m.col[i * 3]; val cg = m.col[i * 3 + 1]; val cb = m.col[i * 3 + 2]
+            val vm = maxOf(cr, maxOf(cg, cb))
+            if (vm <= 1.02f) continue
+            val k = vm - 1f
+            w += k; n++
+            cx += m.pos[i * 3] * k; cy += m.pos[i * 3 + 1] * k; cz += m.pos[i * 3 + 2] * k
+            r += (cr / vm).let { it * it } * k; g += (cg / vm).let { it * it } * k; b += (cb / vm).let { it * it } * k
+        }
+        if (n < 6 || w <= 0f) null
+        else {
+            val strength = (w / n * 1.6f + 0.5f).coerceIn(0.5f, 1.8f)
+            Vec3(cx / w, cy / w, cz / w) to Vec3(r / w, g / w, b / w) * strength
+        }
+    }
+    private fun lampFromProp(mesh: PropMesh, pos: Vec3, n: Vec3, t2in: Vec3, size: Float) {
+        val gl = glowOf(mesh) ?: return
+        val t2 = (t2in - n * (t2in dot n)).normalized(); val t1 = t2 cross n
+        val c = gl.first
+        addLamp(pos + t1 * (c.x * size) + t2 * (c.y * size) + n * (c.z * size + size * 0.1f), gl.second, 3.4f)
+    }
 
     /** Decides where theme props go. Called once per level; does nothing for classic finishes. */
     fun planProps(outerRadius: Float) {
-        placed.clear(); obstacles.clear(); lamps.clear(); lampIdx.clear()
+        placed.clear(); anims.clear(); obstacles.clear(); lamps.clear(); lampIdx.clear(); lampCol.clear(); lampReach.clear()
+        val explicitLamps = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17
         val lib = PropLibrary.forTheme(pal.themeId) ?: return
         val prof = profileData(pal.profile)
         val topH = wallHeight * prof.hs
@@ -485,7 +648,11 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val p = maze.mesh.vertices[v]
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
-                placed.add(Placed(if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction, p + n * topH, n, tangent(n, hash(v + 5)), sizeJ, dl * 0.75f + 0.05f))
+                val jm = if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction
+                val jt = tangent(n, hash(v + 5))
+                val jw = animate(lib, jm, p + n * topH, n, jt, sizeJ, dl * 0.75f + 0.05f, v)
+                placed.add(Placed(jm, p + n * topH, n, jt, sizeJ, dl * 0.75f + 0.05f, jw))
+                if (!explicitLamps) lampFromProp(jm, p + n * topH, n, jt, sizeJ)
                 if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
             }
@@ -503,8 +670,11 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val size = cs * 0.78f
             val opts = listOfNotNull(lib.deadA, lib.deadB, lib.deadC)
             val mesh = opts[(hash(c + 13) * opts.size).toInt().coerceAtMost(opts.size - 1)]
-            placed.add(Placed(mesh, p, surface.normal(p), -dir, size, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+            val dd = maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f
+            val dw = animate(lib, mesh, p, surface.normal(p), -dir, size, dd, c + 50000)
+            placed.add(Placed(mesh, p, surface.normal(p), -dir, size, dd, dw))
             obstacles.add(Obstacle(c, p, size * 0.4f))
+            if (!explicitLamps) lampFromProp(mesh, p, surface.normal(p), -dir, size)
             if (pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + surface.normal(p) * (size * 0.55f))
             deads++
         }
@@ -516,7 +686,18 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val r = kotlin.math.sqrt(1f - y * y); val phi = i * 2.399963f
             val d = Vec3(cos(phi) * r, y, sin(phi) * r).normalized()
             val size = outerRadius * 0.4f
-            placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, tangent(d, hash(i + 4000)), size, 0.9f))
+            val lt = tangent(d, hash(i + 4000))
+            val lw = animate(lib, lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, i + 90000)
+            placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, lw))
+        }
+        // 4. a few birds (or butterflies, drones...) circling over the maze
+        lib.bird?.let { bd ->
+            for (k in 0 until bd.count) {
+                val c = (hash(k * 977 + 31) * maze.cellCount).toInt().coerceIn(0, maze.cellCount - 1)
+                val ctr = maze.centers[c]; val n = surface.normal(ctr)
+                anims.add(AnimInst(null, frameOf(ctr, n, tangent(n, hash(k + 61)), cs), hash(k + 3) * 6.2831853f, 0.6f, bd,
+                    radius = 1.6f + 2.4f * hash(k + 17), height = bd.height * (0.8f + 0.5f * hash(k + 29)), dir = if (hash(k + 41) < 0.5f) -1f else 1f))
+            }
         }
     }
 
@@ -525,13 +706,22 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val mb = MeshBuilder()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return mb
         val list = listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2)
-        for ((k, m) in list.withIndex()) {
+        fun put(m: PropMesh, o: Vec3, sc: Float = 1f) {
             val base = mb.vertexCount
-            val ox = (k - (list.size - 1) / 2f) * 1.15f
             for (i in 0 until m.vertexCount)
-                mb.vertex(Vec3(m.pos[i * 3] + ox, m.pos[i * 3 + 1], m.pos[i * 3 + 2]), Vec3(m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]), Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]))
+                mb.vertex(Vec3(m.pos[i * 3] * sc + o.x, m.pos[i * 3 + 1] * sc + o.y, m.pos[i * 3 + 2] * sc + o.z), Vec3(m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]), Vec3(m.col[i * 3], m.col[i * 3 + 1], m.col[i * 3 + 2]))
             var q = 0
             while (q < m.idx.size) { mb.tri(base + m.idx[q], base + m.idx[q + 1], base + m.idx[q + 2]); q += 3 }
+        }
+        val n = list.size + (if (lib.bird != null) 1 else 0)
+        for ((k, m) in list.withIndex()) {
+            val ox = (k - (n - 1) / 2f) * 1.15f
+            put(m, Vec3(ox, 0f, 0f))
+            lib.anims[m]?.let { sp -> if (!sp.whole) for (o in sp.at) put(sp.part, Vec3(ox + o.x, o.y, o.z)) }
+        }
+        lib.bird?.let { bd ->
+            val o = Vec3((list.size - (n - 1) / 2f) * 1.15f, 0f, 0.5f)
+            for (m in listOf(bd.body, bd.wingL, bd.wingR)) put(m, o, 2f)
         }
         return mb
     }
@@ -569,6 +759,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     fun props(): MeshBuilder {
         val mb = MeshBuilder()
         for (pl in placed) {
+            if (pl.skip) continue
             val t2 = (pl.t2 - pl.n * (pl.t2 dot pl.n)).normalized()
             val t1 = t2 cross pl.n
             val m = pl.mesh

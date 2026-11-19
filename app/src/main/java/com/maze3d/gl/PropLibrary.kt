@@ -13,33 +13,205 @@ object PropLibrary {
     private fun c(r: Int, g: Int, b: Int) = PM.rgb(r, g, b)
     private fun glow(v: Vec3, k: Float) = v * k
 
+    /** How a placed prop (or a part of it) moves. Parts are drawn at each offset in [at], in the prop's own units. */
+    object Anim { const val SPIN = 0; const val BOB = 1; const val SWAY = 2; const val FLICKER = 3; const val WOBBLE = 4; const val NOD = 5 }
+    class AnimSpec(val part: PropMesh, val type: Int, val speed: Float = 1f, val amp: Float = 1f, val whole: Boolean = false,
+                   val at: List<Vec3> = listOf(Vec3.ZERO), val pivotZ: Float = 0f)
+    /** A small flock circling above the maze: body plus two flapping wings (left wing along +y, right along -y). */
+    class Bird(val body: PropMesh, val wingL: PropMesh, val wingR: PropMesh, val count: Int, val size: Float, val height: Float, val flap: Float, val glide: Boolean = false)
+
     class ThemeProps(val junction: PropMesh, val deadA: PropMesh, val deadB: PropMesh, val landmark: PropMesh,
-                     val deadC: PropMesh? = null, val junction2: PropMesh? = null)
+                     val deadC: PropMesh? = null, val junction2: PropMesh? = null,
+                     val anims: Map<PropMesh, AnimSpec> = emptyMap(), val bird: Bird? = null)
+
+    private fun whole(m: PropMesh, type: Int, speed: Float = 1f, amp: Float = 1f, pivotZ: Float = 0f) = m to AnimSpec(m, type, speed, amp, true, pivotZ = pivotZ)
+    private fun part(host: PropMesh, part: PropMesh, type: Int, at: List<Vec3>, speed: Float = 1f, amp: Float = 1f) = host to AnimSpec(part, type, speed, amp, false, at)
+
 
     private val cache = HashMap<Int, ThemeProps>()
     fun forTheme(id: Int): ThemeProps? = if (id < 0) null else cache.getOrPut(id) { build(id) }
 
     private fun build(id: Int): ThemeProps = when (id) {
-        0 -> ThemeProps(gumdrop(), cupcake(), lollipop(), candyCane(), allsortsPile(), allsortLayered(0.5f))
-        1 -> ThemeProps(marigold(), sugarSkull(), candleVotive(), candelabra())
-        2 -> ThemeProps(trafficCone(), tyreStack(), trophy(), flagPole())
-        3 -> ThemeProps(cornerFlag(), football(), trophy(), floodlight())
-        4 -> ThemeProps(beacon(), dish(), canister(), rocket())
-        5 -> ThemeProps(ketchup(), burger(), sodaCup(), friesBox())
-        6 -> ThemeProps(flask(), beaker(), testTubes(), atom())
-        7 -> ThemeProps(lampPost(), snowman(), snowPine(), snowPine(), iceCrystals())
-        8 -> ThemeProps(obelisk(), canopicJar(), sphinx(), pyramidProp())
-        9 -> ThemeProps(neonSign(), terminal(), hologram(), cityTower(), neonRing(), neonStar())
-        10 -> ThemeProps(fern(), idol(), jungleStump(), jungleTree())
-        11 -> ThemeProps(glowBell(), glowCluster(), glowParasol(), glowGiant(), bonnets(), inkcap())
-        12 -> ThemeProps(pumpkin(), leafPile(), hayBale(), autumnTree(), autumnTree(), pumpkin())
-        13 -> ThemeProps(legoBrick(), duck(), toyCar(), toyRocket(), blockStack(), starBlock())
-        14 -> ThemeProps(buttonProp(), spool(), pomPom(), feltTree(), heartPatch(), yarnBall())
-        15 -> ThemeProps(boneProp(), eggNest(), fern(), volcanoProp(), ammonite(), jungleTree())
-        16 -> ThemeProps(boltProp(), toolbox(), wrench(), hammerProp(), gearProp(), boltProp())
-        17 -> ThemeProps(emberSpire(), lavaRocks(), obsidianCrystal(), brazier(), volcanoProp(), emberSpire())
-        else -> ThemeProps(gummyBear(), pudding(), jellyBean(), jellyDrop(), cherryProp(), gummyBear())
+        0 -> { val lp = lollipop(); val cc = candyCane()
+            ThemeProps(gumdrop(), cupcake(), lp, cc, allsortsPile(), allsortLayered(0.5f),
+                mapOf(whole(lp, Anim.SPIN, 0.6f), whole(cc, Anim.SPIN, 0.25f)), butterfly(c(255, 120, 200), c(120, 220, 255))) }
+        1 -> { val mg = marigold(); val cv = candleVotive(); val cb = candelabra()
+            ThemeProps(mg, sugarSkull(), cv, cb, null, null,
+                mapOf(whole(mg, Anim.SWAY, 1f, 1.2f), part(cv, flame(0.05f, 0.22f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.55f))),
+                    part(cb, flame(0.032f, 0.13f), Anim.FLICKER, listOf(Vec3(-0.3f, 0f, 0.94f), Vec3(0f, 0f, 0.94f), Vec3(0.3f, 0f, 0.94f)))),
+                butterfly(c(255, 130, 20), c(40, 20, 10))) }
+        2 -> { val tr = trophy(); val fp = flagPole()
+            ThemeProps(trafficCone(), tyreStack(), tr, fp, null, null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f))) }
+        3 -> { val cf = cornerFlag(); val fb = football(); val tr = trophy()
+            ThemeProps(cf, fb, tr, floodlight(), null, null, mapOf(whole(cf, Anim.SWAY, 1.8f, 1.6f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f)),
+                bird(c(250, 250, 250), c(200, 200, 205), 5, 0.5f, 3.2f, 7f)) }
+        4 -> { val ds = dish(); val rk = rocket()
+            ThemeProps(beacon(), ds, canister(), rk, null, null,
+                mapOf(whole(ds, Anim.SPIN, 0.35f), part(rk, flame(0.07f, 0.22f, c(120, 200, 255), c(255, 255, 255)), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.02f)), 1.5f, -1f))) }
+        5 -> { val bg = burger()
+            ThemeProps(ketchup(), bg, sodaCup(), friesBox(), null, null, mapOf(whole(bg, Anim.WOBBLE, 1f, 0.7f)),
+                bird(c(250, 250, 250), c(220, 220, 220), 4, 0.55f, 3f, 6f)) }
+        6 -> { val at = atom(); val bk = beaker()
+            ThemeProps(flask(), bk, testTubes(), at, null, null, mapOf(whole(at, Anim.SPIN, 1.2f), part(bk, bubbles(), Anim.BOB, listOf(Vec3(0f, 0f, 0.15f)), 2f, 1f))) }
+        7 -> { val sp = snowPine(); val sm = snowman()
+            ThemeProps(lampPost(), sm, sp, sp, iceCrystals(), null, mapOf(whole(sp, Anim.SWAY, 0.7f, 0.8f), whole(sm, Anim.NOD, 0.6f, 0.6f)),
+                bird(c(200, 40, 30), c(110, 70, 50), 4, 0.35f, 2.2f, 9f)) }
+        8 -> { val sx = sphinx()
+            ThemeProps(obelisk(), canopicJar(), sx, pyramidProp(), null, null, emptyMap(), falcon()) }
+        9 -> { val hg = hologram(); val nr = neonRing(); val ns = neonStar()
+            ThemeProps(neonSign(), terminal(), hg, cityTower(), nr, ns, mapOf(whole(hg, Anim.SPIN, 1.1f), whole(nr, Anim.SPIN, 0.8f), whole(ns, Anim.SPIN, 0.5f)), drone()) }
+        10 -> { val fn = fern(); val jt = jungleTree(); val mk = monkey()
+            ThemeProps(fn, idol(), jungleStump(), jt, mk, null, mapOf(whole(fn, Anim.SWAY, 1.1f, 1.4f), whole(jt, Anim.SWAY, 0.7f, 0.8f), whole(mk, Anim.BOB, 1.2f, 1f)), parrot()) }
+        11 -> { val gb = glowBell(); val gc = glowCluster(); val gp = glowParasol(); val gg = glowGiant(); val bn = bonnets(); val ik = inkcap()
+            ThemeProps(gb, gc, gp, gg, bn, ik, mapOf(whole(gb, Anim.SWAY, 0.5f, 0.6f), whole(gc, Anim.SWAY, 0.6f, 0.5f), whole(gp, Anim.SWAY, 0.45f, 0.7f),
+                whole(bn, Anim.SWAY, 0.7f, 0.6f), whole(ik, Anim.SWAY, 0.55f, 0.6f))) }
+        12 -> { val at = autumnTree(); val pk = pumpkin()
+            ThemeProps(pk, leafPile(), hayBale(), at, at, pk, mapOf(whole(at, Anim.SWAY, 0.8f, 0.9f)), crow()) }
+        13 -> { val dk = duck(); val tr = toyRocket(); val sb = starBlock()
+            ThemeProps(legoBrick(), dk, toyCar(), tr, blockStack(), sb, mapOf(whole(dk, Anim.BOB, 1f, 1f), whole(tr, Anim.BOB, 0.5f, 0.8f), whole(sb, Anim.SPIN, 0.6f)), paperPlane()) }
+        14 -> { val sp = spool(); val pp = pomPom(); val ft = feltTree(); val yb = yarnBall()
+            ThemeProps(buttonProp(), sp, pp, ft, heartPatch(), yb, mapOf(whole(sp, Anim.SPIN, 0.7f), whole(pp, Anim.WOBBLE, 1.2f, 1f), whole(ft, Anim.SWAY, 0.8f, 1f), whole(yb, Anim.SPIN, 0.4f)),
+                butterfly(c(255, 150, 190), c(250, 230, 200))) }
+        15 -> { val en = eggNest(); val fn = fern(); val jt = jungleTree(); val dn = dino()
+            ThemeProps(boneProp(), en, fn, volcanoProp(), dn, jt, mapOf(whole(en, Anim.WOBBLE, 0.8f, 0.6f), whole(fn, Anim.SWAY, 1f, 1.3f), whole(jt, Anim.SWAY, 0.6f, 0.8f), whole(dn, Anim.NOD, 0.9f, 1.2f)),
+                pterodactyl()) }
+        16 -> { val gp = gearProp()
+            ThemeProps(boltProp(), toolbox(), wrench(), hammerProp(), gp, boltProp(), mapOf(whole(gp, Anim.SPIN, 0.9f))) }
+        17 -> { val bz = brazier()
+            ThemeProps(emberSpire(), lavaRocks(), obsidianCrystal(), bz, volcanoProp(), emberSpire(),
+                mapOf(part(bz, flame(0.16f, 0.42f, c(255, 90, 20), c(255, 210, 60)), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.48f)), 1.2f))) }
+        else -> { val gb = gummyBear(); val pd = pudding(); val ch = cherryProp()
+            ThemeProps(gb, pd, jellyBean(), jellyDrop(), ch, gb, mapOf(whole(gb, Anim.WOBBLE, 1.1f, 1f), whole(pd, Anim.WOBBLE, 0.9f, 1.3f), whole(ch, Anim.SWAY, 1.2f, 1.2f)),
+                butterfly(c(120, 255, 160), c(255, 240, 120))) }
     }
+
+    // ---------------------------------------------------------------- shared animated parts
+    /** A flame standing on z = 0: a hot core inside a softer outer tongue (colours above 1 glow and light the scene). */
+    fun flame(r: Float, h: Float, outer: Vec3 = c(255, 120, 30), inner: Vec3 = c(255, 220, 90)) = PM().apply {
+        col = outer * 2.2f; lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(r, h * 0.18f), floatArrayOf(r * 0.8f, h * 0.45f), floatArrayOf(r * 0.3f, h * 0.8f), floatArrayOf(0f, h)), 12)
+        col = inner * 2.8f; lathe(listOf(floatArrayOf(0f, h * 0.02f), floatArrayOf(r * 0.55f, h * 0.18f), floatArrayOf(r * 0.4f, h * 0.45f), floatArrayOf(0f, h * 0.7f)), 10)
+    }.build()
+
+    private fun bubbles() = PM().apply {
+        col = c(170, 255, 200) * 1.3f
+        for (i in 0 until 6) { val a = i * 2.3f; at(cos(a) * 0.08f, sin(a) * 0.08f, i * 0.07f) { sphere(0.025f + 0.008f * (i % 3), 8, 6) } }
+    }.build()
+
+    // ---------------------------------------------------------------- flying creatures (body along +x, wings along ±y)
+    private fun wingPair(span: Float, chord: Float, cA: Vec3, cB: Vec3, tip: Float = 0.5f): Pair<PropMesh, PropMesh> {
+        fun wing(sgn: Float) = PM().apply {
+            val n = 5
+            for (k in 0 until n) {
+                val y0 = sgn * span * k / n; val y1 = sgn * span * (k + 1) / n
+                val f0 = 1f - (1f - tip) * k / n; val f1 = 1f - (1f - tip) * (k + 1) / n
+                col = if (k >= n - 2) cB else cA
+                push(); translate(-chord * 0.15f, (y0 + y1) * 0.5f, 0f); box(chord * (f0 + f1) * 0.5f, kotlin.math.abs(y1 - y0) * 1.02f, 0.012f); pop()
+            }
+        }.build()
+        return wing(1f) to wing(-1f)
+    }
+
+    private fun bird(cBody: Vec3, cWing: Vec3, count: Int, size: Float, height: Float, flap: Float): Bird {
+        val body = PM().apply {
+            col = cBody; at { scale(1f, 0.6f, 0.6f); sphere(0.12f, 12, 8) }
+            at(0.13f, 0f, 0.03f) { sphere(0.06f, 10, 8) }
+            col = c(250, 180, 40); at(0.19f, 0f, 0.03f) { rotY((PI / 2).toFloat()); cone(0.02f, 0.06f, 6) }
+            col = cWing; at(-0.16f, 0f, 0f) { scale(1f, 1f, 0.2f); cone(0.06f, 0.12f, 6) }
+        }.build()
+        val (l, r) = wingPair(0.3f, 0.14f, cWing, cWing * 0.8f)
+        return Bird(body, l, r, count, size, height, flap)
+    }
+
+    private fun parrot(): Bird {
+        val body = PM().apply {
+            col = c(230, 40, 40); at { scale(1f, 0.6f, 0.6f); sphere(0.13f, 14, 10) }
+            at(0.14f, 0f, 0.04f) { sphere(0.065f, 12, 8) }
+            col = c(255, 230, 120); at(0.2f, 0f, 0.02f) { rotY(2.0f); cone(0.025f, 0.07f, 8) }
+            col = c(250, 250, 250); for (s in intArrayOf(-1, 1)) at(0.165f, s * 0.04f, 0.06f) { sphere(0.015f, 6, 4) }
+            col = c(40, 100, 230); push(); translate(-0.13f, 0f, 0f); rotY((PI / 2).toFloat() + 0.2f); scale(0.4f, 1f, 1f); cylinder(0.06f, 0.26f, 8, 0.01f); pop()
+        }.build()
+        val (l, r) = wingPair(0.34f, 0.16f, c(230, 40, 40), c(40, 110, 230), 0.45f)
+        return Bird(body, l, r, 5, 0.6f, 2.6f, 8f)
+    }
+
+    private fun crow(): Bird {
+        val b = bird(c(30, 30, 36), c(24, 24, 30), 5, 0.55f, 2.8f, 6f)
+        return Bird(b.body, b.wingL, b.wingR, 6, 0.55f, 2.8f, 6f, glide = true)
+    }
+
+    private fun falcon(): Bird {
+        val b = bird(c(150, 110, 70), c(110, 80, 50), 3, 0.75f, 3.6f, 4f)
+        return Bird(b.body, b.wingL, b.wingR, 3, 0.75f, 3.6f, 4f, glide = true)
+    }
+
+    private fun pterodactyl(): Bird {
+        val body = PM().apply {
+            col = c(150, 110, 80); at { scale(1f, 0.5f, 0.5f); sphere(0.12f, 12, 8) }
+            at(0.12f, 0f, 0.05f) { sphere(0.05f, 10, 8) }
+            push(); translate(0.15f, 0f, 0.06f); rotY((PI / 2).toFloat() + 0.25f); cone(0.03f, 0.2f, 8); pop()          // long beak
+            col = c(200, 80, 50); push(); translate(0.08f, 0f, 0.09f); rotY(-0.9f); cone(0.025f, 0.14f, 6); pop()       // crest
+        }.build()
+        val (l, r) = wingPair(0.48f, 0.2f, c(170, 120, 90), c(120, 80, 60), 0.2f)
+        return Bird(body, l, r, 3, 0.9f, 3.6f, 3f, glide = true)
+    }
+
+    private fun butterfly(cA: Vec3, cB: Vec3): Bird {
+        val body = PM().apply { col = c(40, 30, 30); at { scale(1f, 0.3f, 0.3f); sphere(0.08f, 8, 6) } }.build()
+        fun wing(sgn: Float) = PM().apply {
+            col = cA * 1.1f; push(); translate(0.02f, sgn * 0.11f, 0f); scale(1f, 1f, 0.06f); sphere(0.1f, 12, 8); pop()
+            col = cB; push(); translate(-0.07f, sgn * 0.08f, 0f); scale(1f, 1f, 0.06f); sphere(0.065f, 10, 6); pop()
+        }.build()
+        return Bird(body, wing(1f), wing(-1f), 6, 0.35f, 0.9f, 14f)
+    }
+
+    private fun paperPlane(): Bird {
+        val body = PM().apply { col = c(250, 250, 250); box(0.3f, 0.02f, 0.05f) }.build()
+        fun wing(sgn: Float) = PM().apply { col = c(240, 240, 245); prism(listOf(floatArrayOf(0.15f, 0f), floatArrayOf(-0.15f, sgn * 0.0f), floatArrayOf(-0.15f, sgn * 0.16f)).let { if (sgn < 0) it.reversed() else it }, 0.008f) }.build()
+        return Bird(body, wing(1f), wing(-1f), 3, 0.6f, 2.2f, 0f, glide = true)
+    }
+
+    private fun drone(): Bird {
+        val body = PM().apply {
+            col = c(40, 44, 54); box(0.22f, 0.1f, 0.05f)
+            col = c(255, 40, 160) * 2f; at(0.11f, 0f, 0f) { sphere(0.02f, 6, 4) }
+            col = c(40, 220, 255) * 2f; at(-0.11f, 0f, 0f) { sphere(0.02f, 6, 4) }
+        }.build()
+        fun arm(sgn: Float) = PM().apply {
+            col = c(60, 64, 74); at(0f, sgn * 0.1f, 0f) { box(0.03f, 0.12f, 0.02f) }
+            col = c(160, 170, 190); for (x in floatArrayOf(-0.09f, 0.09f)) at(x, sgn * 0.16f, 0.015f) { cylinder(0.06f, 0.004f, 14) }
+        }.build()
+        return Bird(body, arm(1f), arm(-1f), 4, 0.6f, 2.4f, 0f, glide = true)
+    }
+
+    // ---------------------------------------------------------------- ground animals
+    private fun monkey() = PM().apply {
+        val fur = c(110, 70, 40); val face = c(220, 170, 130)
+        col = fur; at(z = 0.35f) { scale(0.9f, 0.8f, 1.1f); sphere(0.22f, 16, 12) }
+        at(z = 0.72f) { sphere(0.18f, 16, 12) }
+        col = face; at(0.12f, 0f, 0.7f) { scale(0.6f, 1f, 0.9f); sphere(0.12f, 12, 8) }
+        col = fur; for (s in intArrayOf(-1, 1)) { at(0f, s * 0.19f, 0.76f) { sphere(0.06f, 10, 8) } }
+        col = face; for (s in intArrayOf(-1, 1)) { at(0f, s * 0.2f, 0.76f) { sphere(0.035f, 8, 6) } }
+        col = c(20, 16, 14); for (s in intArrayOf(-1, 1)) { at(0.17f, s * 0.05f, 0.76f) { sphere(0.022f, 8, 6) } }
+        col = fur
+        for (s in intArrayOf(-1, 1)) {
+            tube(listOf(Vec3(0f, s * 0.17f, 0.48f), Vec3(0.12f, s * 0.24f, 0.35f), Vec3(0.18f, s * 0.2f, 0.2f)), 0.045f, 8)
+            tube(listOf(Vec3(0f, s * 0.1f, 0.2f), Vec3(0.12f, s * 0.14f, 0.12f), Vec3(0.14f, s * 0.12f, 0.02f)), 0.05f, 8)
+        }
+        tube(listOf(Vec3(-0.18f, 0f, 0.2f), Vec3(-0.34f, 0f, 0.22f), Vec3(-0.4f, 0f, 0.42f), Vec3(-0.32f, 0f, 0.55f)), 0.025f, 6)
+        col = c(250, 220, 60); push(); translate(0.22f, 0.18f, 0.2f); rotX(0.5f); scale(0.35f, 0.35f, 1f); cylinder(0.08f, 0.24f, 10, 0.05f); pop()   // banana
+    }.build()
+
+    private fun dino() = PM().apply {
+        val skin = c(90, 150, 70); val belly = c(200, 210, 140)
+        col = skin; at(0f, 0f, 0.42f) { scale(1.3f, 0.75f, 0.9f); sphere(0.22f, 16, 12) }
+        tube(listOf(Vec3(0.18f, 0f, 0.5f), Vec3(0.26f, 0f, 0.68f), Vec3(0.3f, 0f, 0.8f)), 0.08f, 10, taper = { 1f - 0.3f * it })
+        at(0.36f, 0f, 0.84f) { scale(1.4f, 0.8f, 0.8f); sphere(0.09f, 12, 8) }
+        tube(listOf(Vec3(-0.22f, 0f, 0.42f), Vec3(-0.4f, 0f, 0.32f), Vec3(-0.5f, 0f, 0.18f)), 0.09f, 10, taper = { 1f - 0.9f * it })
+        for (s in intArrayOf(-1, 1)) { at(-0.05f, s * 0.12f, 0.12f) { cylinder(0.065f, 0.24f, 10) }; at(0.12f, s * 0.12f, 0.12f) { cylinder(0.055f, 0.22f, 10) } }
+        col = belly; at(0.05f, 0f, 0.34f) { scale(1.1f, 0.6f, 0.7f); sphere(0.2f, 12, 8) }
+        col = c(230, 120, 40); for (k in 0 until 6) at(-0.25f + k * 0.08f, 0f, 0.6f - kotlin.math.abs(k - 2.5f) * 0.03f) { cone(0.04f, 0.09f, 6) }
+        col = c(20, 20, 20); for (s in intArrayOf(-1, 1)) at(0.42f, s * 0.06f, 0.88f) { sphere(0.018f, 6, 4) }
+    }.build()
 
     // ---------------------------------------------------------------- candy
     private fun gumdrop() = PM().apply {
@@ -146,7 +318,6 @@ object PropLibrary {
 
     private fun candleVotive() = PM().apply {
         col = c(255, 214, 120); cylinder(0.2f, 0.55f, 20, 0.2f)
-        col = c(255, 160, 40) * 1.6f; at(z = 0.55f) { cone(0.045f, 0.2f, 8) }
         col = c(240, 90, 60); at(z = 0.2f) { torus(0.2f, 0.012f, 20, 4) }
         col = c(60, 30, 20); cylinder(0.24f, 0.06f, 20)
     }.build()
@@ -159,7 +330,7 @@ object PropLibrary {
             val path = listOf(Vec3(0f, 0f, 0.6f), Vec3(x * 0.4f, 0f, 0.58f), Vec3(x * 0.9f, 0f, 0.65f), Vec3(x, 0f, 0.78f))
             col = c(214, 168, 70); tube(path, 0.025f, 8)
             at(x, 0f, 0.78f) { col = c(214, 168, 70); cylinder(0.06f, 0.03f, 10); col = c(250, 240, 220); cylinder(0.035f, 0.16f, 10)
-                col = c(255, 170, 40) * 1.7f; at(z = 0.16f) { cone(0.028f, 0.1f, 8) } }
+                col = c(60, 40, 30); at(z = 0.16f) { cylinder(0.006f, 0.02f, 4) } }
         }
     }.build()
 
@@ -247,10 +418,15 @@ object PropLibrary {
     }.build()
 
     private fun canister() = PM().apply {
-        col = c(210, 216, 226); cylinder(0.28f, 0.7f, 20)
-        col = c(255, 150, 40); at(z = 0.2f) { cylinder(0.285f, 0.1f, 20) }
-        col = c(84, 224, 255) * 1.8f; at(z = 0.45f) { push(); translate(0f, -0.275f, 0f); scale(1f, 0.1f, 1f); box(0.2f, 1f, 0.08f); pop() }
-        col = c(140, 148, 162); at(z = 0.7f) { cylinder(0.22f, 0.06f, 16, 0.12f) }
+        // ribbed fuel tank with hazard band, valve wheel and carry handle
+        val steel = c(206, 212, 222)
+        col = steel; lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.26f, 0f), floatArrayOf(0.28f, 0.03f), floatArrayOf(0.28f, 0.62f), floatArrayOf(0.22f, 0.7f), floatArrayOf(0.08f, 0.74f), floatArrayOf(0f, 0.74f)), 24)
+        col = c(170, 176, 188); for (k in 0 until 4) at(z = 0.1f + k * 0.15f) { torus(0.283f, 0.012f, 24, 4) }
+        for (i in 0 until 8) { col = if (i % 2 == 0) c(250, 190, 30) else c(30, 30, 34); push(); rotZ(i * 0.785f); at(0f, 0f, 0.36f) { lathe(listOf(floatArrayOf(0.286f, 0f), floatArrayOf(0.286f, 0.08f)), 6, false) }; pop() }
+        col = c(84, 224, 255) * 1.6f; at(0f, -0.28f, 0.52f) { box(0.12f, 0.01f, 0.05f) }
+        col = c(90, 96, 108); at(z = 0.74f) { cylinder(0.03f, 0.1f, 10) }
+        col = c(220, 40, 40); at(z = 0.84f) { torus(0.07f, 0.012f, 14, 5) }
+        col = c(60, 64, 74); tube(listOf(Vec3(-0.16f, 0f, 0.68f), Vec3(-0.12f, 0f, 0.82f), Vec3(0.12f, 0f, 0.82f), Vec3(0.16f, 0f, 0.68f)), 0.015f, 6)
     }.build()
 
     private fun rocket() = PM().apply {
@@ -261,13 +437,20 @@ object PropLibrary {
         for (i in 0 until 3) { push(); rotZ(i * 2.094f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.0125f)
             prism(listOf(floatArrayOf(0.12f, 0.08f), floatArrayOf(0.34f, 0.04f), floatArrayOf(0.12f, 0.46f)), 0.025f); pop() }
         col = c(60, 66, 78); at(z = 0.02f) { cylinder(0.08f, 0.1f, 14, 0.12f) }
-        col = c(255, 160, 50) * 2f; at(z = -0.0f) { cone(0.06f, 0.1f, 10) }
     }.build()
 
     // ---------------------------------------------------------------- fast food
     private fun ketchup() = PM().apply {
-        col = c(215, 28, 28)
-        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.4f, 0.04f), floatArrayOf(0.34f, 0.24f), floatArrayOf(0.2f, 0.5f), floatArrayOf(0.1f, 0.8f), floatArrayOf(0f, 1f)), 20)
+        // squeeze bottle: rounded body, white label, flip cap with a nozzle and a drip of sauce
+        val red = c(205, 22, 24)
+        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.26f, 0f), floatArrayOf(0.3f, 0.04f), floatArrayOf(0.31f, 0.3f), floatArrayOf(0.3f, 0.52f),
+            floatArrayOf(0.24f, 0.64f), floatArrayOf(0.14f, 0.7f), floatArrayOf(0.13f, 0.72f)), 26) { _, v -> if (v in 0.22f..0.6f) c(248, 244, 232) else red }
+        col = c(40, 140, 50); for (k in 0 until 3) at(0f, 0f, 0.3f + k * 0.09f) { push(); translate(0f, -0.31f, 0f); box(0.22f - k * 0.05f, 0.012f, 0.03f); pop() }
+        col = red * 0.8f; at(z = 0.42f) { push(); translate(0f, -0.312f, 0f); scale(1f, 0.1f, 1f); sphere(0.06f, 10, 6); pop() }      // tomato
+        col = c(250, 250, 250); at(z = 0.72f) { cylinder(0.14f, 0.1f, 20, 0.12f) }
+        at(z = 0.82f) { cylinder(0.05f, 0.14f, 12, 0.012f) }
+        col = red; at(0.0f, 0.0f, 0.97f) { sphere(0.022f, 8, 6) }
+        tube(listOf(Vec3(0.12f, 0f, 0.74f), Vec3(0.2f, 0f, 0.7f), Vec3(0.27f, 0f, 0.62f), Vec3(0.31f, 0f, 0.5f)), 0.025f, 8, taper = { 1f - 0.5f * it })
     }.build()
 
     private fun burger() = PM().apply {
@@ -293,21 +476,16 @@ object PropLibrary {
     }.build()
 
     private fun friesBox() = PM().apply {
-        val bo = 0.2f; val to = 0.32f; val h = 0.5f
-        fun side(k: Int) {
-            val a = k * (PI / 2).toFloat()
-            val ca = cos(a); val sa = sin(a)
-            fun pt(u: Float, r: Float, z: Float) = Vec3(ca * r - sa * u, sa * r + ca * u, z)
-            col = c(220, 36, 36)
-            flat(pt(-bo, bo, 0f), pt(bo, bo, 0f), pt(to, to, h), pt(-to, to, h))
-            col = c(255, 235, 140)
-            flat(pt(-bo * 0.7f, bo + 0.002f, 0.09f), pt(bo * 0.7f, bo + 0.002f, 0.09f), pt(to * 0.72f, to * 0.78f, h * 0.72f), pt(-to * 0.72f, to * 0.78f, h * 0.72f))
-        }
-        for (k in 0 until 4) side(k)
-        col = c(250, 205, 70)
-        for (i in 0 until 22) {
-            val a = i * 2.4f; val r = 0.04f + 0.2f * ((i * 3) % 7) / 7f
-            push(); translate(cos(a) * r, sin(a) * r, h + 0.1f + 0.14f * ((i * 7) % 4)); rotZ(a); rotX(0.1f * (i % 3 - 1)); rotY(0.1f * (i % 4 - 1.5f)); box(0.07f, 0.07f, 0.6f); pop()
+        // red carton with a curved front, a golden arch and a fan of fries
+        val red = c(212, 30, 30)
+        col = red
+        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.2f, 0f), floatArrayOf(0.3f, 0.5f), floatArrayOf(0.31f, 0.52f)), 4, false)
+        col = c(255, 200, 40); at(0f, -0.23f, 0.25f) { rotX((PI / 2).toFloat()); torus(0.08f, 0.018f, 16, 5) }
+        for (i in 0 until 16) {
+            val a = i * 2.4f; val r = 0.04f + 0.17f * ((i * 7) % 9) / 9f
+            col = if (i % 3 == 0) c(255, 210, 90) else c(244, 190, 70)
+            push(); translate(cos(a) * r, sin(a) * r * 0.7f, 0.42f); rotX(sin(a) * 0.25f); rotY(cos(a) * 0.25f)
+            translate(0f, 0f, 0.14f + 0.06f * (i % 4)); box(0.045f, 0.045f, 0.36f + 0.06f * (i % 3)); pop()
         }
     }.build()
 
@@ -321,8 +499,16 @@ object PropLibrary {
     }.build()
 
     private fun beaker() = PM().apply {
-        col = c(205, 235, 248); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.3f, 0f), floatArrayOf(0.3f, 0.7f), floatArrayOf(0.33f, 0.72f)), 24, false) { _, v -> if (v < 0.55f) c(255, 120, 150) else c(205, 235, 248) }
-        col = c(30, 40, 60); for (i in 1..4) at(0f, -0.3f, 0.12f * i) { box(if (i % 2 == 0) 0.16f else 0.09f, 0.02f, 0.012f) }
+        // glass beaker with a pouring lip, graduation marks and a glowing liquid
+        val glass = c(200, 228, 240)
+        col = c(90, 255, 160) * 1.25f; at(z = 0.02f) { cylinder(0.27f, 0.42f, 24) }
+        col = c(150, 255, 200) * 1.4f; at(z = 0.44f) { cylinder(0.27f, 0.015f, 24) }
+        col = glass
+        lathe(listOf(floatArrayOf(0.3f, 0.46f), floatArrayOf(0.3f, 0.78f), floatArrayOf(0.33f, 0.8f)), 24, false)     // glass shows above the liquid only
+        at(z = 0.0f) { torus(0.29f, 0.015f, 24, 5) }
+        at(0f, -0.3f, 0.78f) { rotX(-0.6f); cone(0.06f, 0.08f, 8) }
+        col = c(250, 250, 255)
+        for (i in 1..5) at(0.3f, 0f, 0.12f * i) { box(0.012f, if (i % 2 == 0) 0.14f else 0.08f, 0.012f) }
     }.build()
 
     private fun testTubes() = PM().apply {
@@ -388,13 +574,29 @@ object PropLibrary {
     }.build()
 
     private fun sphinx() = PM().apply {
-        col = c(214, 176, 116)
-        at(0f, 0f, 0.0f) { push(); translate(0f, 0.05f, 0.12f); box(0.42f, 0.9f, 0.24f); pop() }                                     // body
-        push(); translate(0f, -0.36f, 0.14f); box(0.3f, 0.3f, 0.2f); pop()                                                             // paws
-        push(); translate(0f, -0.22f, 0.5f); scale(0.9f, 0.8f, 1f); sphere(0.2f, 18, 12); pop()                                        // head
-        col = c(40, 130, 190)                                                                                                         // nemes headdress stripes
-        for (i in 0 until 5) { val z = 0.34f + i * 0.06f; at(0f, -0.22f, z) { torus(0.2f - 0.012f * i, 0.012f, 22, 4) } }
-        col = c(255, 206, 70); push(); translate(0f, -0.4f, 0.56f); sphere(0.04f, 8, 6); pop()
+        // a recumbent lion with a human head in a striped nemes headdress
+        val stone = c(214, 176, 116); val shade = c(186, 148, 96)
+        col = stone
+        at(0f, 0.12f, 0.2f) { scale(0.32f, 0.62f, 0.2f); sphere(1f, 20, 12) }                     // body
+        at(0f, 0.5f, 0.24f) { scale(0.3f, 0.22f, 0.22f); sphere(1f, 16, 10) }                      // haunches
+        for (s in intArrayOf(-1, 1)) {
+            at(s * 0.16f, -0.32f, 0.07f) { scale(0.09f, 0.28f, 0.07f); sphere(1f, 12, 8) }        // fore legs
+            col = shade; at(s * 0.16f, -0.58f, 0.06f) { sphere(0.07f, 10, 8) }; col = stone      // paws
+        }
+        at(0f, -0.2f, 0.42f) { scale(0.2f, 0.18f, 0.2f); sphere(1f, 14, 10) }                       // chest
+        tube(listOf(Vec3(0f, 0.7f, 0.12f), Vec3(0.18f, 0.66f, 0.04f), Vec3(0.26f, 0.38f, 0.03f)), 0.03f, 6)   // tail
+        // head and headdress
+        at(0f, -0.26f, 0.64f) { scale(0.13f, 0.14f, 0.16f); sphere(1f, 16, 12) }
+        col = c(40, 110, 190)
+        for (i in 0 until 6) {
+            col = if (i % 2 == 0) c(40, 110, 190) else c(236, 196, 90)
+            for (s in intArrayOf(-1, 1)) at(s * (0.15f + i * 0.012f), -0.22f, 0.7f - i * 0.06f) { box(0.05f, 0.14f, 0.06f) }
+        }
+        col = c(236, 196, 90); at(0f, -0.25f, 0.78f) { scale(1.15f, 1f, 0.45f); sphere(0.15f, 14, 8) }
+        col = c(255, 206, 70) * 1.2f; at(0f, -0.38f, 0.8f) { sphere(0.03f, 8, 6) }               // uraeus
+        col = shade; for (s in intArrayOf(-1, 1)) at(s * 0.05f, -0.385f, 0.66f) { box(0.04f, 0.01f, 0.012f) }
+        at(0f, -0.4f, 0.62f) { box(0.025f, 0.03f, 0.05f) }
+        col = c(120, 90, 60); at(0f, -0.36f, 0.5f) { box(0.03f, 0.03f, 0.1f) }                    // beard
     }.build()
 
     private fun pyramidProp() = PM().apply {
@@ -501,14 +703,16 @@ object PropLibrary {
     }.build()
 
     private fun idol() = PM().apply {
-        col = c(122, 124, 110)
-        push(); translate(0f, 0f, 0.32f); box(0.5f, 0.4f, 0.64f); pop()
-        push(); translate(0f, 0f, 0.8f); box(0.6f, 0.46f, 0.3f); pop()                                    // head
-        col = c(80, 90, 70); push(); translate(0f, -0.24f, 0.8f); box(0.5f, 0.05f, 0.08f); pop()           // brow
-        col = c(255, 190, 60) * 1.4f; for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.14f, -0.25f, 0.78f); sphere(0.035f, 8, 6); pop() }
-        col = c(60, 66, 54); push(); translate(0f, -0.24f, 0.7f); box(0.24f, 0.04f, 0.04f); pop()
-        col = c(58, 120, 46); for (i in 0 until 4) { push(); translate(-0.2f + i * 0.13f, -0.2f, 0.62f); box(0.02f, 0.02f, 0.3f); pop() }
-        col = c(100, 104, 92); push(); translate(0f, 0f, 1.0f); box(0.7f, 0.52f, 0.06f); pop()
+        // a mossy carved stone head: heavy brow, glowing eyes, broad nose and a grimacing mouth
+        val stone = c(128, 126, 110); val dark = c(70, 72, 60); val moss = c(70, 130, 50)
+        col = stone; lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.36f, 0f), floatArrayOf(0.38f, 0.25f), floatArrayOf(0.36f, 0.7f), floatArrayOf(0.3f, 0.86f), floatArrayOf(0.18f, 0.95f), floatArrayOf(0f, 0.97f)), 18) { u, v ->
+            if (v > 0.8f && ((u * 7f).toInt() % 2 == 0)) moss else stone }
+        col = dark; at(0f, -0.33f, 0.66f) { box(0.56f, 0.12f, 0.08f) }                             // brow
+        col = c(255, 170, 40) * 1.7f; for (s in intArrayOf(-1, 1)) at(s * 0.13f, -0.36f, 0.56f) { scale(1f, 0.4f, 0.7f); sphere(0.06f, 10, 8) }
+        col = stone; at(0f, -0.38f, 0.43f) { scale(0.8f, 1f, 1.2f); cone(0.09f, 0.04f, 3) }; at(0f, -0.35f, 0.4f) { scale(1.2f, 0.7f, 0.8f); sphere(0.08f, 10, 8) }   // nose
+        col = dark; at(0f, -0.35f, 0.24f) { box(0.36f, 0.08f, 0.1f) }
+        col = c(230, 226, 210); for (i in 0 until 6) at(-0.15f + i * 0.06f, -0.39f, 0.24f) { box(0.04f, 0.02f, 0.06f) }
+        col = moss; for (i in 0 until 7) { val a = i * 0.9f; tube(listOf(Vec3(cos(a) * 0.36f, sin(a) * 0.36f, 0.9f), Vec3(cos(a) * 0.4f, sin(a) * 0.4f, 0.6f), Vec3(cos(a + 0.2f) * 0.39f, sin(a + 0.2f) * 0.39f, 0.3f)), 0.015f, 5) }
     }.build()
 
     private fun jungleStump() = PM().apply {
@@ -601,10 +805,17 @@ object PropLibrary {
     }.build()
 
     private fun hayBale() = PM().apply {
-        col = c(196, 144, 52)
-        push(); translate(0f, 0.25f, 0.3f); rotX(-(PI / 2).toFloat()); cylinder(0.3f, 0.5f, 20); pop()
-        col = c(170, 124, 44)
-        for (k in 0 until 3) { push(); translate(0f, -0.25f + k * 0.25f, 0.2f); rotX((PI / 2).toFloat()); torus(0.3f, 0.012f, 20, 4); pop() }
+        // two rectangular bales stacked crosswise, with twine and loose straw
+        val straw = c(214, 170, 72)
+        for (b in 0..1) {
+            push(); translate(0f, 0f, 0.17f + b * 0.32f); rotZ(b * 1.4f)
+            col = straw; box(0.62f, 0.36f, 0.3f)
+            col = c(232, 196, 104); for (k in 0 until 9) at(-0.28f + k * 0.07f, -0.181f, 0f) { box(0.012f, 0.006f, 0.28f) }
+            col = c(150, 96, 40); for (s in intArrayOf(-1, 1)) at(s * 0.15f, 0f, 0f) { box(0.02f, 0.372f, 0.312f) }
+            pop()
+        }
+        col = c(232, 196, 104)
+        for (k in 0 until 10) { val a = k * 0.63f; tube(listOf(Vec3(cos(a) * 0.33f, sin(a) * 0.24f, 0.02f), Vec3(cos(a) * 0.42f, sin(a) * 0.3f, 0.06f + 0.03f * (k % 3))), 0.006f, 4) }
     }.build()
 
     private fun autumnTree() = PM().apply {
@@ -680,10 +891,20 @@ object PropLibrary {
     }.build()
 
     private fun heartPatch() = PM().apply {
-        col = c(224, 60, 90)
-        push(); translate(-0.13f, 0f, 0.4f); sphere(0.2f, 12, 8); pop(); push(); translate(0.13f, 0f, 0.4f); sphere(0.2f, 12, 8); pop()
-        push(); translate(0f, 0f, 0.14f); rotX(PI.toFloat()); cone(0.3f, 0.3f, 14); pop()
-        col = c(250, 240, 220); for (k in 0 until 8) tube(listOf(Vec3(-0.3f + k * 0.085f, -0.19f, 0.2f), Vec3(-0.3f + k * 0.085f, -0.19f, 0.34f)), 0.008f, 4)
+        // a stuffed felt heart on a stand, edged with running stitches
+        val felt = c(224, 60, 90)
+        fun lobe(sgn: Float) = listOf(floatArrayOf(0f, -0.42f)) + (0..10).map { k ->
+            val a = (PI * (1.15f - 1.15f * k / 10f)).toFloat()
+            floatArrayOf(sgn * (0.2f + 0.2f * cos(a)) , 0.12f + 0.2f * sin(a)) }.let { if (sgn < 0) it else it.reversed() } + listOf(floatArrayOf(0f, 0.1f))
+        push(); translate(0f, 0.05f, 0.5f); rotX((PI / 2).toFloat())
+        col = felt; for (s in floatArrayOf(-1f, 1f)) { val pts = lobe(s); prism(if (s > 0) pts.reversed() else pts, 0.1f) }
+        col = c(250, 240, 220)
+        for (s in floatArrayOf(-1f, 1f)) for (k in 0 until 9) {
+            val a0 = (PI * (1.1f - 1.1f * k / 9f)).toFloat(); val a1 = a0 - 0.08f
+            tube(listOf(Vec3(s * (0.2f + 0.19f * cos(a0)), 0.12f + 0.19f * sin(a0), 0.105f), Vec3(s * (0.2f + 0.19f * cos(a1)), 0.12f + 0.19f * sin(a1), 0.105f)), 0.008f, 4)
+        }
+        pop()
+        col = c(180, 140, 100); cylinder(0.025f, 0.12f, 8); cylinder(0.14f, 0.03f, 16)
     }.build()
 
     private fun yarnBall() = PM().apply {
@@ -712,9 +933,18 @@ object PropLibrary {
     }.build()
 
     private fun volcanoProp() = PM().apply {
-        col = c(92, 70, 56); lathe(listOf(floatArrayOf(0.02f, 0f), floatArrayOf(0.44f, 0f), floatArrayOf(0.14f, 0.82f), floatArrayOf(0.1f, 0.86f), floatArrayOf(0.02f, 0.84f)), 20, false)
-        col = c(255, 110, 20) * 2.2f; at(z = 0.84f) { cylinder(0.1f, 0.03f, 14) }
-        for (i in 0 until 5) { col = c(255, 120, 30) * 1.8f; push(); translate(0f, 0f, 0.1f + i * 0.14f); rotZ(i * 1.3f); tube(listOf(Vec3(0.3f - i * 0.05f, 0f, 0f), Vec3(0.26f - i * 0.05f, 0.1f, 0.08f)), 0.012f, 4); pop() }
+        // rugged cone, glowing crater, lava rivulets down the flanks and a plume of smoke
+        lathe(listOf(floatArrayOf(0.02f, 0f), floatArrayOf(0.48f, 0f), floatArrayOf(0.4f, 0.12f), floatArrayOf(0.26f, 0.48f), floatArrayOf(0.16f, 0.76f), floatArrayOf(0.13f, 0.8f), floatArrayOf(0.08f, 0.74f), floatArrayOf(0.02f, 0.72f)), 22, false) { u, v ->
+            val n = sin(u * 37f) * sin(v * 23f + u * 11f)
+            if (v > 0.9f) c(255, 120, 30) * 2f else c(84, 64, 54) * (0.8f + 0.25f * n) }
+        col = c(255, 110, 20) * 2.4f; at(z = 0.74f) { cylinder(0.1f, 0.02f, 14) }
+        for (i in 0 until 4) {
+            val a = i * 1.57f + 0.4f
+            col = c(255, 100, 20) * 2f
+            tube((0..5).map { k -> val v = k / 5f; val r = 0.14f + 0.33f * v; Vec3(cos(a + 0.2f * sin(v * 6f)) * r, sin(a + 0.2f * sin(v * 6f)) * r, 0.78f - 0.74f * v) }, 0.016f, 5, taper = { 1f - 0.6f * it })
+        }
+        col = c(90, 86, 90)
+        for (k in 0 until 5) at(0.04f * sin(k * 2f), 0.04f * cos(k * 1.3f), 0.86f + k * 0.07f) { sphere(0.07f + 0.025f * k, 10, 8) }
     }.build()
 
     private fun ammonite() = PM().apply {
@@ -739,10 +969,15 @@ object PropLibrary {
     }.build()
 
     private fun wrench() = PM().apply {
-        col = c(176, 180, 190)
-        push(); translate(0f, 0f, 0.4f); box(0.1f, 0.04f, 0.8f); pop()
-        at(z = 0.82f) { torus(0.1f, 0.04f, 16, 6) }
-        col = c(230, 40, 36); push(); translate(0f, 0f, 0.15f); box(0.115f, 0.05f, 0.28f); pop()
+        // combination spanner standing on its ring end: tapered shaft, open jaw at the top
+        val steel = c(186, 190, 200)
+        col = steel
+        push(); translate(0f, 0f, 0.48f); box(0.09f, 0.035f, 0.62f); pop()
+        at(0f, 0f, 0.12f) { rotX((PI / 2).toFloat()); translate(0f, 0f, -0.02f); torus(0.09f, 0.035f, 18, 6) }
+        for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.1f, 0f, 0.9f); rotY(-s * 0.25f); box(0.06f, 0.04f, 0.16f); pop() }
+        push(); translate(0f, 0f, 0.8f); box(0.24f, 0.04f, 0.06f); pop()
+        col = c(230, 40, 36); push(); translate(0f, 0f, 0.42f); box(0.1f, 0.045f, 0.3f); pop()
+        col = c(60, 60, 66); for (k in 0 until 4) at(0f, -0.024f, 0.32f + k * 0.06f) { box(0.08f, 0.004f, 0.012f) }
     }.build()
 
     private fun hammerProp() = PM().apply {
@@ -761,14 +996,28 @@ object PropLibrary {
 
     // ---------------------------------------------------------------- lava
     private fun emberSpire() = PM().apply {
-        col = c(40, 30, 34); cone(0.26f, 0.9f, 7)
-        col = c(255, 100, 20) * 2.4f; at(z = 0.62f) { cone(0.08f, 0.3f, 7) }
-        for (k in 0 until 3) { col = c(255, 120, 30) * 1.9f; push(); rotZ(k * 2.1f); translate(0.1f, 0f, 0.08f); box(0.02f, 0.02f, 0.3f); pop() }
+        // a cluster of basalt columns with molten seams
+        val rock = c(36, 28, 32)
+        val hs = floatArrayOf(0.95f, 0.7f, 0.55f, 0.8f, 0.45f)
+        for (i in 0 until 5) {
+            val a = i * 1.26f; val r = if (i == 0) 0f else 0.17f
+            col = rock; push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a); cylinder(0.11f, hs[i], 6, 0.1f)
+            col = c(255, 100, 20) * 2.2f; at(z = hs[i]) { cylinder(0.075f, 0.012f, 6) }
+            col = c(255, 120, 30) * 1.8f; at(0.1f, 0f, hs[i] * 0.4f) { box(0.012f, 0.02f, hs[i] * 0.8f) }
+            pop()
+        }
     }.build()
 
     private fun lavaRocks() = PM().apply {
-        for (i in 0 until 4) { val a = i * 1.6f; col = c(38, 28, 32); push(); translate(cos(a) * 0.15f, sin(a) * 0.15f, 0f); rotZ(a); scale(0.7f + 0.2f * (i % 2), 1f, 1f + 0.3f * i); cone(0.16f, 0.5f, 6); pop() }
-        col = c(255, 100, 20) * 2.2f; for (k in 0 until 6) { push(); translate(cos(k * 1.1f) * 0.2f, sin(k * 1.1f) * 0.2f, 0.04f); sphere(0.03f, 6, 4); pop() }
+        // rough boulders split by glowing cracks, with a small pool of lava between them
+        col = c(255, 90, 20) * 2.1f; at(z = 0.005f) { cylinder(0.3f, 0.02f, 18) }
+        for (i in 0 until 5) {
+            val a = i * 1.3f; val r = 0.12f + 0.12f * (i % 2)
+            col = c(42, 32, 34)
+            push(); translate(cos(a) * r, sin(a) * r, 0.1f + 0.04f * (i % 3)); rotZ(a); rotX(0.3f * (i % 2)); scale(1.2f, 0.9f, 0.8f + 0.2f * (i % 3)); sphere(0.14f, 7, 5); pop()
+            col = c(255, 110, 30) * 1.9f
+            push(); translate(cos(a) * r, sin(a) * r, 0.12f); rotZ(a + 0.5f); box(0.2f, 0.012f, 0.012f); pop()
+        }
     }.build()
 
     private fun obsidianCrystal() = PM().apply {
@@ -779,8 +1028,7 @@ object PropLibrary {
 
     private fun brazier() = PM().apply {
         col = c(46, 38, 40); cylinder(0.04f, 0.4f, 8); at(z = 0.4f) { cylinder(0.24f, 0.1f, 14, 0.16f) }
-        col = c(255, 90, 20) * 2.6f; at(z = 0.5f) { cone(0.16f, 0.4f, 8) }
-        col = c(255, 190, 50) * 2.8f; at(z = 0.52f) { cone(0.09f, 0.3f, 8) }
+        col = c(255, 110, 30) * 1.8f; at(z = 0.48f) { cylinder(0.18f, 0.03f, 14) }          // glowing coals
     }.build()
 
     // ---------------------------------------------------------------- jelly

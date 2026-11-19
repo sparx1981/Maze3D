@@ -140,8 +140,8 @@ uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the l
 uniform vec3 uLampCol;
 uniform float uHedgeSnow;   // 1 = snow dusts the hedges
 uniform vec4 uLamp[12];
-uniform float uLampIdx[12];
-uniform float uLampMode;     // 1 = each lamp takes one of the four spore colours      // local-space lamp positions (xyz) and reach (w)
+uniform vec3 uLampC[12];      // linear colour x strength of each lamp; uLamp holds local-space position (xyz) and reach (w)
+uniform float uLampGain;     // day scenes dim the lamps; night scenes rely on them
 uniform vec3 uFogCol;
 uniform float uWet;        // 0..1 rain wetness
 uniform float uSandOn;     // 1 = sand / mud height field is bound
@@ -326,7 +326,7 @@ void main() {
         float fade = 1.0 - smoothstep(0.0012, 0.004, length(dFdx(P)));      // grain averages out at a distance
         float grain = vnoise(vec2(dot(P, vec3(310.0, 170.0, 250.0)), dot(P, vec3(-190.0, 330.0, 120.0))));
         float lump = vnoise(vec2(dot(P, vec3(14.0, 9.0, 11.0)), dot(P, vec3(-8.0, 15.0, 10.0))));
-        float rip = sin(dot(P, vec3(70.0, 20.0, 45.0)) + 3.0 * lump);
+        float rip = sin(dot(P, vec3(70.0, 20.0, 45.0)) + 3.0 * lump - uTime * 0.35);                // ripples creep with the wind
         albedo *= 0.80 + 0.2 * lump + 0.22 * (grain - 0.5) * 2.0 * fade;
         hgt = (rip * 0.0004 + (grain - 0.5) * 0.0004 * fade);
         rough = 0.96;
@@ -342,6 +342,8 @@ void main() {
         albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.35, 0.65, n));
         vec4 sp = sprinkles(P.yz) * tw.x + sprinkles(P.xz) * tw.y + sprinkles(P.xy) * tw.z;
         albedo = mix(albedo, sp.rgb / max(sp.a, 1e-3), clamp(sp.a, 0.0, 1.0));
+        float tw2 = vnoise(vec2(dot(P, vec3(60.0, 35.0, 50.0)), dot(P, vec3(-30.0, 55.0, 40.0))) + uTime * 0.8);
+        emit = vec3(1.0, 0.9, 0.95) * clamp(sp.a, 0.0, 1.0) * smoothstep(0.78, 0.95, tw2) * 0.9;     // sugar glints
         rough = 0.22; coat = 1.0;
     } else if (uMat == 8) {     // day of the dead: marigold flowers and papel-picado dots on purple
         vec4 f1 = flowers(P.yz), f2 = flowers(P.xz), f3 = flowers(P.xy);
@@ -390,7 +392,8 @@ void main() {
         vec4 pn = s1 * tw.x + s2 * tw.y + s3 * tw.z;
         albedo *= pn.r;
         hgt = (pn.r - 0.7) * 0.0012;
-        emit = vec3(0.3, 0.9, 1.0) * pn.g * 1.6;
+        float blink = 0.55 + 0.45 * step(0.35, fract(sin(dot(floor(P * 9.0), vec3(12.9, 78.2, 37.7))) * 43758.5 + uTime * 0.25));
+        emit = vec3(0.3, 0.9, 1.0) * pn.g * 1.6 * blink;
         rough = 0.32; metal = 0.5;
     } else if (uMat == 12) {    // diner tablecloth: red and white checks with woven fabric
         float ck = mod(floor(P.x * 7.0) + floor(P.y * 7.0) + floor(P.z * 7.0), 2.0);
@@ -412,7 +415,8 @@ void main() {
         albedo = mix(albedo * (0.8 + 0.3 * frost), vec3(0.45, 0.62, 0.8) * albedo, crack * 0.7);
         hgt = -crack * 0.0008 + (frost - 0.5) * 0.0003;
         rough = 0.09 + 0.12 * frost; coat = 1.0;
-        emit = vec3(0.35, 0.55, 0.8) * 0.12 * (1.0 - crack);
+        float glint = smoothstep(0.86, 0.97, vnoise(vec2(dot(P, vec3(520.0, 300.0, 410.0)), dot(P, vec3(-280.0, 510.0, 330.0))) + uTime * 1.3)) * fade3(P);
+        emit = vec3(0.35, 0.55, 0.8) * 0.12 * (1.0 - crack) + vec3(0.9, 0.97, 1.0) * glint * 1.4;
     } else if (uMat == 15) {    // sandstone with carved bands and glyph blocks
         float band = fract(P.y * 3.4);
         float line = 1.0 - smoothstep(0.0, 0.03, abs(band - 0.5) - 0.44);
@@ -426,7 +430,8 @@ void main() {
         vec3 gp = fract(P * 6.0 + 0.5) - 0.5;
         float l1 = 1.0 - smoothstep(0.0, 0.025, min(abs(gp.x), min(abs(gp.y), abs(gp.z))));
         float pick = step(0.5, fract(floor(P.x * 6.0) * 0.37 + floor(P.y * 6.0) * 0.61 + floor(P.z * 6.0) * 0.43));
-        emit = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 0.9, 1.0), pick) * l1 * 1.8 * fade3(P);
+        float pulse = 0.6 + 0.4 * sin(dot(P, vec3(9.0, 5.0, 7.0)) * 2.0 - uTime * 3.0);
+        emit = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 0.9, 1.0), pick) * l1 * 1.8 * fade3(P) * pulse;
         rough = 0.18; coat = 1.0;
     } else if (uMat == 17) {    // jungle moss: layered greens, damp sheen
         float m1 = vnoise(vec2(dot(P, vec3(30.0, 14.0, 21.0)), dot(P, vec3(-12.0, 28.0, 17.0))));
@@ -434,7 +439,7 @@ void main() {
         albedo *= 0.5 + 0.9 * m1;
         albedo = mix(albedo, albedo * vec3(1.3, 1.25, 0.6), smoothstep(0.55, 0.8, m2));
         hgt = (m2 - 0.5) * 0.0010 + (m1 - 0.5) * 0.0006;
-        rough = 0.5 + 0.3 * m2; coat = 0.25;
+        rough = 0.5 + 0.3 * m2; coat = 0.25 + 0.15 * sin(uTime * 0.7 + m1 * 6.0);
     } else if (uMat == 21) {    // carved stone: weathered blocks
         float n1 = vnoise(vec2(dot(P, vec3(45.0, 22.0, 33.0)), dot(P, vec3(-20.0, 40.0, 26.0))));
         float n2 = vnoise(vec2(dot(P, vec3(260.0, 150.0, 200.0)), dot(P, vec3(-140.0, 250.0, 170.0))));
@@ -623,19 +628,18 @@ void main() {
     if (coat > 0.0) spec += coat * envMap(R, 0.04) * (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * 0.9;
     float occ = mix(1.0, 0.55 + 0.45 * sh, 0.6);  // shadowed areas also lose some specular sky light
     col += irradiance(N) * diffC * mix(1.0, 0.28, uNight) * mix(vec3(1.0), vec3(0.4, 0.55, 1.1), uNight) + spec * occ * mix(1.0, 0.3, uNight);
-    if (uNight > 0.01) {                                      // lamps: soft blue pools of light around each post
+    if (uLampGain > 0.0) {                                    // light from lamps and glowing props: coloured pools on the floor, walls and props nearby
         for (int i = 0; i < 12; i++) {
             if (uLamp[i].w <= 0.0) continue;
             vec3 dl = uLamp[i].xyz - vLocal;
             float dd = length(dl);
-            float att = 1.0 / (1.0 + 9.0 * (dd / uLamp[i].w) * (dd / uLamp[i].w)) * (1.0 - smoothstep(0.6, 1.0, dd / uLamp[i].w));
-            float nl = max(dot(N, normalize(dl)), 0.0) * 0.8 + 0.2;
-            vec3 lc = uLampCol;
-            if (uLampMode > 0.5) {
-                int k = int(uLampIdx[i] + 0.5);
-                lc = k == 0 ? vec3(0.55, 1.0, 0.36) : k == 1 ? vec3(0.30, 1.0, 0.75) : k == 2 ? vec3(0.85, 1.0, 0.35) : vec3(0.25, 0.88, 1.0);
-            }
-            col += (diffC * 2.0 + 0.02) * lc * att * nl * 0.55;
+            float x = dd / uLamp[i].w;
+            float att = 1.0 / (1.0 + 9.0 * x * x) * (1.0 - smoothstep(0.6, 1.0, x));
+            vec3 ld = dl / max(dd, 1e-5);
+            float nl = max(dot(N, ld), 0.0) * 0.8 + 0.2;
+            vec3 hl = normalize(ld + V);
+            float sp = pow(max(dot(N, hl), 0.0), mix(12.0, 90.0, 1.0 - rough)) * (1.0 - rough) * 0.6;
+            col += ((diffC * 2.0 + 0.02) * nl + F0 * sp) * uLampC[i] * att * 0.55 * uLampGain;
         }
     }
     // rim light
@@ -1303,6 +1307,7 @@ precision highp float;
 uniform vec3 uCam;
 uniform float uTime;
 uniform float uKind;        // 1 water, 2 gas, 3 fog
+uniform float uLayers;      // number of fog / gas slices
 uniform float uScale;       // 1 / cell size
 uniform float uNear;        // sheets fade out close to the camera so the ball stays visible
 uniform vec3 uMarbleP;
@@ -1390,23 +1395,35 @@ void main() {
         col = mix(col, vec3(0.96, 0.99, 1.0), wake * 0.92);
         float alpha = max(smoothstep(0.0, 0.2, lv) * mix(0.9, 0.72, shallow) * (0.6 + 0.4 * near), wake * 0.95);
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.92));
-    } else {                                                    // ---- gas and fog
+    } else {                                                    // ---- gas and fog: slices through a drifting, billowing 3D density field
         bool gas = uKind < 2.5;
-        float sc = gas ? 2.2 : 1.1;
-        vec2 q = p * sc + vec2(uTime * 0.07 + layer * 3.7, -uTime * 0.05 + layer * 1.3);
-        float n = fbm(q + 0.8 * vec2(fbm(q * 0.9 + uTime * 0.06), fbm(q * 0.9 - uTime * 0.05)));
-        float dens = clamp((n - 0.28) * 2.1, 0.0, 1.0) * smoothstep(0.02, 0.5, lv) * (0.5 + 0.5 * lv);
-        float light = 0.55 + 0.45 * max(dot(normalize(vNrm), uLightDir), 0.0);
+        float h = vCol.y;                                       // 0 at the floor .. 1 at the top of the volume
+        float sc = gas ? 1.6 : 0.9;
+        float drift = uTime * (gas ? 0.08 : 0.045);
+        vec2 q = p * sc + vec2(drift, -drift * 0.7);
+        vec2 warp = 0.9 * vec2(fbm(q * 0.7 + vec2(uTime * 0.05, 1.7)), fbm(q * 0.7 - vec2(3.1, uTime * 0.04)));
+        // pseudo-3D: neighbouring slices of the field blended by height, rolling slowly upward
+        float hz = h * (gas ? 2.6 : 3.2) - uTime * (gas ? 0.06 : 0.03);
+        float zf = floor(hz);
+        float n0 = fbm(q + warp + vec2(zf * 5.37, zf * 2.11));
+        float n1 = fbm(q + warp + vec2((zf + 1.0) * 5.37, (zf + 1.0) * 2.11));
+        float n = mix(n0, n1, smoothstep(0.0, 1.0, hz - zf));
+        // heavy gas pools low; fog sits in a thick bank that thins out above the walls
+        float prof = gas ? (1.0 - smoothstep(0.25, 1.0, h)) * (0.75 + 0.25 * smoothstep(0.0, 0.1, h))
+                         : smoothstep(0.0, 0.1, h) * (1.0 - smoothstep(0.45, 1.0, h));
+        float dens = clamp((n - (gas ? 0.16 : 0.18)) * 2.8, 0.0, 1.0) * prof * smoothstep(0.0, 0.22, lv) * (0.8 + 0.2 * lv);
+        // light: lower slices sit in the shade of the ones above; looking toward the sun the edges glow (forward scattering)
+        float shade = mix(0.5, 1.08, h) * (0.8 + 0.2 * n);
+        float fwd = pow(max(dot(-V, uLightDir), 0.0), 5.0) * 0.55 * (1.0 - dens * 0.5);
         vec3 col;
-        float alpha;
-        if (gas) {
-            col = mix(vec3(0.30, 0.62, 0.08), vec3(0.78, 0.95, 0.22), n) * light + vec3(0.10, 0.30, 0.02) * dens;
-            alpha = dens * 0.42;
-        } else {
-            col = mix(vec3(0.70, 0.76, 0.84), vec3(0.96, 0.97, 1.0), n) * light;
-            alpha = dens * 0.5;
-        }
-        outColor = vec4(finish(col, gl_FragCoord.xy), alpha * near);
+        if (gas) col = mix(vec3(0.20, 0.46, 0.05), vec3(0.72, 0.95, 0.24), n) * (shade + fwd) + vec3(0.08, 0.26, 0.02) * dens;
+        else col = mix(vec3(0.60, 0.66, 0.75), vec3(0.97, 0.98, 1.0), n * 0.6 + h * 0.4) * (shade + fwd);
+        float total = clamp(dens * (gas ? 0.88 : 0.93), 0.0, 0.98);
+        float alpha = 1.0 - pow(1.0 - total, 1.0 / max(uLayers * 0.55, 1.0));  // the stack of slices adds up to the target density
+        alpha *= mix(0.35, 1.0, smoothstep(0.02, 0.3, abs(dot(N, V))));       // slices seen edge-on would show as bands: thin them out
+        float nearV = smoothstep(uNear * 0.12, uNear * 0.6, distance(uCam, vWorld));          // only the slices right at the lens fade
+        float bubble = mix(0.3, 1.0, smoothstep(0.5, 1.8, length(vLocal - uMarbleP) * uScale));   // the rolling ball clears a pocket around itself
+        outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.95) * nearV * bubble);
     }
 }
 """

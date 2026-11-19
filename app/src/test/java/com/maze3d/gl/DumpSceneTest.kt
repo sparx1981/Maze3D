@@ -147,11 +147,12 @@ class DumpSceneTest {
                 for (c in 0 until maze.cellCount) { val (ox, oy) = wf.tileOrigin(c); for (j in 0 until wf.tile) for (i in 0 until wf.tile) data[(oy + j) * wf.atlasW + ox + i] = wf.h[wf.idx(c, i, j)] }
                 waveJson = ",\"wave\":{\"t\":${wf.t},\"tile\":${wf.tile},\"perRow\":${wf.perRow},\"w\":${wf.atlasW},\"h\":${wf.atlasH},\"data\":${arr(data)},\"foam\":${arr(foamData)}}"
             }
-            val mm = MediumMesh(maze, mk, b.wallHeight)
+            val mm = MediumMesh(maze, mk, b.wallHeight, 9)
             sb.append("\"medium\":{\"kind\":${when (mk) { com.maze3d.core.Medium.WATER -> 1; com.maze3d.core.Medium.GAS -> 2; else -> 3 }},\"cs\":${maze.cellSize},\"v\":${arr(mm.update(fld.level))},\"i\":${arr(mm.indices)}$waveJson},")
         }
         if (sandJson != null) sb.append("\"sand\":$sandJson,")
-        sb.append("\"lamps\":${arr(b.lamps.flatMap { listOf(it.x, it.y, it.z, maze.cellSize * 4.2f) }.toFloatArray())},")
+        sb.append("\"lamps\":${arr(b.lamps.indices.flatMap { listOf(b.lamps[it].x, b.lamps[it].y, b.lamps[it].z, maze.cellSize * b.lampReach[it]) }.toFloatArray())},")
+        sb.append("\"lampCol\":${arr(b.lampCol.flatMap { listOf(it.x, it.y, it.z) }.toFloatArray())},")
         sb.append("\"outer\":${kind.outerRadius},")
         sb.append("\"floor\":${mesh(b.floor(sandJson != null))},\"walls\":${mesh(b.walls())},\"puddles\":${mesh(b.puddles(rn.cells, rn.maxRadius * 0.9f))},\"levels\":${arr(rn.level)},\"ripples\":${ripples(maze, rn)},\"trail\":${trail(maze)},\"markers\":${mesh(b.markers(hz.doorEdges, intArrayOf(maze.solution[maze.solution.size / 4], maze.solution[maze.solution.size / 2], maze.solution[maze.solution.size * 3 / 4]), 0))},\"doors\":${mesh(b.doors(hz.doorEdges, hz.doorPhase))},\"holes\":${mesh(b.pits(hz.holeCells, hz.holePhase, hz.holeRadius, maze.cellSize))},\"lids\":${mesh(b.lids(hz.holeCells, hz.holePhase, hz.holeRadius))},\"holeC\":${holeC(maze, hz)},\"thread\":${mesh(b.thread(maze.start))},")
         sb.append("\"marble\":{\"pos\":${arr(floatArrayOf(marble.position.x, marble.position.y, marble.position.z))},\"r\":${marble.radius}},")
