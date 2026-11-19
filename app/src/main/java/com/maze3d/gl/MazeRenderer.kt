@@ -945,7 +945,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     if (gustAmt > 0.01f) {                               // storm gust: the wind shoves the ball along the surface
                         val n = mb.surface.normal(mb.position)
                         val w = gustDir - n * (gustDir dot n)
-                        if (w.lengthSq() > 1e-6f) mb.kick(w.normalized() * (GRAVITY * 0.55f * gustAmt * dt))
+                        if (w.lengthSq() > 1e-6f) mb.kick(w.normalized() * (GRAVITY * 0.2f * gustAmt * dt))
                     }
                     statDist += (mb.position - before).length() / m.cellSize
                     statTime += dt

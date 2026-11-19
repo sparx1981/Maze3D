@@ -738,6 +738,19 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val lw = animate(lib, lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, i + 90000)
             placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, lw))
         }
+        // 3b. a ring of grandstands all round the shape, facing in, so the whole circuit is watched (motorsport)
+        lib.ring?.let { rm ->
+            for (i in 0 until lib.ringCount) {
+                // upright stands in a ring round the shape's equator, like a stadium round a pitch
+                val phi = i * 6.2831853f / lib.ringCount
+                val d = Vec3(cos(phi), 0f, sin(phi))
+                val up = Vec3(0f, 1f, 0f)
+                val pos = d * (outerRadius * 2.05f) - up * (outerRadius * 0.55f)
+                val size = outerRadius * 0.62f
+                val aw = animate(lib, rm, pos, up, -d, size, 0.9f, i + 120000)
+                placed.add(Placed(rm, pos, up, -d, size, 0.9f, aw))
+            }
+        }
         // 4. a few birds (or butterflies, drones...) circling over the maze
         for ((fi, bd) in listOfNotNull(lib.bird, lib.birds2, lib.birds3).withIndex()) {
             for (k0 in 0 until bd.count) { val k = k0 + fi * 50

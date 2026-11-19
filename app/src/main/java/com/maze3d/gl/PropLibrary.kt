@@ -24,7 +24,7 @@ object PropLibrary {
     class ThemeProps(val junction: PropMesh, val deadA: PropMesh, val deadB: PropMesh, val landmark: PropMesh,
                      val deadC: PropMesh? = null, val junction2: PropMesh? = null,
                      val anims: Map<PropMesh, AnimSpec> = emptyMap(), val bird: Bird? = null, val more: List<PropMesh> = emptyList(),
-                     val junctionMore: List<PropMesh> = emptyList(), val floor: List<PropMesh> = emptyList(), val birds2: Bird? = null, val junctionShare: Float = 0.2f, val birds3: Bird? = null)
+                     val junctionMore: List<PropMesh> = emptyList(), val floor: List<PropMesh> = emptyList(), val birds2: Bird? = null, val junctionShare: Float = 0.2f, val birds3: Bird? = null, val ring: PropMesh? = null, val ringCount: Int = 0)
 
     private fun whole(m: PropMesh, type: Int, speed: Float = 1f, amp: Float = 1f, pivotZ: Float = 0f) = m to AnimSpec(m, type, speed, amp, true, pivotZ = pivotZ)
     private fun part(host: PropMesh, part: PropMesh, type: Int, at: List<Vec3>, speed: Float = 1f, amp: Float = 1f) = host to AnimSpec(part, type, speed, amp, false, at)
@@ -46,7 +46,7 @@ object PropLibrary {
                 butterfly(c(255, 130, 20), c(40, 20, 10))) }
         2 -> { val tr = trophy(); val fp = flagPole()
             val gs = grandstand(c(220, 30, 30), c(250, 250, 250), c(30, 30, 34))
-            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f), crowdSpec(gs)), null, listOf(gs, gs)) }
+            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f), crowdSpec(gs)), null, listOf(gs, gs, gs), ring = gs, ringCount = 18) }
         3 -> { val cf = cornerFlag(); val fb = football(); val tr = trophy()
             val gs = grandstand(c(40, 90, 220), c(250, 214, 40), c(40, 140, 60))
             ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(whole(cf, Anim.SWAY, 1.8f, 1.6f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f), crowdSpec(gs)),
@@ -227,15 +227,27 @@ object PropLibrary {
     }.build()
 
     private fun dino() = PM().apply {
-        val skin = c(90, 150, 70); val belly = c(200, 210, 140)
-        col = skin; at(0f, 0f, 0.42f) { scale(1.3f, 0.75f, 0.9f); sphere(0.22f, 16, 12) }
-        tube(listOf(Vec3(0.18f, 0f, 0.5f), Vec3(0.26f, 0f, 0.68f), Vec3(0.3f, 0f, 0.8f)), 0.08f, 10, taper = { 1f - 0.3f * it })
-        at(0.36f, 0f, 0.84f) { scale(1.4f, 0.8f, 0.8f); sphere(0.09f, 12, 8) }
-        tube(listOf(Vec3(-0.22f, 0f, 0.42f), Vec3(-0.4f, 0f, 0.32f), Vec3(-0.5f, 0f, 0.18f)), 0.09f, 10, taper = { 1f - 0.9f * it })
-        for (s in intArrayOf(-1, 1)) { at(-0.05f, s * 0.12f, 0.12f) { cylinder(0.065f, 0.24f, 10) }; at(0.12f, s * 0.12f, 0.12f) { cylinder(0.055f, 0.22f, 10) } }
-        col = belly; at(0.05f, 0f, 0.34f) { scale(1.1f, 0.6f, 0.7f); sphere(0.2f, 12, 8) }
-        col = c(230, 120, 40); for (k in 0 until 6) at(-0.25f + k * 0.08f, 0f, 0.6f - kotlin.math.abs(k - 2.5f) * 0.03f) { cone(0.04f, 0.09f, 6) }
-        col = c(20, 20, 20); for (s in intArrayOf(-1, 1)) at(0.42f, s * 0.06f, 0.88f) { sphere(0.018f, 6, 4) }
+        // a friendly long-necked sauropod: smooth barrel body, tapering neck and tail as one curve, pillar legs with toenails,
+        // a small head with eyes and nostrils, a lighter belly and darker blotches down the back
+        val skin = c(96, 156, 84); val dark = c(60, 112, 58); val belly = c(206, 214, 150)
+        val spineCurve = (0..20).map { k -> val v = k / 20f
+            val x = -0.62f + 1.16f * v
+            val z = 0.42f + (if (v > 0.62f) (v - 0.62f) * 1.25f else 0f) * (if (v > 0.62f) 1f else 0f) + 0.06f * kotlin.math.sin(v * 3.1f) - (if (v < 0.25f) (0.25f - v) * 0.9f else 0f)
+            Vec3(x, 0f, z) }
+        col = skin
+        tube(spineCurve, 0.2f, 18, colorFn = { v -> if (((v * 23f).toInt() % 5) == 0 && v in 0.25f..0.7f) dark else skin }, taper = { v ->
+            when { v < 0.25f -> 0.18f + 0.82f * (v / 0.25f); v < 0.62f -> 1f; else -> 1f - 0.72f * ((v - 0.62f) / 0.38f) } })
+        col = belly; at(0.0f, 0f, 0.36f) { scale(1.5f, 0.75f, 0.55f); sphere(0.18f, 16, 10) }
+        val head = spineCurve.last()
+        col = skin; at(head.x + 0.05f, 0f, head.z + 0.03f) { scale(1.5f, 0.85f, 0.8f); sphere(0.075f, 14, 10) }
+        col = c(30, 26, 22); for (s in intArrayOf(-1, 1)) { at(head.x + 0.07f, s * 0.05f, head.z + 0.07f) { sphere(0.014f, 8, 6) }; at(head.x + 0.15f, s * 0.02f, head.z + 0.05f) { sphere(0.007f, 5, 4) } }
+        col = c(255, 255, 255); for (s in intArrayOf(-1, 1)) at(head.x + 0.078f, s * 0.054f, head.z + 0.075f) { sphere(0.005f, 4, 3) }
+        col = dark; tube(listOf(Vec3(head.x + 0.02f, -0.03f, head.z - 0.01f), Vec3(head.x + 0.12f, 0f, head.z), Vec3(head.x + 0.02f, 0.03f, head.z - 0.01f)), 0.004f, 3)   // smile
+        for (lx in floatArrayOf(-0.2f, 0.18f)) for (s in intArrayOf(-1, 1)) {
+            col = skin; tube(listOf(Vec3(lx, s * 0.12f, 0.38f), Vec3(lx + 0.02f, s * 0.13f, 0.18f), Vec3(lx, s * 0.13f, 0.03f)), 0.07f, 12, taper = { 1f - 0.15f * it })
+            col = belly; for (t in -1..1) at(lx + 0.06f, s * 0.13f + t * 0.03f, 0.02f) { scale(1f, 0.8f, 0.6f); sphere(0.022f, 6, 4) }
+        }
+        col = dark; for (k in 0 until 7) { val p = spineCurve[6 + k * 2]; at(p.x, 0f, p.z + 0.16f) { scale(1.3f, 0.5f, 0.6f); sphere(0.04f, 8, 6) } }   // back ridge
     }.build()
 
     // ---------------------------------------------------------------- candy
@@ -1592,18 +1604,37 @@ object PropLibrary {
     }.build()
 
     private fun dinoSkeleton() = PM().apply {
-        // a fossil skeleton half out of the ground: skull, spine of vertebrae, a fan of ribs and the tail
-        val bone = c(236, 226, 200)
-        col = c(140, 110, 80); at(z = 0.0f) { scale(1.4f, 0.6f, 0.1f); sphere(0.4f, 16, 8) }
-        col = bone
-        val spine = (0..16).map { k -> val v = k / 16f; Vec3(-0.55f + 1.05f * v, 0f, 0.12f + 0.25f * kotlin.math.sin(v * 3.1f)) }
-        for (p in spine) at(p.x, p.y, p.z) { sphere(0.035f, 8, 6) }
-        tube(spine, 0.015f, 5)
-        for (k in 4..10) { val p = spine[k]; for (s in intArrayOf(-1, 1)) tube(listOf(p, Vec3(p.x + 0.02f, s * 0.14f, p.z - 0.08f), Vec3(p.x + 0.04f, s * 0.12f, 0.03f)), 0.011f, 4) }
+        // a museum-style T. rex skeleton on a plinth: skull with jaw, teeth and eye holes; vertebrae shrinking down the tail;
+        // curved ribs, pelvis, three-part legs with clawed feet, tiny arms and support rods
+        val bone = c(236, 226, 200); val old = c(206, 190, 160)
+        col = c(70, 66, 62); at(z = 0.02f) { box(1.05f, 0.42f, 0.04f) }
+        col = c(150, 140, 120); at(z = 0.045f) { box(1.0f, 0.37f, 0.01f) }
+        val spine = (0..22).map { k -> val v = k / 22f
+            Vec3(-0.5f + 0.92f * v, 0f, 0.38f + 0.26f * kotlin.math.sin(v * 2.6f + 0.3f) - (if (v < 0.4f) (0.4f - v) * 0.5f else 0f)) }
+        for ((k, p) in spine.withIndex()) { val r = 0.016f + 0.028f * (k / 22f).let { if (it < 0.75f) it else 0.75f }
+            col = if (k % 2 == 0) bone else old; at(p.x, p.y, p.z) { scale(0.8f, 1f, 1.2f); sphere(r, 8, 6) }
+            if (k in 8..18) { col = bone; at(p.x, 0f, p.z + r * 2f) { box(0.012f, 0.01f, r * 1.8f) } } }
+        for (k in 9..15) { val p = spine[k]; val drop = 0.16f + 0.05f * (k - 9) * (15 - k) / 9f
+            for (s in intArrayOf(-1, 1)) { col = bone; tube((0..5).map { j -> val a = j / 5f * 2.6f; Vec3(p.x - 0.01f * j, s * 0.13f * kotlin.math.sin(a), p.z - drop * (1f - kotlin.math.cos(a)) * 0.6f) }, 0.009f, 4) } }
+        val pel = spine[7]
+        col = bone; at(pel.x, 0f, pel.z - 0.04f) { scale(1.4f, 1f, 0.8f); sphere(0.06f, 10, 8) }
+        for (s in intArrayOf(-1, 1)) {
+            tube(listOf(Vec3(pel.x, s * 0.07f, pel.z - 0.04f), Vec3(pel.x + 0.06f, s * 0.08f, 0.32f), Vec3(pel.x - 0.02f, s * 0.08f, 0.17f), Vec3(pel.x + 0.03f, s * 0.08f, 0.07f)), 0.022f, 6, taper = { 1f - 0.35f * it })
+            at(pel.x + 0.06f, s * 0.08f, 0.32f) { sphere(0.026f, 8, 6) }; at(pel.x - 0.02f, s * 0.08f, 0.17f) { sphere(0.02f, 8, 6) }
+            for (t in -1..1) tube(listOf(Vec3(pel.x + 0.03f, s * 0.08f, 0.07f), Vec3(pel.x + 0.1f, s * 0.08f + t * 0.025f, 0.055f)), 0.007f, 3)
+            val ch = spine[17]
+            tube(listOf(Vec3(ch.x, s * 0.08f, ch.z - 0.1f), Vec3(ch.x + 0.05f, s * 0.09f, ch.z - 0.17f), Vec3(ch.x + 0.08f, s * 0.08f, ch.z - 0.15f)), 0.008f, 3)
+        }
+        col = c(60, 60, 66); at(pel.x, 0f, 0.05f) { cylinder(0.008f, pel.z - 0.1f, 6) }; at(spine[16].x, 0f, 0.05f) { cylinder(0.008f, spine[16].z - 0.1f, 6) }
+        // skull
         val hd = spine.last()
-        at(hd.x + 0.08f, 0f, hd.z) { scale(1.6f, 0.7f, 0.8f); sphere(0.08f, 12, 8) }
-        col = c(60, 50, 40); for (s in intArrayOf(-1, 1)) at(hd.x + 0.07f, s * 0.04f, hd.z + 0.03f) { sphere(0.02f, 6, 4) }
-        col = bone; for (k in 0 until 5) at(hd.x + 0.1f + k * 0.022f, 0f, hd.z - 0.05f) { cone(0.008f, 0.025f, 4) }
+        col = bone
+        push(); translate(hd.x + 0.1f, 0f, hd.z + 0.01f)
+        at(0f, 0f, 0.02f) { scale(1.7f, 0.75f, 0.85f); sphere(0.075f, 14, 10) }
+        at(0.05f, 0f, -0.05f) { scale(1.8f, 0.6f, 0.35f); sphere(0.06f, 12, 8) }
+        col = c(40, 34, 28); for (s in intArrayOf(-1, 1)) { at(-0.03f, s * 0.055f, 0.04f) { sphere(0.022f, 8, 6) }; at(0.06f, s * 0.04f, 0.02f) { scale(1.4f, 0.6f, 1f); sphere(0.018f, 6, 4) } }
+        col = c(250, 246, 230); for (k in 0 until 7) { at(0.0f + k * 0.022f, -0.04f, -0.02f) { rotY(PI.toFloat()); cone(0.006f, 0.028f, 4) }; at(0.0f + k * 0.022f, 0.04f, -0.02f) { rotY(PI.toFloat()); cone(0.006f, 0.028f, 4) } }
+        pop()
     }.build()
 
     private fun bigEggs() = PM().apply {
