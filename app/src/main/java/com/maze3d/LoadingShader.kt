@@ -10,6 +10,12 @@ object LoadingShader {
 uniform float2 uRes;
 uniform float uTime;
 uniform float uQ;           // 1 = full quality, 0 = cheaper (no refraction march)
+uniform float3 uFloorA;     // random surface: floor, wall and wall-edge colours (sRGB)
+uniform float3 uWall;
+uniform float3 uWallTop;
+uniform float3 uBallA;      // random ball: two colours and kind (0 glass, 1 painted)
+uniform float3 uBallB;
+uniform float uBallKind;
 
 const float S = 1.35;       // maze cell size
 const float TH = 0.055;     // wall half thickness
@@ -115,9 +121,9 @@ float3 shade(float3 ro, float3 rd, int steps) {
             float2 g = float2(p.x, p.z + scrollAt()) / S;
             float2 f = abs(fract(g) - 0.5);
             float seam = smoothstep(0.482, 0.5, max(f.x, f.y));
-            float3 base = float3(0.035, 0.05, 0.085) * (0.7 + 0.6 * hash21(floor(g)));
+            float3 base = pow(uFloorA, float3(2.2)) * 0.45 * (0.7 + 0.6 * hash21(floor(g)));
             float nl = max(dot(n, L), 0.0);
-            col = base * (0.35 + 1.1 * nl) + float3(0.05, 0.12, 0.22) * seam * 0.6;
+            col = base * (0.35 + 1.1 * nl) + pow(uWallTop, float3(2.2)) * seam * 0.25;
             col += thread(p.xz);
             float pool = exp(-dot(p.xz - float2(0.0, 0.0), p.xz) * 0.55);
             col += float3(0.18, 0.32, 0.55) * pool * 0.5;
@@ -126,12 +132,12 @@ float3 shade(float3 ro, float3 rd, int steps) {
             col *= mix(1.0, sh, 0.7);
         } else {
             // wall: deep teal enamel with a hot glowing rim along the top edge
-            float3 base = float3(0.03, 0.14, 0.17);
+            float3 base = pow(uWall, float3(2.2)) * 0.6;
             float nl = max(dot(n, L), 0.0);
             float edge = smoothstep(0.045, 0.0, top - p.y);
             float fres = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
             col = base * (0.3 + 1.2 * nl) * key + float3(0.05, 0.14, 0.26) * fres * 1.4;
-            col += mix(float3(0.2, 0.8, 1.0), float3(1.0, 0.75, 0.3), smoothstep(8.0, 22.0, t)) * edge * 2.1 * (0.6 + 0.4 * uQ);
+            col += pow(uWallTop, float3(2.2)) * edge * 2.1 * (0.6 + 0.4 * uQ);
         }
         // distance haze into the night
         col = mix(col, sky(rd), 1.0 - exp(-t * 0.06));
@@ -197,10 +203,16 @@ half4 main(float2 fc) {
             float3 bp = float3(n.x, n.y * cs - n.z * sn, n.y * sn + n.z * cs);
             float band = sin(bp.x * 6.0 + sin(bp.y * 4.0 + bp.z * 3.0) * 1.6);
             float ribbon = smoothstep(0.7, 0.85, band) * (1.0 - smoothstep(0.9, 0.97, band));
-            float3 ribCol = mix(float3(0.2, 0.75, 1.0), float3(1.0, 0.72, 0.28), 0.5 + 0.5 * sin(bp.z * 2.0 + 1.0));
+            float3 ribCol = mix(uBallA, uBallB, 0.5 + 0.5 * sin(bp.z * 2.0 + 1.0));
             float3 glass = inner * float3(0.86, 0.95, 1.0) * mix(1.0, 0.45, pow(1.0 - NoV, 1.6));
             glass = mix(glass, ribCol * 1.2 + glass * 0.3, ribbon * 0.55);
             float3 mcol = glass * (1.0 - F) + refl * (0.15 + 0.85 * F);
+            if (uBallKind > 0.5) {                            // a painted ball: two-colour pattern under a glossy coat
+                float pat = smoothstep(-0.15, 0.15, sin(bp.x * 5.0 + sin(bp.y * 3.0 + bp.z * 4.0) * 1.8));
+                float3 alb = pow(mix(uBallA, uBallB, pat), float3(2.2));
+                float nl = max(dot(n, normalize(float3(-0.5, 0.8, -0.4))), 0.0);
+                mcol = alb * (0.25 + 1.6 * nl) + refl * (0.05 + 0.6 * F);
+            }
             mcol += float3(8.0) * pow(max(dot(reflect(rd, n), normalize(float3(-0.5, 0.8, -0.4))), 0.0), 220.0);
             // caustic kiss of light on the floor under the glass
             col = mcol;

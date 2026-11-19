@@ -21,7 +21,7 @@ const fsrc = '#version 300 es\nprecision highp float;\nout vec4 o;\n' + src + '\
     gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, fsrc));
     gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     gl.useProgram(pr);
-    gl.uniform2f(gl.getUniformLocation(pr, 'uRes'), +W, +H); gl.uniform1f(gl.getUniformLocation(pr, 'uTime'), +time); gl.uniform1f(gl.getUniformLocation(pr, 'uQ'), +Q);
+    gl.uniform2f(gl.getUniformLocation(pr, 'uRes'), +W, +H); gl.uniform1f(gl.getUniformLocation(pr, 'uTime'), +time); gl.uniform1f(gl.getUniformLocation(pr, 'uQ'), +Q); const U=n=>gl.getUniformLocation(pr,n); gl.uniform3f(U('uFloorA'),0.48,0.79,0.29); gl.uniform3f(U('uWall'),0.29,0.52,0.2); gl.uniform3f(U('uWallTop'),0.6,0.9,0.4); gl.uniform3f(U('uBallA'),0.95,0.15,0.15); gl.uniform3f(U('uBallB'),1,0.85,0.1); gl.uniform1f(U('uBallKind'),1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return 'ok';
   }, [fsrc, time, W, H, Q]).catch(e => 'ERR ' + e.message);

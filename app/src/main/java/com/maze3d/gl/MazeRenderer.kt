@@ -947,6 +947,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     }
                     if (pal.themeId == 7) snowfall(mb, m)
                     if (pal.themeId == 11) { glowStamp(mb); glowAtmosphere(mb, m, dt) }
+                    if (pal.themeId == 17) lavaAtmosphere(mb, m, dt)
                     if (pal.themeId == 12) fallLeaves(mb, m, dt)
                     audio.roll((mb.velocity.length() / (m.cellSize * 4f)).coerceIn(0f, 1f),
                         when { terrain == Terrain.SAND -> 2; terrain == Terrain.MUD -> 3; pal.floorMat == Mat.WOOD -> 1; else -> 0 })
@@ -1415,15 +1416,28 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uExposure"), exposure())
         run {                                                   // follow view: see through the shape where it hides the ball
             val mbc = marble
+            var want = 0f
+            val cs = maze?.cellSize ?: 0.1f
             if (cameraMode == 1 && mbc != null && phase != Phase.MENU && chaseBlend < 0.5f) {
+                // is any of the shape actually between the camera and the ball? (checked in the piece's own space)
+                val sf = mbc.surface
+                val eyeL = orient.inverseRotate(eye)
+                val from = mbc.position + sf.normal(mbc.position) * (mbc.radius * 1.5f)
+                for (k in 1..24) {
+                    val q = from + (eyeL - from) * (k / 24f)
+                    if ((q - sf.core(q)).length() < sf.radius * 0.99f) { want = 1f; break }
+                }
+            }
+            cutAmt += (want - cutAmt) * 0.15f
+            if (cutAmt > 0.02f && mbc != null) {
                 val w = orient.rotate(mbc.position)
-                val cs = maze?.cellSize ?: 0.1f
-                GLES30.glUniform4f(loc(sceneProg, "uCutA"), eye.x, eye.y, eye.z, 1f)
-                GLES30.glUniform4f(loc(sceneProg, "uCutB"), w.x, w.y, w.z, cs * 2.2f)
+                GLES30.glUniform4f(loc(sceneProg, "uCutA"), eye.x, eye.y, eye.z, cutAmt)
+                GLES30.glUniform4f(loc(sceneProg, "uCutB"), w.x, w.y, w.z, cs * 1.8f)
             } else GLES30.glUniform4f(loc(sceneProg, "uCutA"), 0f, 0f, 0f, 0f)
         }
         run { val sp = studPitch(); GLES30.glUniform2f(loc(sceneProg, "uStud"), 1f / sp, sp * 0.12f) }
         GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uHiero"), if (pal.themeId == 8) 1f else 0f)
         lampUniform.fill(0f); lampColUniform.fill(0f)
         // the lamps nearest the ball (or the view centre) light the scene; how many depends on the quality setting
         val lampCap = when { profile.shadows >= 2 -> 12; profile.shadows >= 1 -> 8; else -> 4 }
@@ -1439,7 +1453,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 lampColUniform[i * 3] = c.x * flick; lampColUniform[i * 3 + 1] = c.y * flick; lampColUniform[i * 3 + 2] = c.z * flick
             }
         }
-        GLES30.glUniform1f(loc(sceneProg, "uLampGain"), if (lamps.isEmpty()) 0f else if (night) 1f else 1.7f)
+        GLES30.glUniform1f(loc(sceneProg, "uLampGain"), if (lamps.isEmpty()) 0f else if (night) 1f else 0.6f)
         GLES30.glUniform3fv(loc(sceneProg, "uLampC"), 12, lampColUniform, 0)
         GLES30.glUniform4fv(loc(sceneProg, "uLamp"), 12, lampUniform, 0)
         run {
@@ -1755,8 +1769,52 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
     }
 
+    private var sporeBurstAcc = 0f
+    private var fireAcc = 0f
+    private var smokeAcc = 0f
+
+    /** Lava level: flames licking up from braziers, spires and vents near the ball, with dark smoke rolling off them. */
+    private fun lavaAtmosphere(mb: Marble, m: Maze, dt: Float) {
+        if (lamps.isEmpty()) return
+        val cs = m.cellSize
+        val rate = if (profile.particles >= 1) 1f else 0.5f
+        fireAcc += dt * rate; smokeAcc += dt * rate
+        while (fireAcc > 0.025f) {
+            fireAcc -= 0.025f
+            val lp = lamps[rnd.nextInt(lamps.size)]
+            if ((lp - mb.position).length() > cs * 8f) continue
+            val n = mb.surface.normal(lp)
+            val j = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+            val col = Vec3.lerp(Vec3(1f, 0.32f, 0.05f), Vec3(1f, 0.8f, 0.25f), rnd.nextFloat())
+            sparks.emit(lp + j * (cs * 0.12f), n * (cs * (1.2f + 1.4f * rnd.nextFloat())) + j * (cs * 0.4f), 0.5f + 0.5f * rnd.nextFloat(), col, 0.008f + 0.012f * rnd.nextFloat())
+        }
+        while (smokeAcc > 0.12f) {
+            smokeAcc -= 0.12f
+            val lp = lamps[rnd.nextInt(lamps.size)]
+            if ((lp - mb.position).length() > cs * 9f) continue
+            val n = mb.surface.normal(lp)
+            dust.emit(lp + n * (cs * 0.25f), n * (cs * (0.5f + 0.4f * rnd.nextFloat())) + Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f) * (cs * 0.25f),
+                2.2f + rnd.nextFloat(), Vec3(0.16f, 0.13f, 0.13f), 0.03f + 0.03f * rnd.nextFloat())
+        }
+    }
+
     /** Spores drifting up from the mushrooms and a few fireflies, as in the spore demo. */
     private fun glowAtmosphere(mb: Marble, m: Maze, dt: Float) {
+        // every so often a mushroom near the ball puffs a plume of glowing spores high into the air
+        sporeBurstAcc += dt
+        if (sporeBurstAcc > 0.8f && lamps.isNotEmpty()) {
+            sporeBurstAcc = 0f
+            val near = lamps.filter { (it - mb.position).length() < m.cellSize * 7f }
+            if (near.isNotEmpty()) {
+                val lp = near[rnd.nextInt(near.size)]
+                val pn = mb.surface.normal(lp)
+                val base = when (rnd.nextInt(4)) { 0 -> Vec3(0.55f, 1f, 0.36f); 1 -> Vec3(0.3f, 1f, 0.75f); 2 -> Vec3(0.85f, 1f, 0.35f); else -> Vec3(0.25f, 0.88f, 1f) }
+                repeat(if (profile.particles >= 1) 22 else 10) {
+                    val j = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+                    sparks.emit(lp, pn * (m.cellSize * (2.2f + 2.5f * rnd.nextFloat())) + j * (m.cellSize * 0.9f), 2.5f + 1.5f * rnd.nextFloat(), base * (0.8f + 0.4f * rnd.nextFloat()), 0.005f + 0.006f * rnd.nextFloat())
+                }
+            }
+        }
         sporeAcc += dt
         if (sporeAcc < 0.09f) return
         sporeAcc = 0f
@@ -2193,6 +2251,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         Matrix.scaleM(aL, 0, 1f + k, 1f + k, 1f - k * 1.8f)
                         Matrix.rotateM(aL, 0, sp.amp * 3f * kotlin.math.sin(t * sp.speed * 2.1f + ph), 1f, 0f, 0f)
                     }
+                    PropLibrary.Anim.CROWD -> {
+                        // fans bob and cheer; every so often a Mexican wave rolls along the stand (rows rise one after another)
+                        val cheer = 0.02f * maxOf(0f, kotlin.math.sin(t * 7f + off.z * 31f + ph))
+                        val wave = maxOf(0f, kotlin.math.sin(t * 0.9f + ph - off.z * 6f)).let { val w = it * it * it * it; w * w } * 0.07f
+                        Matrix.translateM(aL, 0, 0f, 0f, cheer + wave)
+                    }
                     PropLibrary.Anim.SCREW -> {
                         // the nut winds up the thread and back down: height and turn stay locked together like a real screw
                         val u = 0.5f - 0.5f * kotlin.math.cos(t * sp.speed + ph)
@@ -2214,9 +2278,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Bright pastel levels are toned down so they do not wash out. */
     private var fogClock = 0f
+    private var cutAmt = 0f
     private var fogLast = 0f
 
-    private fun exposure() = when (pal.themeId) { 0 -> 0.74f; 6 -> 0.72f; 18 -> 0.74f; else -> 1f }
+    private fun exposure() = when (pal.themeId) { 0 -> 0.66f; 6 -> 0.64f; 18 -> 0.62f; 12, 13, 14, 5, 2, 3 -> 0.8f; 7, 9, 11, 17 -> 1f; else -> 0.86f }
 
     private fun studPitch() = (maze?.marbleRadius ?: 0.02f) * 1.7f
 

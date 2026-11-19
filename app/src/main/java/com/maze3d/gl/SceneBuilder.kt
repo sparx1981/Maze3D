@@ -185,7 +185,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val eb = b0 + dir * wallHalfThickness
         val len = (eb - ea).length()
         val stripeSegs = if (mode == 1) max(1, Math.round(len / (cs * 0.26f))) else 1
-        val per = if (style == WallStyle.NONE) 1 else max(1, Math.round(len / (cs * (if (style == WallStyle.HEDGE) 0.1f else 0.13f) / wallDetail) / stripeSegs))
+        val per = if (style == WallStyle.NONE) max(1, Math.round(len / (cs * 0.2f) / stripeSegs)) else max(1, Math.round(len / (cs * (if (style == WallStyle.HEDGE) 0.1f else 0.13f) / wallDetail) / stripeSegs))
         val segs = stripeSegs * per
         val nk = prof.size
         val freq = 1f / (cs * 0.16f)
@@ -197,29 +197,35 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val tint = Array(segs + 1) { FloatArray(nk) { 1f } }
         val snow = Array(segs + 1) { FloatArray(nk) }
         val seam = FloatArray(segs + 1)
+        // the wall's mid normal guards against a bad normal at a vertex (closest-point lookups on the knot can latch onto the wrong strand)
+        var nMid = (dir cross (maze.centers[maze.edgeCellR[e]] - maze.centers[maze.edgeCellL[e]])).normalized()       // from the mesh itself: never latches onto another strand
+        if ((nMid dot surface.normal(surface.project((a0 + b0) * 0.5f))) < 0f) nMid = -nMid
+        fun safeN(q: Vec3): Vec3 { val n = surface.normal(q); return if (kotlin.math.abs(n dot dir) > 0.3f || (n dot nMid) < 0.8f) nMid else n }
+        val ringN = arrayOfNulls<Vec3>(segs + 1)
         for (r in 0..segs) {
             val f = r / segs.toFloat()
             val p = if (f <= 0f) ea else if (f >= 1f) eb else surface.project(ea + (eb - ea) * f)
-            val n = surface.normal(if (f <= 0f) a0 else if (f >= 1f) b0 else p)
+            val n = safeN(if (f <= 0f) a0 else if (f >= 1f) b0 else p)
+            ringN[r] = n
             val side = (dir cross n).normalized()
             val taper = kotlin.math.sin(f * PI.toFloat())
             var bend = 0f; var wsc = 1f; var hsc = 1f
             when (style) {
-                WallStyle.ROOT -> { bend = vnoise(p * (freq * 0.5f) + Vec3(3.1f, 0f, 0f)) * 1.8f * taper; wsc = 1f + 0.35f * vnoise(p * freq); hsc = 1f + 0.15f * vnoise(p * (freq * 0.7f) + Vec3(7f, 1f, 2f)) }
+                WallStyle.ROOT -> { bend = vnoise(p * (freq * 0.5f) + Vec3(3.1f, 0f, 0f)) * 1.8f * taper; wsc = 1f + 0.35f * vnoise(p * freq); hsc = 1.08f + 0.12f * vnoise(p * (freq * 0.7f) + Vec3(7f, 1f, 2f)) }
                 WallStyle.HEDGE -> { hsc = 1.05f + 0.16f * vnoise(p * (freq * 0.8f) + Vec3(5f, 2f, 1f)); wsc = 1.12f }
                 WallStyle.ROCK, WallStyle.BLOCKS -> {
                     val cf = f * chunks; val ci = kotlin.math.floor(cf).toInt().coerceAtMost(chunks - 1); val fr = cf - ci
-                    fun hOf(i: Int) = if (style == WallStyle.ROCK) 0.78f + 0.42f * hash(e * 31 + i) else 0.94f + 0.08f * hash(e * 31 + i)
+                    fun hOf(i: Int) = if (style == WallStyle.ROCK) 0.95f + 0.35f * hash(e * 31 + i) else 0.97f + 0.08f * hash(e * 31 + i)
                     fun wOf(i: Int) = if (style == WallStyle.ROCK) 0.95f + 0.4f * hash(e * 17 + i + 500) else 1.03f
                     val edgeK = if (style == WallStyle.ROCK) 0.22f else 0.08f
                     val blendL = (1f - (fr / edgeK).coerceIn(0f, 1f)).let { it * it }
                     val blendR = (1f - ((1f - fr) / edgeK).coerceIn(0f, 1f)).let { it * it }
-                    val sink = if (style == WallStyle.ROCK) 0.55f else 0.85f        // stones round off where they meet
+                    val sink = if (style == WallStyle.ROCK) 0.88f else 0.94f        // stones round off where they meet, but never leave a gap
                     hsc = hOf(ci) * (1f - (1f - sink) * maxOf(blendL, blendR)); wsc = wOf(ci) * (1f - 0.25f * maxOf(blendL, blendR))
                     seam[r] = maxOf(blendL, blendR)
                 }
-                WallStyle.BEADS -> { val b = 0.5f + 0.5f * kotlin.math.cos(f * beads * 2f * PI.toFloat()); wsc = 0.9f + 0.32f * b; hsc = 0.94f + 0.12f * b }
-                WallStyle.PILLOW -> { val b = kotlin.math.abs(kotlin.math.sin(f * beads * PI.toFloat())); wsc = 0.88f + 0.3f * b; hsc = 0.9f + 0.16f * b; seam[r] = 1f - b }
+                WallStyle.BEADS -> { val b = 0.5f + 0.5f * kotlin.math.cos(f * beads * 2f * PI.toFloat()); wsc = 0.95f + 0.3f * b; hsc = 1f + 0.12f * b }
+                WallStyle.PILLOW -> { val b = kotlin.math.abs(kotlin.math.sin(f * beads * PI.toFloat())); wsc = 0.94f + 0.28f * b; hsc = 1f + 0.14f * b; seam[r] = 1f - b }
             }
             for (k in 0 until nk) {
                 val q = prof[k]
@@ -248,8 +254,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         // normals from the deformed grid (around the profile x along the wall)
         fun posAt(r: Int, k: Int) = basePos[r][k]!! + liftV[r][k]!!
         val nrm = Array(segs + 1) { r ->
-            val p0 = if (r <= 0) a0 else if (r >= segs) b0 else basePos[r][0]!!
-            val n = surface.normal(p0)
+            val n = ringN[r]!!
             val side = (dir cross n).normalized()
             Array(nk) { k ->
                 val q = prof[k]
@@ -689,7 +694,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         if (lib.floor.isNotEmpty()) {
             var n = 0
             for (c in 0 until maze.cellCount) {
-                if (c == maze.start || c == maze.goal || hash(c + 4242) > 0.38f || n > 110) continue
+                if (c == maze.start || c == maze.goal || hash(c + 4242) > 0.7f || n > (240 * wallDetail).toInt()) continue
                 val walls = (0..3).map { maze.cellEdges[c * 4 + it] }.filter { maze.isWall(it) }
                 if (walls.isEmpty()) continue
                 val e = walls[(hash(c + 77) * walls.size).toInt().coerceAtMost(walls.size - 1)]

@@ -139,6 +139,7 @@ uniform float uFog;         // distance haze density (chase view)
 uniform float uNight;       // 1 = moonlit night: dim blue light, lamps do the lighting
 uniform vec3 uLampCol;
 uniform float uHedgeSnow;   // 1 = snow dusts the hedges
+uniform float uHiero;       // 1 = Egyptian walls carry painted hieroglyphs
 uniform vec4 uLamp[12];
 uniform vec3 uLampC[12];      // linear colour x strength of each lamp; uLamp holds local-space position (xyz) and reach (w)
 uniform float uLampGain;     // day scenes dim the lamps; night scenes rely on them
@@ -251,6 +252,47 @@ vec4 glyphs(vec2 uv) {
     return vec4(0.0, 0.0, 0.0, m);
 }
 
+// Painted Egyptian hieroglyphs: columns of symbols (ankh, eye, bird, water, sun, reed) in blue, red, ochre and green,
+// outlined in black and framed by column rules. Returns (colour, coverage).
+float sline(vec2 p, vec2 a, vec2 b, float w) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - w; }
+vec4 hiero(vec2 uv) {
+    vec2 id = floor(uv), f = fract(uv) - 0.5;
+    float h = hash21(id + 0.37);
+    int k = int(h * 6.0);
+    float aa = max(fwidth(uv.x), fwidth(uv.y)) * 1.5 + 0.004;
+    float d = 1e3;                                         // signed distance of the symbol
+    vec3 c = vec3(0.12, 0.3, 0.65);
+    if (k == 0) {                                          // ankh
+        d = min(abs(length((f - vec2(0.0, 0.18)) * vec2(1.0, 0.8)) - 0.11) - 0.035, sline(f, vec2(0.0, 0.08), vec2(0.0, -0.4), 0.04));
+        d = min(d, sline(f, vec2(-0.2, 0.02), vec2(0.2, 0.02), 0.04)); c = vec3(0.8, 0.58, 0.16);
+    } else if (k == 1) {                                   // eye of Horus
+        float e = length(f * vec2(1.0, 2.3)) - 0.28;
+        d = abs(e) - 0.03; d = min(d, length(f - vec2(0.02, 0.0)) - 0.06);
+        d = min(d, sline(f, vec2(-0.05, -0.1), vec2(-0.12, -0.36), 0.03)); d = min(d, sline(f, vec2(0.06, -0.1), vec2(0.2, -0.3), 0.025));
+        c = vec3(0.12, 0.3, 0.65);
+    } else if (k == 2) {                                   // bird (ibis)
+        d = length((f - vec2(0.02, -0.02)) * vec2(1.0, 1.6)) - 0.18;
+        d = min(d, length(f - vec2(0.18, 0.2)) - 0.07); d = min(d, sline(f, vec2(0.22, 0.2), vec2(0.36, 0.08), 0.02));
+        d = min(d, sline(f, vec2(0.0, -0.12), vec2(-0.04, -0.42), 0.018)); d = min(d, sline(f, vec2(0.06, -0.12), vec2(0.08, -0.42), 0.018));
+        d = min(d, sline(f, vec2(-0.14, 0.0), vec2(-0.34, -0.12), 0.04)); c = vec3(0.1, 0.45, 0.35);
+    } else if (k == 3) {                                   // water: three zigzags
+        for (int i = 0; i < 3; i++) { float y = -0.22 + float(i) * 0.22; float zz = abs(fract((f.x + 0.5) * 4.0) - 0.5) * 0.12; d = min(d, abs(f.y - y - zz) - 0.022); }
+        d = max(d, abs(f.x) - 0.38); c = vec3(0.12, 0.3, 0.65);
+    } else if (k == 4) {                                   // sun disk with a cobra
+        d = length(f - vec2(0.0, 0.08)) - 0.2; d = min(d, abs(length(f - vec2(0.0, 0.08)) - 0.26) - 0.02);
+        d = min(d, sline(f, vec2(-0.08, -0.2), vec2(0.08, -0.38), 0.03)); c = vec3(0.75, 0.16, 0.1);
+    } else {                                               // reed / feather
+        d = length((f - vec2(0.0, 0.0)) * vec2(3.2, 1.0)) - 0.4; d = max(d, -sline(f, vec2(0.0, -0.4), vec2(0.0, 0.4), 0.012));
+        c = vec3(0.8, 0.58, 0.16);
+    }
+    float fill = 1.0 - smoothstep(-aa, aa, d);
+    float outline = 1.0 - smoothstep(0.0, aa, abs(d) - 0.012);
+    vec3 col = mix(c, vec3(0.05, 0.04, 0.03), outline * 0.85);
+    float rule = 1.0 - smoothstep(0.0, aa, abs(abs(f.x) - 0.47) - 0.012);   // column rules
+    col = mix(col, vec3(0.08, 0.06, 0.04), rule * (1.0 - fill));
+    return vec4(col, max(fill, rule * 0.9) * step(0.12, h));
+}
+
 // 2/2 twill carbon weave on one plane. Returns (tone, direction) with distance-based fade.
 vec2 weave(vec2 uv) {
     vec2 g = uv / 0.011;
@@ -283,16 +325,17 @@ float sandH(vec2 uv, float cell) {
 uniform vec4 uCutA;          // follow view see-through: xyz = camera (world), w = 1 when on
 uniform vec4 uCutB;          // xyz = ball (world), w = radius of the cut-away tunnel
 void main() {
-    if (uCutA.w > 0.5) {                                   // anything between the camera and the ball is cut away like a clipping tunnel
+    if (uCutA.w > 0.01) {                                  // only while the shape hides the ball: a soft-edged see-through window toward it
         vec3 ab = uCutB.xyz - uCutA.xyz;
         float L = length(ab);
         vec3 d = ab / max(L, 1e-5);
         float t = dot(vWorld - uCutA.xyz, d);
-        float keep = uCutB.w * 1.1;                          // the ball's own neighbourhood stays
+        float keep = uCutB.w * 0.9;                          // the ball's own neighbourhood stays
         if (t > 0.0 && t < L - keep) {
             float r = length(vWorld - uCutA.xyz - d * t);
-            float rad = uCutB.w * (0.55 + 0.45 * smoothstep(0.0, L * 0.6, t));
-            if (r < rad) discard;
+            float rad = uCutB.w * uCutA.w;
+            float k = smoothstep(rad * 0.55, rad, r);          // 0 inside .. 1 outside, with a dithered fringe
+            if (k < hash21(floor(gl_FragCoord.xy * 0.5))) discard;
         }
     }
     for (int i = 0; i < 48; i++) {                         // real holes: the floor is cut away
@@ -450,6 +493,13 @@ void main() {
         albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
         hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
         rough = 0.86;
+        if (uHiero > 0.5) {
+            vec3 an = abs(normalize(vNL));
+            vec2 sq = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);
+            vec4 g = hiero(sq * 34.0);
+            albedo = mix(albedo, pow(g.rgb, vec3(2.2)) * (0.85 + 0.3 * n1), g.a * 0.92);    // painted, a little worn
+            hgt -= g.a * 0.00035;                                                        // and lightly carved
+        }
     } else if (uMat == 23) {    // snow-capped hedge: dense leaf clumps with powder on top
         float leaf = vnoise(vec2(dot(P, vec3(190.0, 110.0, 150.0)), dot(P, vec3(-90.0, 170.0, 120.0))));
         float clump = vnoise(vec2(dot(P, vec3(42.0, 24.0, 32.0)), dot(P, vec3(-20.0, 38.0, 28.0))));
@@ -1446,12 +1496,12 @@ void main() {
         vec3 col;
         if (gas) col = mix(vec3(0.20, 0.46, 0.05), vec3(0.72, 0.95, 0.24), n) * (shade + fwd) + vec3(0.08, 0.26, 0.02) * dens;
         else col = mix(vec3(0.60, 0.66, 0.75), vec3(0.97, 0.98, 1.0), n * 0.6 + h * 0.4) * (shade + fwd);
-        float total = clamp(dens * (gas ? 0.88 : 0.93), 0.0, 0.98);
+        float total = clamp(dens * (gas ? 0.88 : 0.97), 0.0, 0.985);
         float alpha = 1.0 - pow(1.0 - total, 1.0 / max(uLayers * 0.55, 1.0));  // the stack of slices adds up to the target density
         alpha *= mix(0.35, 1.0, smoothstep(0.02, 0.3, abs(dot(N, V))));       // slices seen edge-on would show as bands: thin them out
-        float nearV = smoothstep(uNear * 0.12, uNear * 0.6, distance(uCam, vWorld));          // only the slices right at the lens fade
+        float nearV = gas ? smoothstep(uNear * 0.12, uNear * 0.6, distance(uCam, vWorld)) : smoothstep(uNear * 0.04, uNear * 0.25, distance(uCam, vWorld));   // only the slices right at the lens fade
         float bubble = gas ? mix(0.3, 1.0, smoothstep(0.5, 1.8, length(vLocal - uMarbleP) * uScale))
-                           : mix(0.06, 1.0, smoothstep(0.7 + 0.5 * uMarbleSp, 2.3 + 0.6 * uMarbleSp, length(vLocal - uMarbleP) * uScale));   // a clear pocket around the ball
+                           : mix(0.1, 1.0, smoothstep(0.3 + 0.3 * uMarbleSp, 1.25 + 0.5 * uMarbleSp, length(vLocal - uMarbleP) * uScale));   // a small clear pocket around the ball
         outColor = vec4(finish(col, gl_FragCoord.xy), clamp(alpha, 0.0, 0.95) * nearV * bubble);
     }
 }

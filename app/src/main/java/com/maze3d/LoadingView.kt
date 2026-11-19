@@ -166,6 +166,37 @@ class LoadingView(context: Context, private val title: String = "MARBLIX", priva
     private var slowAcc = 0f
     private var quality = 1f
 
+    /** A random surface and ball from the game for this loading screen: floor, wall and wall-edge colours, then two ball colours and its kind (0 glass, 1 painted). */
+    private val look: FloatArray = run {
+        val rnd = java.util.Random()
+        val pal = com.maze3d.gl.Palette.themes.let { it[rnd.nextInt(it.size)] }
+        val top = pal.wallTop ?: pal.accent
+        val balls = arrayOf(
+            floatArrayOf(0.2f, 0.75f, 1f, 1f, 0.72f, 0.28f, 0f),          // glass marble
+            floatArrayOf(1f, 0.3f, 0.6f, 0.3f, 0.7f, 1f, 1f),            // gobstopper
+            floatArrayOf(0.96f, 0.94f, 0.9f, 1f, 0.55f, 0.1f, 1f),       // sugar skull
+            floatArrayOf(0.08f, 0.08f, 0.09f, 0.3f, 0.3f, 0.32f, 1f),    // tyre
+            floatArrayOf(0.97f, 0.97f, 0.97f, 0.08f, 0.08f, 0.09f, 1f),  // football
+            floatArrayOf(0.5f, 0.3f, 1f, 0.9f, 0.6f, 1f, 0f),            // plasma
+            floatArrayOf(0.85f, 0.55f, 0.2f, 0.3f, 0.7f, 0.2f, 1f),      // bun
+            floatArrayOf(0.3f, 1f, 0.8f, 0.2f, 0.5f, 1f, 0f),            // science orb
+            floatArrayOf(0.95f, 0.97f, 1f, 0.7f, 0.85f, 1f, 1f),         // snowball
+            floatArrayOf(1f, 0.8f, 0.3f, 0.15f, 0.3f, 0.8f, 1f),         // gold scarab
+            floatArrayOf(1f, 0.2f, 0.8f, 0.2f, 0.9f, 1f, 0f),            // neon globe
+            floatArrayOf(0.45f, 0.5f, 0.42f, 0.3f, 0.6f, 0.25f, 1f),     // mossy stone
+            floatArrayOf(0.3f, 1f, 0.55f, 0.1f, 0.3f, 0.2f, 0f),         // glow orb
+            floatArrayOf(0.9f, 0.5f, 0.1f, 0.6f, 0.2f, 0.05f, 1f),       // autumn leaf
+            floatArrayOf(0.95f, 0.15f, 0.15f, 0.1f, 0.35f, 0.95f, 1f),   // toy ball
+            floatArrayOf(0.9f, 0.3f, 0.5f, 0.3f, 0.7f, 0.8f, 1f),        // yarn
+            floatArrayOf(1f, 0.6f, 0.15f, 0.6f, 0.3f, 0.05f, 0f),        // amber
+            floatArrayOf(0.85f, 0.87f, 0.9f, 0.5f, 0.52f, 0.56f, 1f),    // ball bearing
+            floatArrayOf(1f, 0.4f, 0.05f, 0.05f, 0.03f, 0.03f, 1f),      // molten core
+            floatArrayOf(1f, 0.25f, 0.5f, 1f, 0.7f, 0.15f, 0f),          // gummy
+            floatArrayOf(0.95f, 0.15f, 0.15f, 1f, 0.85f, 0.1f, 1f))      // beach ball
+        val b = balls[rnd.nextInt(balls.size)]
+        floatArrayOf(pal.floor.x, pal.floor.y, pal.floor.z, pal.wall.x, pal.wall.y, pal.wall.z, top.x, top.y, top.z, b[0], b[1], b[2], b[3], b[4], b[5], b[6])
+    }
+
     /** GPU-shader scene on Android 13+; returns false if it is unavailable so the Canvas animation runs instead. */
     private fun drawShader(c: Canvas, w: Float, h: Float): Boolean {
         if (Build.VERSION.SDK_INT < 33 || shaderFailed) return false
@@ -179,6 +210,9 @@ class LoadingView(context: Context, private val title: String = "MARBLIX", priva
             sh.setFloatUniform("uRes", w, h)
             sh.setFloatUniform("uTime", t)
             sh.setFloatUniform("uQ", quality)
+            val L = look
+            sh.setFloatUniform("uFloorA", L[0], L[1], L[2]); sh.setFloatUniform("uWall", L[3], L[4], L[5]); sh.setFloatUniform("uWallTop", L[6], L[7], L[8])
+            sh.setFloatUniform("uBallA", L[9], L[10], L[11]); sh.setFloatUniform("uBallB", L[12], L[13], L[14]); sh.setFloatUniform("uBallKind", L[15])
             p.reset(); p.isAntiAlias = false; p.shader = sh
             c.drawRect(0f, 0f, w, h, p)
             p.shader = null

@@ -1292,6 +1292,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     // ---- renderer callbacks (GL thread) -------------------------------------------------
+    private var wrongWay: TextView? = null
+    private var wrongEdge: View? = null
+
     override fun onHud(shape: String, seconds: Int, solved: Boolean, percent: Int, stray: Int) {
         runOnUiThread {
             title.text = shape.uppercase()
@@ -1301,6 +1304,30 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             val (col, glow) = when { stray >= 12 -> Color.rgb(255, 70, 60) to 1f; stray >= 6 -> Color.rgb(255, 150, 40) to 0.8f; stray >= 2 -> Color.rgb(255, 214, 64) to 0.6f; else -> Color.argb(210, 255, 255, 255) to 0f }
             pctText.setTextColor(col)
             pctText.setShadowLayer(if (glow > 0f) 22f * glow else 10f, 0f, 0f, if (glow > 0f) col else Color.argb(170, 0, 0, 0))
+            // a big, unmissable warning once the ball is clearly heading the wrong way, plus a red glow round the screen edge
+            val ww = wrongWay ?: TextView(this).apply {
+                text = "WRONG WAY"; setTextColor(Color.WHITE); textSize = 26f; letterSpacing = 0.18f
+                typeface = Typeface.create("sans-serif-black", Typeface.BOLD); gravity = Gravity.CENTER
+                setPadding(dp(22f), dp(10f), dp(22f), dp(10f)); alpha = 0f
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(30f).toFloat(); setColor(Color.argb(210, 220, 40, 40)) }
+                (hudLayer as? FrameLayout)?.addView(this, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(150f) })
+                wrongWay = this
+            }
+            val edge = wrongEdge ?: View(this).apply {
+                background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(150, 255, 30, 30), Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(150, 255, 30, 30)))
+                alpha = 0f
+                (hudLayer as? FrameLayout)?.addView(this, 0, FrameLayout.LayoutParams(-1, -1))
+                wrongEdge = this
+            }
+            val warn = stray >= 4 && !solved
+            if (warn) {
+                val pulse = 0.65f + 0.35f * kotlin.math.abs(kotlin.math.sin(System.currentTimeMillis() / 180.0)).toFloat()
+                ww.alpha = pulse; ww.scaleX = 0.95f + 0.1f * pulse; ww.scaleY = ww.scaleX
+                edge.alpha = (if (stray >= 12) 1f else 0.6f) * pulse
+                pctText.scaleX = 1.35f; pctText.scaleY = 1.35f
+            } else {
+                ww.alpha = 0f; edge.alpha = 0f; pctText.scaleX = 1f; pctText.scaleY = 1f
+            }
             banner.animate().alpha(if (solved) 1f else 0f).setDuration(350).start()
         }
     }

@@ -14,7 +14,7 @@ object PropLibrary {
     private fun glow(v: Vec3, k: Float) = v * k
 
     /** How a placed prop (or a part of it) moves. Parts are drawn at each offset in [at], in the prop's own units. */
-    object Anim { const val SPIN = 0; const val BOB = 1; const val SWAY = 2; const val FLICKER = 3; const val WOBBLE = 4; const val NOD = 5; const val SCREW = 6 }
+    object Anim { const val SPIN = 0; const val BOB = 1; const val SWAY = 2; const val FLICKER = 3; const val WOBBLE = 4; const val NOD = 5; const val SCREW = 6; const val CROWD = 7 }
     class AnimSpec(val part: PropMesh, val type: Int, val speed: Float = 1f, val amp: Float = 1f, val whole: Boolean = false,
                    val at: List<Vec3> = listOf(Vec3.ZERO), val pivotZ: Float = 0f)
     /** A small flock circling above the maze: body plus two flapping wings (left wing along +y, right along -y). */
@@ -35,18 +35,22 @@ object PropLibrary {
 
     private fun build(id: Int): ThemeProps = when (id) {
         0 -> { val lp = lollipop(); val cc = candyCane()
+            val fp = fruitPastilles(); val ws = wrappedSweet(); val lw = liquoriceWheel(); val cn = candyCorn()
             ThemeProps(gumdrop(), cupcake(), lp, cc, allsortsPile(), allsortLayered(0.5f),
-                mapOf(whole(lp, Anim.SPIN, 0.6f), whole(cc, Anim.SPIN, 0.25f)), butterfly(c(255, 120, 200), c(120, 220, 255))) }
+                mapOf(whole(lp, Anim.SPIN, 0.6f), whole(cc, Anim.SPIN, 0.25f), whole(lw, Anim.SPIN, 0.5f), whole(ws, Anim.WOBBLE, 1f, 0.6f)), butterfly(c(255, 120, 200), c(120, 220, 255)),
+                listOf(fp, ws, lw, cn), junctionMore = listOf(fp, cn, ws)) }
         1 -> { val mg = marigold(); val cv = candleVotive(); val cb = candelabra()
             ThemeProps(mg, sugarSkull(), cv, cb, null, null,
                 mapOf(whole(mg, Anim.SWAY, 1f, 1.2f), part(cv, flame(0.05f, 0.22f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.55f))),
                     part(cb, flame(0.032f, 0.13f), Anim.FLICKER, listOf(Vec3(-0.3f, 0f, 0.94f), Vec3(0f, 0f, 0.94f), Vec3(0.3f, 0f, 0.94f)))),
                 butterfly(c(255, 130, 20), c(40, 20, 10))) }
         2 -> { val tr = trophy(); val fp = flagPole()
-            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f))) }
+            val gs = grandstand(c(220, 30, 30), c(250, 250, 250), c(30, 30, 34))
+            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f), crowdSpec(gs)), null, listOf(gs, gs)) }
         3 -> { val cf = cornerFlag(); val fb = football(); val tr = trophy()
-            ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(whole(cf, Anim.SWAY, 1.8f, 1.6f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f)),
-                bird(c(250, 250, 250), c(200, 200, 205), 5, 0.5f, 3.2f, 7f)) }
+            val gs = grandstand(c(40, 90, 220), c(250, 214, 40), c(40, 140, 60))
+            ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(whole(cf, Anim.SWAY, 1.8f, 1.6f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f), crowdSpec(gs)),
+                bird(c(250, 250, 250), c(200, 200, 205), 5, 0.5f, 3.2f, 7f), listOf(gs, gs)) }
         4 -> { val ds = dish(); val rk = rocket()
             val mr = moonRover()
             ThemeProps(beacon(), ds, canister(), rk, mr, null,
@@ -73,7 +77,7 @@ object PropLibrary {
                 mapOf(whole(fn, Anim.SWAY, 1.1f, 1.4f), whole(mk, Anim.BOB, 1.2f, 1f), whole(bn, Anim.SWAY, 0.9f, 1.3f), whole(bb, Anim.SWAY, 0.7f, 1.2f),
                     whole(ms, Anim.SWAY, 1f, 1.2f), whole(hl, Anim.SWAY, 1.1f, 1.3f), whole(br, Anim.SWAY, 1.2f, 0.8f), whole(jt2, Anim.SWAY, 0.7f, 0.8f),
                     part(jt, sn, Anim.SWAY, listOf(Vec3(0.26f * cos(0.4f), 0.26f * sin(0.4f), 0.76f)), 0.8f, 2.5f)),
-                parrot(), listOf(bn, bb, ms, hl, jt2), junctionMore = listOf(bn, ms, hl, bb), floor = listOf(fn, br, ms, hl), birds2 = toucan(), junctionShare = 0.6f) }
+                parrot(), listOf(bn, bb, ms, hl, jt2), junctionMore = listOf(bn, ms, hl, bb), floor = listOf(fn, br, ms, hl, bb, jt2, fn, br), birds2 = toucan(), junctionShare = 0.85f) }
         11 -> { val gb = glowBell(); val gc = glowCluster(); val gp = glowParasol(); val gg = glowGiant(); val bn = bonnets(); val ik = inkcap()
             ThemeProps(gb, gc, gp, gg, bn, ik, mapOf(whole(gb, Anim.SWAY, 0.5f, 0.6f), whole(gc, Anim.SWAY, 0.6f, 0.5f), whole(gp, Anim.SWAY, 0.45f, 0.7f),
                 whole(bn, Anim.SWAY, 0.7f, 0.6f), whole(ik, Anim.SWAY, 0.55f, 0.6f))) }
@@ -867,8 +871,6 @@ object PropLibrary {
         col = c(90, 110, 40); tube(listOf(Vec3(0f, 0f, 0.36f), Vec3(0.02f, 0f, 0.46f), Vec3(0.07f, 0.02f, 0.5f)), 0.03f, 8, taper = { 1f - 0.4f * it })
         tube(listOf(Vec3(0.02f, 0f, 0.44f), Vec3(-0.05f, 0.06f, 0.46f), Vec3(-0.08f, 0.02f, 0.5f), Vec3(-0.05f, -0.02f, 0.48f)), 0.006f, 4)
         col = c(70, 130, 40); push(); translate(-0.08f, -0.08f, 0.38f); rotZ(-0.8f); rotY(0.4f); scale(1f, 0.6f, 0.08f); sphere(0.09f, 10, 6); pop()
-        col = c(240, 220, 120); at(0.32f, 0.12f, 0.07f) { scale(1f, 1f, 0.8f); sphere(0.08f, 12, 8) }; at(0.37f, 0.15f, 0.15f) { sphere(0.05f, 10, 8) }
-        col = c(90, 140, 60); at(0.32f, 0.12f, 0.13f) { scale(0.6f, 1f, 0.3f); sphere(0.06f, 8, 6) }
     }.build()
 
     private fun leafPile() = PM().apply {
@@ -1466,4 +1468,70 @@ object PropLibrary {
         val (l, r) = wingPair(0.28f, 0.15f, c(24, 24, 28), c(30, 30, 36), 0.5f)
         return Bird(body, l, r, 4, 0.6f, 2.0f, 7f, glide = true)
     }
+
+    // ---------------------------------------------------------------- stadium
+    /** Concrete stepped grandstand facing +y, with a roof on posts and advertising boards. The crowd is separate (animated rows). */
+    private fun grandstand(seatA: Vec3, seatB: Vec3, board: Vec3) = PM().apply {
+        val conc = c(170, 172, 180)
+        for (r in 0 until 4) {                           // four tiers, each a step up and back
+            val top = 0.1f + 0.16f * r
+            col = conc; push(); translate(0f, 0.18f - r * 0.13f, top * 0.5f); box(1.0f, 0.13f, top); pop()
+            col = if (r % 2 == 0) seatA else seatB
+            for (k in 0 until 9) { push(); translate(-0.44f + k * 0.11f, 0.18f - r * 0.13f + 0.03f, top + 0.015f); box(0.09f, 0.05f, 0.03f); pop() }
+        }
+        col = conc * 0.8f; push(); translate(0f, -0.25f, 0.3f); box(1.0f, 0.06f, 0.6f); pop()                    // back wall
+        col = c(80, 84, 94); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.49f, -0.25f, 0.42f); box(0.03f, 0.03f, 0.84f); pop() }
+        col = c(230, 232, 238); push(); translate(0f, -0.06f, 0.86f); rotX(-0.18f); box(1.08f, 0.5f, 0.025f); pop()        // roof
+        col = board; push(); translate(0f, 0.33f, 0.05f); box(1.0f, 0.02f, 0.1f); pop()
+        col = c(250, 250, 250); for (k in 0 until 4) { push(); translate(-0.36f + k * 0.24f, 0.341f, 0.05f); box(0.12f, 0.004f, 0.04f); pop() }
+    }.build()
+
+    /** One row of spectators (heads and shoulders in mixed shirt colours), to sit on a tier; animated to cheer and do the wave. */
+    private fun crowdRow() = PM().apply {
+        val shirts = listOf(c(220, 40, 40), c(40, 90, 220), c(250, 214, 40), c(250, 250, 250), c(40, 160, 70), c(240, 120, 30))
+        val skins = listOf(c(240, 200, 160), c(200, 150, 110), c(150, 100, 70), c(110, 70, 50))
+        for (k in 0 until 9) {
+            val x = -0.44f + k * 0.11f
+            col = shirts[(k * 5 + 3) % shirts.size]; at(x, 0f, 0.04f) { scale(1f, 0.7f, 1.1f); sphere(0.04f, 8, 6) }
+            col = skins[(k * 3) % skins.size]; at(x, 0f, 0.1f) { sphere(0.026f, 8, 6) }
+            if (k % 3 == 0) { col = shirts[(k + 2) % shirts.size]; tube(listOf(Vec3(x + 0.03f, 0f, 0.07f), Vec3(x + 0.05f, 0f, 0.14f)), 0.008f, 4) }      // a raised arm / scarf
+        }
+    }.build()
+    private fun crowdSpec(host: PropMesh) = part(host, crowdRow(), Anim.CROWD, (0 until 4).map { r -> Vec3(0f, 0.18f - r * 0.13f - 0.01f, 0.13f + 0.16f * r) }, 1f, 1f)
+
+    // ---------------------------------------------------------------- sweets
+    private fun fruitPastilles() = PM().apply {
+        // a little stack of sugar-dusted fruit gums in different flavours
+        val cols = listOf(c(230, 40, 50), c(250, 160, 30), c(130, 200, 50), c(250, 220, 60), c(150, 60, 170))
+        for (i in 0 until 6) {
+            val a = i * 1.1f; val r = if (i < 3) 0.12f else 0.06f; val z = if (i < 3) 0f else 0.11f + 0.11f * (i - 3) * 0.5f
+            col = cols[i % cols.size] * 1.1f
+            push(); translate(cos(a) * r, sin(a) * r, z); rotX(0.15f * (i % 2)); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.13f, 0.005f), floatArrayOf(0.15f, 0.05f), floatArrayOf(0.13f, 0.1f), floatArrayOf(0f, 0.105f)), 18) { u, v -> cols[i % cols.size] * (if (((u * 41f + v * 17f) * 13f % 1f) > 0.85f) 1.5f else 1.1f) }
+            pop()
+        }
+    }.build()
+
+    private fun wrappedSweet() = PM().apply {
+        // a boiled sweet in a twisted foil wrapper
+        col = c(250, 60, 120); push(); translate(0f, 0f, 0.16f); rotY((PI / 2).toFloat()); scale(1f, 1f, 1.4f); sphere(0.15f, 16, 10); pop()
+        col = c(255, 255, 255); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.2f, 0f, 0.16f); rotY(s * (PI / 2).toFloat()); cone(0.04f, 0.04f, 10); pop()
+            push(); translate(s * 0.24f, 0f, 0.16f); rotY(-s * (PI / 2).toFloat()); lathe(listOf(floatArrayOf(0.01f, 0f), floatArrayOf(0.14f, 0.12f), floatArrayOf(0.12f, 0.13f)), 10, false) { u, _ -> if ((u * 10f).toInt() % 2 == 0) c(255, 220, 240) else c(250, 60, 120) }; pop() }
+        col = c(255, 230, 245); for (k in 0 until 4) at(0f, -0.13f, 0.12f + k * 0.03f) { box(0.18f, 0.006f, 0.008f) }
+    }.build()
+
+    private fun liquoriceWheel() = PM().apply {
+        // a liquorice wheel with a pink sweet in the middle, standing on its edge
+        push(); translate(0f, 0f, 0.3f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.06f)
+        col = c(20, 18, 22); for (k in 0 until 8) torus(0.05f + k * 0.03f, 0.016f, 24, 5)
+        col = c(255, 120, 180) * 1.1f; cylinder(0.05f, 0.12f, 14)
+        pop()
+        col = c(20, 18, 22); push(); translate(0f, 0f, 0.02f); box(0.2f, 0.14f, 0.04f); pop()
+    }.build()
+
+    private fun candyCorn() = PM().apply {
+        for (i in 0 until 3) { val a = i * 2.1f
+            push(); translate(cos(a) * 0.12f, sin(a) * 0.12f, 0f); rotZ(a)
+            lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.12f, 0.0f), floatArrayOf(0.1f, 0.15f), floatArrayOf(0.05f, 0.32f), floatArrayOf(0f, 0.36f)), 10) { _, v -> if (v < 0.35f) c(255, 220, 60) else if (v < 0.7f) c(255, 140, 30) else c(255, 255, 250) }
+            pop() }
+    }.build()
 }
