@@ -392,11 +392,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private fun followDist(): Float {
         val mb = marble ?: return camDist
         val m = maze ?: return camDist
+        val ballZ = orient.rotate(mb.position).z
         val aspect = width.toFloat() / height
         val tanMin = min(tan(Math.toRadians(19.0)).toFloat(), tan(Math.toRadians(19.0)).toFloat() * aspect)
         val r = kind.outerRadius * 1.12f
         val far = (r / tanMin + r) * 1.6f
-        val close = mb.position.length() + m.cellSize * 2.6f
+        val close = ballZ + m.cellSize * 2.6f                 // the camera ends up a few cells above the ball itself
         val t = zoomV * zoomV * (3f - 2f * zoomV)
         return far + (close - far) * t
     }
@@ -409,6 +410,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         if (!wantChase && chaseBlend < 0.003f) chaseBlend = 0f
         var eyeV = Vec3(0f, 0f, camDist)
         var tgt = Vec3.ZERO
+        if (cameraMode == 1 && marble != null && phase != Phase.MENU) {
+            // follow view: zooming in closes on the ball, not on the middle of the piece (the view axis slides over to the ball)
+            val w = orient.rotate(marble!!.position)
+            val zt = zoomV * zoomV * (3f - 2f * zoomV)
+            eyeV = Vec3(w.x * zt, w.y * zt, camDist)
+            tgt = Vec3(w.x * zt, w.y * zt, 0f)
+        }
         var up = Vec3(0f, 1f, 0f)
         var fov = 38f
         var near = 0.1f
@@ -877,13 +885,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         if (followOn && !dragging && phase == Phase.PLAY && !paused && time - lastTouchAt > 1.0f) {
             val n = mb.surface.normal(mb.position)
-            val local = (mb.position.normalized() * 0.5f + n * 0.5f).normalized()
+            val local = com.maze3d.core.FollowView.pick(mb.surface, mb.position, n, orient.inverseRotate(Vec3(0f, 0f, 1f)))
             val w = orient.rotate(local)
             val dotz = w.z.coerceIn(-1f, 1f)
             val ang = kotlin.math.acos(dotz)
             if (ang > 0.01f) {
                 val axis = w cross Vec3(0f, 0f, 1f)
-                val step = min(ang * (1f - exp(-3.2f * dt)), 2.4f * dt)
+                val step = min(ang * (1f - exp(-4.5f * dt)), 3.4f * dt)
                 if (axis.lengthSq() > 1e-10f) orient = (Quat.fromAxisAngle(axis, step) * orient).normalized()
                 angVel = Vec3.ZERO
             }
@@ -1678,7 +1686,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val kk = ease01(chaseBlend)
             val mbw = marble?.let { orient.rotate(it.position) }
             val chaseFocus = if (mbw != null) (eye - mbw).length() else camDist
-            pp.focus = camDist + (chaseFocus - camDist) * kk
+            pp.focus = if (cameraMode == 1 && mbw != null && phase != Phase.MENU) chaseFocus else camDist + (chaseFocus - camDist) * kk
             pp.focusRange = kind.outerRadius * 1.1f + (0.9f - kind.outerRadius * 1.1f) * kk
             pp.time = time
             pp.cloudOn = cloudsOn

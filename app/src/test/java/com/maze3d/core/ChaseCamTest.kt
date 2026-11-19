@@ -120,3 +120,25 @@ class ChaseCamTest {
         for (kind in listOf(ShapeKind.TORUS, ShapeKind.SPHERE, ShapeKind.CUBE)) for (zoom in floatArrayOf(0.3f, 0.67f, 1f)) for (seed in 1L..3L) assertTrue("$kind zoom $zoom seed $seed lost the ball", playLost(kind, seed, zoom, false, true) == 0f)
     }
 }
+
+class FollowViewTest {
+    @Test
+    fun ballIsAlwaysSeenFromAClearSide() {
+        for (kind in listOf(ShapeKind.TORUS, ShapeKind.SPHERE, ShapeKind.CUBE, ShapeKind.CAPSULE, ShapeKind.KNOT)) {
+            val maze = Maze(kind.createMesh(), 2)
+            val s = maze.mesh.surface
+            var cur = Vec3(0f, 0f, 1f)
+            var blocked = 0
+            for (c in maze.solution) {
+                val p = maze.centers[c] + s.normal(maze.centers[c]) * maze.marbleRadius
+                val n = s.normal(p)
+                val d = FollowView.pick(s, p, n, cur)
+                assertTrue("${kind.label}: viewer side faces the ball", (n dot d) > 0.2f)
+                if (!FollowView.clear(s, p, n, d)) blocked++
+                cur = d
+            }
+            println("FOLLOWVIEW ${kind.label} blocked=$blocked/${maze.solution.size}")
+            assertTrue("${kind.label}: view blocked too often", blocked <= maze.solution.size / 20)
+        }
+    }
+}
