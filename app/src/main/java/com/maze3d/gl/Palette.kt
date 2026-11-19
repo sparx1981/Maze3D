@@ -13,7 +13,7 @@ object Mat {
 }
 
 /** Wall cross-sections. */
-object Profile { const val ROUND = 0; const val SQUARE = 1; const val KERB = 2; const val TAPER = 3; const val TUBE = 4; const val BLOCK = 5; const val FLAT = 6 }
+object Profile { const val ROUND = 0; const val SQUARE = 1; const val KERB = 2; const val TAPER = 3; const val TUBE = 4; const val BLOCK = 5; const val FLAT = 6; const val ARMCO = 7 }
 
 /** Backdrop styles drawn behind the piece. */
 object Backdrop { const val STUDIO = 0; const val STARS = 1; const val SKY = 2; const val NEON = 3; const val BOKEH = 4; const val AURORA = 5; const val SHAFTS = 6; const val CITY = 7 }
@@ -73,10 +73,10 @@ class Palette(
                 floor2 = c(255, 140, 20), wall2 = c(232, 222, 198), profile = Profile.TUBE, knobs = true,
                 backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 1),
             // 2 Motorsport: asphalt, red-and-white kerbs
-            Palette("Motorsport", c(54, 56, 60), Mat.ASPHALT, 0.8f, c(242, 242, 242), Mat.ENAMEL, 0.35f,
+            Palette("Motorsport", c(54, 56, 60), Mat.ASPHALT, 0.8f, c(196, 202, 212), Mat.BRUSHED, 0.32f,
                 c(120, 160, 215), c(26, 30, 40), c(255, 62, 48), c(255, 220, 0),
-                wall2 = c(220, 30, 34), profile = Profile.KERB, stripes = true,
-                backdrop = Backdrop.SKY, wallMetal = 0f, themeId = 2),
+                wall2 = c(186, 192, 202), profile = Profile.ARMCO,
+                backdrop = Backdrop.SKY, wallMetal = 0.85f, themeId = 2),
             // 3 Football: mown grass, white pitch lines
             Palette("Football", c(46, 150, 56), Mat.TURF, 0.9f, c(250, 250, 250), Mat.ENAMEL, 0.5f,
                 c(110, 176, 240), c(14, 44, 24), c(255, 232, 80), c(255, 80, 60),

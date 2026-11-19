@@ -635,10 +635,11 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     }
 
     private fun selectedShape(): ShapeKind? = if (selShape == 0) null else ShapeKind.values()[selShape - 1]
+    private fun isStormSel() = com.maze3d.core.Progress.MENU_KEYS.getOrNull(selSurface) == "storm"
     private fun selectedTerrain(): Terrain? = when (selSurface) { 0 -> null; 2 -> Terrain.SAND; 3 -> Terrain.MUD; else -> Terrain.NONE }
-    private fun selectedMedium(): Medium? = when (selSurface) { 0 -> null; 4 -> Medium.WATER; 5 -> Medium.FOG; 6 -> Medium.GAS; else -> Medium.NONE }
+    private fun selectedMedium(): Medium? = if (isStormSel()) Medium.STORM else when (selSurface) { 0 -> null; 4 -> Medium.WATER; 5 -> Medium.FOG; 6 -> Medium.GAS; else -> Medium.NONE }
     /** null = random, -1 = a classic finish, 0.. = surface theme. */
-    private fun selectedTheme(): Int? = when (selSurface) { 0 -> null; in 1..6 -> -1; else -> selSurface - 7 }
+    private fun selectedTheme(): Int? = if (isStormSel()) null else when (selSurface) { 0 -> null; in 1..6 -> -1; else -> selSurface - 7 }
 
     /** Show the chosen level behind the menu as soon as an option changes. */
     private fun previewSelection() {
@@ -1076,7 +1077,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private lateinit var stats: com.maze3d.core.Stats
     private lateinit var progPrefsRef: android.content.SharedPreferences
     private var lastStatFlush = 0L
-    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava", "Jelly")
+    private val surfaceNames = listOf("Random", "Classic", "Sand", "Mud", "Water", "Fog", "Gas", "Candy", "Dead", "Racing", "Football", "Space", "Food", "Science", "Ice", "Egypt", "Neon", "Jungle", "Glow", "Fall", "Toys", "Craft", "Prehist.", "Tools", "Lava", "Jelly", "Storm")
 
     private fun mazesText(n: Int) = if (n <= 1) "Finish 1 more maze" else "Finish $n more mazes"
 

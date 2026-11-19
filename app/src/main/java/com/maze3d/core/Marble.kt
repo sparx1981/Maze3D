@@ -110,7 +110,7 @@ class Marble(private val maze: Maze) {
         val e = studPitch * 0.12f
         val g1 = (studH(p + t1 * e, n) - studH(p - t1 * e, n)) / (2f * e)
         val g2 = (studH(p + t2 * e, n) - studH(p - t2 * e, n)) / (2f * e)
-        val k = -0.07f * studPitch * 3.2f * 0.714f * h        // stud height 0.12 pitch; downhill pull while on a stud flank
+        val k = -0.035f * studPitch * 3.2f * 0.714f * h        // stud height 0.12 pitch; downhill pull while on a stud flank
         velocity += (t1 * g1 + t2 * g2) * k
     }
 

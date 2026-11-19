@@ -532,11 +532,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val m = Maze(k.createMesh(if (keysOn) minOf(difficulty.scale, 0.8f) else difficulty.scale), seed)
         maze = m
         marble = Marble(m)
+        followAim = null; followDirS = null
         val tr = rnd.nextFloat()
         val mr = rnd.nextFloat()
         val pg = progress
         fun open(key: String) = pg == null || pg.surfaceUnlocked(key)
-        medium = forcedMedium ?: (if (plain) Medium.NONE else if (mr < 0.10f) Medium.WATER else if (mr < 0.18f) Medium.FOG else if (mr < 0.26f) Medium.GAS else Medium.NONE)
+        medium = forcedMedium ?: (if (plain) Medium.NONE else if (mr < 0.10f) Medium.WATER else if (mr < 0.18f) Medium.FOG else if (mr < 0.26f) Medium.GAS else if (mr < 0.33f) Medium.STORM else Medium.NONE)
         if (forcedMedium == null && medium != Medium.NONE && !open(medium.name.lowercase())) medium = Medium.NONE
         terrain = forcedTerrain ?: (if (medium != Medium.NONE) Terrain.NONE else if (tr < 0.14f) Terrain.SAND else if (tr < 0.28f) Terrain.MUD else Terrain.NONE)
         if (forcedTerrain == null && terrain != Terrain.NONE && !open(terrain.name.lowercase())) terrain = Terrain.NONE
@@ -580,7 +581,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         var wantDoors = rnd.nextFloat() < 0.5f
         var wantHoles = rnd.nextFloat() < 0.5f
         useClouds = false                                   // clouds, rain and distance haze were removed from the game
-        val wantRain = false
+        val wantRain = medium == Medium.STORM                      // a storm brings driving rain, puddles, lightning and gusts
         if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
         cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
         if (wantRain && rnd.nextFloat() < 0.75f) { }
@@ -599,7 +600,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         marble!!.terrain = terrain
         marble!!.simDetail = simQuality
         poison = 0f
-        field = if (medium != Medium.NONE) com.maze3d.core.MediumField(m, medium, rnd, k.outerRadius).also { it.warmUp(if (medium == Medium.WATER) 8f else 5f) } else null
+        field = if (medium != Medium.NONE && medium != Medium.STORM) com.maze3d.core.MediumField(m, medium, rnd, k.outerRadius).also { it.warmUp(if (medium == Medium.WATER) 8f else 5f) } else null
         marble!!.field = field
         mediumGeo = field?.let { MediumMesh(m, medium, b.wallHeight, when { profile.shadows >= 2 -> 9; profile.shadows >= 1 -> 6; else -> 4 }) }
         mediumGeo?.let { g -> mediumMesh!!.upload(g.update(field!!.level), g.indices, true) }
@@ -892,7 +893,14 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         }
         if (followOn && !dragging && phase == Phase.PLAY && !paused && time - lastTouchAt > 1.0f) {
             val n = mb.surface.normal(mb.position)
-            val local = com.maze3d.core.FollowView.pick(mb.surface, mb.position, n, orient.inverseRotate(Vec3(0f, 0f, 1f)))
+            // re-think the viewing side a few times a second (sticky, so it does not flip between near-equal views), then ease toward it
+            if (time - followPickT > 0.25f || followAim == null) {
+                followPickT = time
+                followAim = com.maze3d.core.FollowView.pickSticky(mb.surface, mb.position, n, orient.inverseRotate(Vec3(0f, 0f, 1f)), followAim)
+            }
+            val aim = followAim!!
+            followDirS = followDirS?.let { (it + (aim - it) * (1f - exp(-3f * dt))).normalized() } ?: aim
+            val local = followDirS!!
             val w = orient.rotate(local)
             val dotz = w.z.coerceIn(-1f, 1f)
             val ang = kotlin.math.acos(dotz)
@@ -934,6 +942,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                     while (runSamples.size / 3 <= sIdx) { runSamples.add(mb.position.x); runSamples.add(mb.position.y); runSamples.add(mb.position.z) }
                     val before = mb.position
                     mb.step(gLocal, dt)
+                    if (gustAmt > 0.01f) {                               // storm gust: the wind shoves the ball along the surface
+                        val n = mb.surface.normal(mb.position)
+                        val w = gustDir - n * (gustDir dot n)
+                        if (w.lengthSq() > 1e-6f) mb.kick(w.normalized() * (GRAVITY * 0.55f * gustAmt * dt))
+                    }
                     statDist += (mb.position - before).length() / m.cellSize
                     statTime += dt
                     if (statTime >= 3f) { host.onStat("playSeconds", statTime); host.onStat("distance", statDist); statTime = 0f; statDist = 0f }
@@ -1097,7 +1110,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
         updateRain(dt)
         if (phase != Phase.PLAY || fallTimer > 0f) audio.roll(0f, 0)
-        audio.wind(cloudAmt)
+        updateStorm(dt)
+        audio.wind(maxOf(cloudAmt, gustAmt))
         val gl = orient.inverseRotate(Vec3(0f, -1f, 0f)) * GRAVITY
         sparks.update(dt, gl)
         dust.update(dt, gl * -0.5f)
@@ -1412,7 +1426,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
         val night = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17
-        GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else 0f)
+        GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else if (medium == Medium.STORM) 0.62f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uExposure"), exposure())
         run {                                                   // follow view: see through the shape where it hides the ball
             val mbc = marble
@@ -2278,10 +2292,49 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Bright pastel levels are toned down so they do not wash out. */
     private var fogClock = 0f
+    // ---- storm: lightning flashes, thunder and wind gusts
+    private var stormFlash = 0f
+    private var nextStrike = 4f
+    private var thunderIn = -1f
+    private var gustAmt = 0f
+    private var gustT = 0f
+    private var nextGust = 6f
+    private var gustDir = Vec3(1f, 0f, 0f)
+    private fun updateStorm(dt: Float) {
+        if (medium != Medium.STORM || phase == Phase.MENU || paused) { stormFlash = 0f; gustAmt = maxOf(0f, gustAmt - dt); return }
+        val mb = marble ?: return
+        val cs = maze?.cellSize ?: 0.1f
+        stormFlash = maxOf(0f, stormFlash - dt * 3.2f)
+        nextStrike -= dt
+        if (nextStrike <= 0f) {
+            stormFlash = 1f; nextStrike = 3.5f + rnd.nextFloat() * 6f
+            thunderIn = 0.4f + rnd.nextFloat() * 1.2f
+            if (rnd.nextFloat() < 0.4f) nextStrike = 0.18f              // a quick double flicker
+        }
+        if (thunderIn > 0f) { thunderIn -= dt; if (thunderIn <= 0f) { audio.impact(1f, rnd.nextFloat() * 2f - 1f); host.onImpact(0.35f) } }
+        nextGust -= dt
+        if (nextGust <= 0f && gustT <= 0f) {
+            gustT = 2.2f + rnd.nextFloat() * 1.5f; nextGust = 7f + rnd.nextFloat() * 6f
+            gustDir = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f).normalized()
+            if (phase == Phase.PLAY) host.onToast("Gust of wind!")
+        }
+        if (gustT > 0f) { gustT -= dt; gustAmt += (1f - gustAmt) * minOf(1f, dt * 3f) } else gustAmt += (0f - gustAmt) * minOf(1f, dt * 2f)
+        if (gustAmt > 0.15f && phase == Phase.PLAY) {                      // streaks of spray blown past the ball show the wind
+            val n = mb.surface.normal(mb.position)
+            val w = (gustDir - n * (gustDir dot n)).normalized()
+            repeat(2) {
+                val j = Vec3(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f)
+                sparks.emit(mb.position - w * (cs * 2f) + (j - n * (j dot n)) * (cs * 3f) + n * (cs * (0.2f + 0.5f * rnd.nextFloat())), w * (cs * 5f * gustAmt), 0.5f, Vec3(0.55f, 0.62f, 0.75f), 0.004f)
+            }
+        }
+    }
+    private var followAim: Vec3? = null
+    private var followDirS: Vec3? = null
+    private var followPickT = -10f
     private var cutAmt = 0f
     private var fogLast = 0f
 
-    private fun exposure() = when (pal.themeId) { 0 -> 0.66f; 6 -> 0.64f; 18 -> 0.62f; 12, 13, 14, 5, 2, 3 -> 0.8f; 7, 9, 11, 17 -> 1f; else -> 0.86f }
+    private fun exposure() = (if (medium == Medium.STORM) 0.85f * (1f + 2.4f * stormFlash) else 1f) * when (pal.themeId) { 0 -> 0.66f; 6 -> 0.64f; 18 -> 0.62f; 12, 13, 14, 5, 2, 3 -> 0.8f; 7, 9, 11, 17 -> 1f; else -> 0.86f }
 
     private fun studPitch() = (maze?.marbleRadius ?: 0.02f) * 1.7f
 

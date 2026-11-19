@@ -185,20 +185,23 @@ class KnotSurface(val k: Float = 0.34f, rr: Float = 0.165f) : Surface("Trefoil k
 
     private val table = Array(SAMPLES) { curve((2.0 * Math.PI * it / SAMPLES).toFloat()) }
     private val du = (2.0 * Math.PI / SAMPLES).toFloat()
-    private var hint = 0
 
     override fun core(p: Vec3): Vec3 {
-        // coarse: nearest table entry (search the neighbourhood of the last answer first, fall back to a full scan)
-        var best = -1; var bestD = Float.MAX_VALUE
-        for (d in -24..24) {
-            val i = (hint + d + SAMPLES) % SAMPLES
+        // coarse-to-fine nearest table entry with no remembered state, so every caller (physics, camera, scenery) gets the same,
+        // correct answer: every 10th sample first, then the full-resolution neighbourhood of the best two coarse hits
+        var c1 = 0; var c2 = 0; var d1 = Float.MAX_VALUE; var d2 = Float.MAX_VALUE
+        var i0 = 0
+        while (i0 < SAMPLES) {
+            val l = (table[i0] - p).lengthSq()
+            if (l < d1) { d2 = d1; c2 = c1; d1 = l; c1 = i0 } else if (l < d2) { d2 = l; c2 = i0 }
+            i0 += 10
+        }
+        var best = c1; var bestD = Float.MAX_VALUE
+        for (cc in intArrayOf(c1, c2)) for (d in -10..10) {
+            val i = (cc + d + SAMPLES) % SAMPLES
             val l = (table[i] - p).lengthSq()
             if (l < bestD) { bestD = l; best = i }
         }
-        if (bestD > (radius * 4f) * (radius * 4f)) {
-            for (i in 0 until SAMPLES) { val l = (table[i] - p).lengthSq(); if (l < bestD) { bestD = l; best = i } }
-        }
-        hint = best
         // refine along the curve between the neighbours by golden-section search
         var a = (best - 1) * du; var b = (best + 1) * du
         val gr = 0.618034f

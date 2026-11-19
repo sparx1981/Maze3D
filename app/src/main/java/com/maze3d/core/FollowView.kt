@@ -28,7 +28,7 @@ object FollowView {
         return true
     }
 
-    private fun score(s: Surface, p: Vec3, n: Vec3, d: Vec3, cur: Vec3): Float {
+    fun score(s: Surface, p: Vec3, n: Vec3, d: Vec3, cur: Vec3): Float {
         val c = n dot d
         if (c < 0.22f || !clear(s, p, n, d)) return -1e9f
         val lat = (p - d * (p dot d)).length()
@@ -54,5 +54,13 @@ object FollowView {
             step *= 0.5f
         }
         return best
+    }
+
+    /** Like [pick], but keeps the previous choice unless the new one is clearly better: no flip-flopping between two similar views. */
+    fun pickSticky(s: Surface, p: Vec3, n: Vec3, cur: Vec3, prev: Vec3?): Vec3 {
+        val best = pick(s, p, n, cur)
+        if (prev == null) return best
+        val sp = score(s, p, n, prev, cur)
+        return if (sp < -1e8f || score(s, p, n, best, cur) > sp + 0.25f) best else prev
     }
 }

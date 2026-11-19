@@ -68,6 +68,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             }
             Profile.BLOCK -> { ws = 1.35f; hs = 0.9f; p(1f, -0.08f); p(1f, 0.9f); p(0.96f, 0.975f); p(0.9f, 1f); p(0f, 1f) }
             Profile.FLAT -> { ws = 2.1f; hs = 0.8f; p(1f, -0.08f); p(1f, 0.85f); p(0.96f, 1f); p(0f, 1f) }
+            Profile.ARMCO -> {                        // W-beam crash barrier: two corrugations on a rail, a lip at the top
+                ws = 1.5f; hs = 0.9f
+                p(0.55f, -0.08f); p(0.55f, 0.22f); p(0.95f, 0.32f); p(1f, 0.42f); p(0.75f, 0.52f); p(0.75f, 0.58f); p(1f, 0.68f); p(0.95f, 0.78f); p(0.6f, 0.86f); p(0.5f, 1f); p(0f, 1f)
+            }
             else -> {                                   // ROUND
                 val rr = 0.62f
                 p(1f, -0.08f); p(1f, 1f - rr * 0.4f)
@@ -707,6 +711,21 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 n++
             }
         }
+        // 2c. motorsport: sponsor boards propped against some barriers
+        if (pal.themeId == 2) {
+            var nb = 0
+            for (e in 0 until maze.edgeCount) {
+                if (!maze.isWall(e) || hash(e + 6011) > 0.1f || nb > 40) continue
+                val a0 = maze.mesh.vertices[maze.edgeA[e]]; val b0 = maze.mesh.vertices[maze.edgeB[e]]
+                val mid = surface.project((a0 + b0) * 0.5f)
+                val n = surface.normal(mid)
+                val dir = (b0 - a0).normalized()
+                val side = (dir cross n).normalized() * (if (hash(e + 7) < 0.5f) 1f else -1f)
+                val p = surface.project(mid + side * (wallHalfThickness * 2.4f))
+                placed.add(Placed(PropLibrary.sponsorBoard(e), p, n, n cross side, cs * 0.85f, maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+                nb++
+            }
+        }
         // 3. landmarks floating around the shape
         val count = 7
         for (i in 0 until count) {
@@ -720,7 +739,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, lw))
         }
         // 4. a few birds (or butterflies, drones...) circling over the maze
-        for ((fi, bd) in listOfNotNull(lib.bird, lib.birds2).withIndex()) {
+        for ((fi, bd) in listOfNotNull(lib.bird, lib.birds2, lib.birds3).withIndex()) {
             for (k0 in 0 until bd.count) { val k = k0 + fi * 50
                 val c = (hash(k * 977 + 31) * maze.cellCount).toInt().coerceIn(0, maze.cellCount - 1)
                 val ctr = maze.centers[c]; val n = surface.normal(ctr)

@@ -24,7 +24,7 @@ object PropLibrary {
     class ThemeProps(val junction: PropMesh, val deadA: PropMesh, val deadB: PropMesh, val landmark: PropMesh,
                      val deadC: PropMesh? = null, val junction2: PropMesh? = null,
                      val anims: Map<PropMesh, AnimSpec> = emptyMap(), val bird: Bird? = null, val more: List<PropMesh> = emptyList(),
-                     val junctionMore: List<PropMesh> = emptyList(), val floor: List<PropMesh> = emptyList(), val birds2: Bird? = null, val junctionShare: Float = 0.2f)
+                     val junctionMore: List<PropMesh> = emptyList(), val floor: List<PropMesh> = emptyList(), val birds2: Bird? = null, val junctionShare: Float = 0.2f, val birds3: Bird? = null)
 
     private fun whole(m: PropMesh, type: Int, speed: Float = 1f, amp: Float = 1f, pivotZ: Float = 0f) = m to AnimSpec(m, type, speed, amp, true, pivotZ = pivotZ)
     private fun part(host: PropMesh, part: PropMesh, type: Int, at: List<Vec3>, speed: Float = 1f, amp: Float = 1f) = host to AnimSpec(part, type, speed, amp, false, at)
@@ -77,7 +77,7 @@ object PropLibrary {
                 mapOf(whole(fn, Anim.SWAY, 1.1f, 1.4f), whole(mk, Anim.BOB, 1.2f, 1f), whole(bn, Anim.SWAY, 0.9f, 1.3f), whole(bb, Anim.SWAY, 0.7f, 1.2f),
                     whole(ms, Anim.SWAY, 1f, 1.2f), whole(hl, Anim.SWAY, 1.1f, 1.3f), whole(br, Anim.SWAY, 1.2f, 0.8f), whole(jt2, Anim.SWAY, 0.7f, 0.8f),
                     part(jt, sn, Anim.SWAY, listOf(Vec3(0.26f * cos(0.4f), 0.26f * sin(0.4f), 0.76f)), 0.8f, 2.5f)),
-                parrot(), listOf(bn, bb, ms, hl, jt2), junctionMore = listOf(bn, ms, hl, bb), floor = listOf(fn, br, ms, hl, bb, jt2, fn, br), birds2 = toucan(), junctionShare = 0.85f) }
+                parrot(), listOf(bn, bb, ms, hl, jt2), junctionMore = listOf(bn, ms, hl, bb), floor = listOf(fn, br, ms, hl, bb, jt2, fn, br), birds2 = toucan(), junctionShare = 0.85f, birds3 = butterfly(c(60, 140, 255), c(20, 20, 40))) }
         11 -> { val gb = glowBell(); val gc = glowCluster(); val gp = glowParasol(); val gg = glowGiant(); val bn = bonnets(); val ik = inkcap()
             ThemeProps(gb, gc, gp, gg, bn, ik, mapOf(whole(gb, Anim.SWAY, 0.5f, 0.6f), whole(gc, Anim.SWAY, 0.6f, 0.5f), whole(gp, Anim.SWAY, 0.45f, 0.7f),
                 whole(bn, Anim.SWAY, 0.7f, 0.6f), whole(ik, Anim.SWAY, 0.55f, 0.6f))) }
@@ -91,9 +91,12 @@ object PropLibrary {
         14 -> { val sp = spool(); val pp = pomPom(); val ft = feltTree(); val yb = yarnBall()
             ThemeProps(buttonProp(), sp, pp, ft, heartPatch(), yb, mapOf(whole(sp, Anim.SPIN, 0.7f), whole(pp, Anim.WOBBLE, 1.2f, 1f), whole(ft, Anim.SWAY, 0.8f, 1f), whole(yb, Anim.SPIN, 0.4f)),
                 butterfly(c(255, 150, 190), c(250, 230, 200))) }
-        15 -> { val en = eggNest(); val fn = fern(); val jt = jungleTree(); val dn = dino()
-            ThemeProps(boneProp(), en, fn, volcanoProp(), dn, jt, mapOf(whole(en, Anim.WOBBLE, 0.8f, 0.6f), whole(fn, Anim.SWAY, 1f, 1.3f), whole(jt, Anim.SWAY, 0.6f, 0.8f), whole(dn, Anim.NOD, 0.9f, 1.2f)),
-                pterodactyl()) }
+        15 -> { val en = eggNest(); val fn = fern(); val jt = jungleTree(); val dn = dino(); val rp = raptor(); val sk = dinoSkeleton(); val eg = bigEggs()
+            val bn = bananaPlant(); val bb = bamboo(); val ms = monstera(); val br = bromeliad()
+            ThemeProps(boneProp(), en, fn, volcanoProp(), dn, jt,
+                mapOf(whole(en, Anim.WOBBLE, 0.8f, 0.6f), whole(fn, Anim.SWAY, 1f, 1.3f), whole(jt, Anim.SWAY, 0.6f, 0.8f), whole(dn, Anim.NOD, 0.9f, 1.2f),
+                    whole(rp, Anim.NOD, 1.3f, 1.4f), whole(eg, Anim.WOBBLE, 0.7f, 0.5f), whole(bn, Anim.SWAY, 0.9f, 1.3f), whole(ms, Anim.SWAY, 1f, 1.2f)),
+                pterodactyl(), listOf(rp, sk, eg, dn, sk), junctionMore = listOf(bn, ms, bb, fn), floor = listOf(fn, ms, br, bb), junctionShare = 0.55f) }
         16 -> { val dr = drill(); val gp = gearProp(); val b1 = boltProp(); val b2 = boltProp(); val nut = hexNut()
             ThemeProps(b1, toolbox(), wrench(), hammerProp(), gp, b2, mapOf(whole(gp, Anim.SPIN, 0.9f),
                 part(b1, nut, Anim.SCREW, listOf(Vec3(0f, 0f, 0.16f)), 0.8f, 0.34f), part(b2, nut, Anim.SCREW, listOf(Vec3(0f, 0f, 0.16f)), 0.6f, 0.34f),
@@ -324,18 +327,37 @@ object PropLibrary {
     }.build()
 
     private fun sugarSkull() = PM().apply {
-        col = c(250, 246, 236)
-        at(z = 0.55f) { push(); scale(0.9f, 0.8f, 1f); sphere(0.4f, 24, 14); pop() }          // cranium
-        at(z = 0.18f) { push(); scale(0.9f, 0.7f, 0.6f); sphere(0.3f, 18, 10); pop() }         // jaw
+        // calavera: rounded cranium with temples, cheekbones and a jaw, deep eye sockets ringed with petals,
+        // an upside-down heart nose, stitched smile and teeth, painted forehead flower and dotted scrollwork
+        val bone = c(250, 246, 236)
+        col = bone
+        at(z = 0.58f) { scale(0.86f, 0.82f, 0.92f); sphere(0.4f, 28, 18) }                                  // cranium
+        for (s in intArrayOf(-1, 1)) at(s * 0.2f, -0.2f, 0.38f) { scale(0.9f, 0.8f, 0.7f); sphere(0.14f, 14, 10) }   // cheekbones
+        at(0f, -0.08f, 0.24f) { scale(0.78f, 0.7f, 0.55f); sphere(0.3f, 22, 12) }                         // jaw
+        at(0f, -0.24f, 0.18f) { scale(1.2f, 0.6f, 0.5f); sphere(0.12f, 14, 8) }                            // chin
         for (s in intArrayOf(-1, 1)) {
-            col = c(40, 20, 60); push(); translate(s * 0.15f, -0.31f, 0.6f); scale(1f, 0.5f, 1f); sphere(0.1f, 12, 8); pop()   // eye sockets
-            col = c(255, 120, 30); push(); translate(s * 0.15f, -0.34f, 0.6f); scale(1f, 0.3f, 1f); torus(0.1f, 0.02f, 14, 6); pop() // marigold ring
-            for (i in 0 until 8) { col = if (i % 2 == 0) c(240, 70, 120) else c(40, 200, 190)
-                val a = i * 0.785f; push(); translate(s * 0.15f + cos(a) * 0.12f, -0.34f, 0.6f + sin(a) * 0.12f); sphere(0.025f, 6, 4); pop() }
+            col = c(30, 14, 46); at(s * 0.14f, -0.3f, 0.52f) { scale(1f, 0.45f, 1.05f); sphere(0.105f, 16, 10) }        // socket
+            col = c(255, 255, 255) * 1.3f; at(s * 0.12f, -0.345f, 0.55f) { sphere(0.018f, 6, 4) }                       // glint
+            for (i in 0 until 10) {                                                                                        // petals around the eye
+                val a = i * 0.628f
+                col = if (i % 2 == 0) c(255, 130, 30) else c(255, 196, 40)
+                push(); translate(s * 0.14f + cos(a) * 0.135f, -0.325f, 0.52f + sin(a) * 0.14f); rotY(a); scale(1.6f, 0.4f, 0.9f); sphere(0.028f, 8, 5); pop()
+            }
+            col = c(40, 200, 190); for (k in 0 until 5) at(s * (0.3f + 0.02f * k), -0.2f + 0.04f * k, 0.32f + 0.06f * k) { sphere(0.016f, 6, 4) }   // cheek dots
+            col = c(240, 70, 120); at(s * 0.24f, -0.27f, 0.35f) { scale(1f, 0.4f, 1f); sphere(0.04f, 10, 6) }                                   // cheek rose
         }
-        col = c(60, 30, 60); push(); translate(0f, -0.33f, 0.46f); scale(0.6f, 0.4f, 1.1f); cone(0.05f, 0.1f, 4); pop()          // nose
-        col = c(50, 30, 50); for (i in -3..3) { push(); translate(i * 0.05f, -0.26f, 0.2f); scale(0.016f, 0.016f, 0.1f); box(1f, 1f, 1f); pop() }   // teeth
-        col = c(255, 170, 30); push(); translate(0f, -0.1f, 0.82f); sphere(0.07f, 8, 6); pop()
+        col = c(40, 16, 50); push(); translate(0f, -0.345f, 0.4f); rotY(PI.toFloat()); scale(1f, 0.4f, 1f)                 // heart-shaped nose
+        for (s in intArrayOf(-1, 1)) at(s * 0.025f, 0f, -0.01f) { sphere(0.03f, 8, 6) }; at(z = 0.02f) { cone(0.045f, 0.06f, 8) }
+        pop()
+        col = c(40, 16, 50); tube((0..10).map { k -> val u = k / 10f - 0.5f; Vec3(u * 0.34f, -0.33f + 0.02f * (u * u * 4f), 0.29f + 0.03f * (u * u * 4f)) }, 0.008f, 4)    // smile
+        col = bone * 1.02f; for (i in -4..4) at(i * 0.036f, -0.335f, 0.28f + 0.012f * (i * i) / 4f) { box(0.026f, 0.02f, 0.05f) }
+        col = c(40, 16, 50); for (i in -4..4) at(i * 0.036f + 0.018f, -0.345f, 0.28f + 0.012f * (i * i) / 4f) { box(0.004f, 0.006f, 0.05f) }
+        // forehead flower and scrollwork
+        for (i in 0 until 6) { val a = i * 1.047f; col = if (i % 2 == 0) c(240, 70, 120) else c(150, 80, 220)
+            push(); translate(cos(a) * 0.055f, -0.36f + 0.02f, 0.78f + sin(a) * 0.055f); scale(1f, 0.35f, 1f); sphere(0.04f, 10, 6); pop() }
+        col = c(255, 214, 40); at(0f, -0.37f, 0.78f) { scale(1f, 0.4f, 1f); sphere(0.028f, 8, 6) }
+        col = c(40, 200, 190); for (s in intArrayOf(-1, 1)) tube((0..8).map { k -> val v = k / 8f; Vec3(s * (0.1f + 0.14f * v), -0.34f + 0.1f * v * v, 0.7f + 0.12f * kotlin.math.sin(v * 3.2f)) }, 0.008f, 4)
+        col = c(255, 214, 40); for (k in 0 until 7) at(-0.15f + k * 0.05f, -0.3f, 0.92f - 0.01f * (k - 3) * (k - 3)) { sphere(0.014f, 6, 4) }
     }.build()
 
     private fun candleVotive() = PM().apply {
@@ -1533,5 +1555,63 @@ object PropLibrary {
             push(); translate(cos(a) * 0.12f, sin(a) * 0.12f, 0f); rotZ(a)
             lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.12f, 0.0f), floatArrayOf(0.1f, 0.15f), floatArrayOf(0.05f, 0.32f), floatArrayOf(0f, 0.36f)), 10) { _, v -> if (v < 0.35f) c(255, 220, 60) else if (v < 0.7f) c(255, 140, 30) else c(255, 255, 250) }
             pop() }
+    }.build()
+
+    // ---------------------------------------------------------------- motorsport sponsor boards and more dinosaurs
+    /** An advertising board standing at the foot of a wall (facing +x), in sponsor colours with a block-letter logo. */
+    fun sponsorBoard(k: Int) = PM().apply {
+        val bgs = listOf(c(220, 30, 30), c(30, 70, 200), c(250, 210, 30), c(20, 20, 24), c(30, 150, 70))
+        val fgs = listOf(c(250, 250, 250), c(250, 250, 250), c(20, 20, 24), c(250, 200, 30), c(250, 250, 250))
+        val i = k % bgs.size
+        col = c(60, 64, 72); for (s in intArrayOf(-1, 1)) at(-0.02f, s * 0.4f, 0f) { box(0.03f, 0.03f, 0.3f) }
+        col = bgs[i]; at(0f, 0f, 0.17f) { box(0.03f, 0.9f, 0.24f) }
+        col = fgs[i]
+        val pattern = (k * 7919 + 13) % 997
+        for (j in 0 until 6) {
+            val tall = ((pattern shr j) and 1) == 1
+            at(0.017f, -0.3f + j * 0.12f, 0.17f) { box(0.004f, 0.08f, if (tall) 0.14f else 0.08f) }
+        }
+        col = fgs[i] * 0.9f; at(0.017f, 0f, 0.07f) { box(0.004f, 0.8f, 0.015f) }
+    }.build()
+
+    private fun raptor() = PM().apply {
+        // a small two-legged raptor with a long tail, sickle claws and a crest of feathers
+        val skin = c(170, 120, 70); val stripe = c(110, 70, 40)
+        col = skin; at(0f, 0f, 0.42f) { scale(1.2f, 0.55f, 0.6f); sphere(0.18f, 14, 10) }
+        tube(listOf(Vec3(0.16f, 0f, 0.48f), Vec3(0.26f, 0f, 0.62f), Vec3(0.3f, 0f, 0.7f)), 0.05f, 8, taper = { 1f - 0.3f * it })
+        at(0.38f, 0f, 0.72f) { scale(1.6f, 0.7f, 0.7f); sphere(0.07f, 12, 8) }
+        col = c(240, 236, 220); for (k in 0 until 4) at(0.44f + 0.015f * k, 0f, 0.68f) { cone(0.008f, 0.02f, 4) }
+        col = skin; tube(listOf(Vec3(-0.18f, 0f, 0.42f), Vec3(-0.4f, 0f, 0.48f), Vec3(-0.6f, 0f, 0.5f)), 0.06f, 8, taper = { 1f - 0.9f * it })
+        for (s in intArrayOf(-1, 1)) {
+            tube(listOf(Vec3(0f, s * 0.07f, 0.36f), Vec3(0.06f, s * 0.08f, 0.2f), Vec3(-0.02f, s * 0.08f, 0.08f), Vec3(0.06f, s * 0.08f, 0.0f)), 0.03f, 6, taper = { 1f - 0.4f * it })
+            tube(listOf(Vec3(0.18f, s * 0.06f, 0.46f), Vec3(0.24f, s * 0.08f, 0.38f)), 0.015f, 5)
+            col = c(30, 26, 22); at(0.42f, s * 0.04f, 0.75f) { sphere(0.012f, 6, 4) }; col = skin
+        }
+        col = stripe; for (k in 0 until 5) at(-0.1f + k * 0.06f, 0f, 0.5f) { box(0.02f, 0.2f, 0.01f) }
+        col = c(200, 70, 40); for (k in 0 until 5) at(0.1f - k * 0.08f, 0f, 0.54f) { rotY(-0.5f); cone(0.02f, 0.08f, 4) }
+    }.build()
+
+    private fun dinoSkeleton() = PM().apply {
+        // a fossil skeleton half out of the ground: skull, spine of vertebrae, a fan of ribs and the tail
+        val bone = c(236, 226, 200)
+        col = c(140, 110, 80); at(z = 0.0f) { scale(1.4f, 0.6f, 0.1f); sphere(0.4f, 16, 8) }
+        col = bone
+        val spine = (0..16).map { k -> val v = k / 16f; Vec3(-0.55f + 1.05f * v, 0f, 0.12f + 0.25f * kotlin.math.sin(v * 3.1f)) }
+        for (p in spine) at(p.x, p.y, p.z) { sphere(0.035f, 8, 6) }
+        tube(spine, 0.015f, 5)
+        for (k in 4..10) { val p = spine[k]; for (s in intArrayOf(-1, 1)) tube(listOf(p, Vec3(p.x + 0.02f, s * 0.14f, p.z - 0.08f), Vec3(p.x + 0.04f, s * 0.12f, 0.03f)), 0.011f, 4) }
+        val hd = spine.last()
+        at(hd.x + 0.08f, 0f, hd.z) { scale(1.6f, 0.7f, 0.8f); sphere(0.08f, 12, 8) }
+        col = c(60, 50, 40); for (s in intArrayOf(-1, 1)) at(hd.x + 0.07f, s * 0.04f, hd.z + 0.03f) { sphere(0.02f, 6, 4) }
+        col = bone; for (k in 0 until 5) at(hd.x + 0.1f + k * 0.022f, 0f, hd.z - 0.05f) { cone(0.008f, 0.025f, 4) }
+    }.build()
+
+    private fun bigEggs() = PM().apply {
+        col = c(130, 110, 80); at(z = 0.02f) { scale(1f, 1f, 0.25f); sphere(0.3f, 14, 8) }
+        for (i in 0 until 3) { val a = i * 2.1f
+            push(); translate(cos(a) * 0.13f, sin(a) * 0.13f, 0.18f); rotY(0.25f * (i - 1)); scale(0.75f, 0.75f, 1.15f)
+            sphere(0.16f, 16, 12) { u, v -> if ((((u * 47f + v * 31f) * 9f) % 1f) > 0.88f) c(120, 140, 90) else c(214, 226, 190) }
+            pop() }
+        col = c(214, 226, 190); for (k in 0 until 4) at(0.25f + 0.04f * k, -0.1f, 0.02f) { rotZ(k * 0.9f); scale(1f, 0.6f, 0.3f); sphere(0.04f, 6, 4) }    // a hatched shell
     }.build()
 }
