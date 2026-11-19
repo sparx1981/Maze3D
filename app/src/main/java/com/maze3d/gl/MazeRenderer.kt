@@ -583,8 +583,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val wantRain = false
         if (plain) { wantDoors = false; wantHoles = false; useClouds = false }
         cloudDensity = 0.3f + 0.7f * rnd.nextFloat()                  // from a few wisps to full overcast
-        if (wantRain && rnd.nextFloat() < 0.75f) useClouds = true
-        if (!plain && !wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> useClouds = true; else -> { } }
+        if (wantRain && rnd.nextFloat() < 0.75f) { }
+        if (!plain && !wantDoors && !wantHoles && !useClouds && !wantRain && terrain == Terrain.NONE) when (rnd.nextInt(4)) { 0 -> wantDoors = true; 1 -> wantHoles = true; 2 -> if (medium == Medium.NONE) medium = Medium.FOG; else -> { } }   // the old 'clouds' roll now brings real fog
         val rainNow = wantRain
         val hardBoost = if (difficulty.scale >= 1.7f) 0.15f else 0f
         val wantBridges = !plain && rnd.nextFloat() < 0.26f + hardBoost
@@ -2105,6 +2105,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     // ---- moving props: spinning machines, swaying plants, bobbing animals, flickering flames and circling birds
     private var animInsts = emptyList<SceneBuilder.AnimInst>()
     private val animMeshes = HashMap<PropMesh, GlMesh>()
+    private var animLast = 0f
     private val aL = FloatArray(16); private val aT = FloatArray(16); private val aW = FloatArray(16); private val aF = FloatArray(16)
     private fun meshFor(pm: PropMesh): GlMesh = animMeshes.getOrPut(pm) {
         GlMesh(GlMesh.SCENE).also { g ->
@@ -2126,22 +2127,34 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         val uModel = loc(sceneProg, "uModel")
         val t = time
         val deg = 57.29578f
+        val dtA = (t - animLast).coerceIn(0f, 0.1f); animLast = t
+        val ball = marble
+        val csA = maze?.cellSize ?: 0.1f
+        val ballFast = ball != null && ball.velocity.length() > csA * 0.6f
         for (a in animInsts) {
             val g = ease01((growT - a.delay) / 0.35f)
             if (g <= 0.01f) continue
             val ph = a.phase
+            // ball interaction: props shake, hop or (for birds) flap up and away when the ball rolls close by
+            if (ball != null && phase == Phase.PLAY) {
+                val dx = ball.position.x - a.frame[12]; val dy = ball.position.y - a.frame[13]; val dz = ball.position.z - a.frame[14]
+                val reach = csA * (if (a.bird != null) 2.2f else 1.25f)
+                if (ballFast && dx * dx + dy * dy + dz * dz < reach * reach) a.react = 1f
+            }
+            a.react = maxOf(0f, a.react - dtA * (if (a.bird != null) 0.35f else 1.1f))
+            val rk = a.react * a.react
             val bd = a.bird
             if (bd != null) {
                 val omega = (if (bd.glide) 0.9f else 1.3f) / a.radius
                 val ang = t * omega * a.dir + ph
                 Matrix.setIdentityM(aL, 0)
-                Matrix.translateM(aL, 0, a.radius * kotlin.math.cos(ang), a.radius * kotlin.math.sin(ang), a.height + 0.25f * kotlin.math.sin(t * 0.8f + ph))
+                Matrix.translateM(aL, 0, a.radius * kotlin.math.cos(ang), a.radius * kotlin.math.sin(ang), a.height + 0.25f * kotlin.math.sin(t * 0.8f + ph) + 1.8f * rk)
                 Matrix.rotateM(aL, 0, (ang + a.dir * PI.toFloat() / 2f) * deg, 0f, 0f, 1f)
                 Matrix.rotateM(aL, 0, -a.dir * 14f, 1f, 0f, 0f)
                 Matrix.scaleM(aL, 0, bd.size * g, bd.size * g, bd.size * g)
                 drawPart(uModel, a.frame, aL, bd.body)
-                val burst = if (bd.glide) (0.15f + 0.85f * maxOf(0f, kotlin.math.sin(t * 0.7f + ph))) else 1f
-                val flap = if (bd.flap > 0f) 38f * burst * kotlin.math.sin(t * bd.flap + ph) else 0f
+                val burst = maxOf(rk, if (bd.glide) (0.15f + 0.85f * maxOf(0f, kotlin.math.sin(t * 0.7f + ph))) else 1f)
+                val flap = if (bd.flap > 0f) 38f * burst * kotlin.math.sin(t * bd.flap * (1f + rk) + ph) else 0f
                 System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingL)
                 System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, -flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingR)
                 continue
@@ -2150,6 +2163,11 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             for (off in sp.at) {
                 Matrix.setIdentityM(aL, 0)
                 Matrix.translateM(aL, 0, off.x, off.y, off.z + sp.pivotZ)
+                if (rk > 0.001f && sp.whole) {                       // startled: a quick hop and a shake
+                    Matrix.translateM(aL, 0, 0f, 0f, 0.12f * rk * kotlin.math.abs(kotlin.math.sin(t * 11f)))
+                    Matrix.rotateM(aL, 0, 14f * rk * kotlin.math.sin(t * 17f + ph), 1f, 0f, 0f)
+                    Matrix.rotateM(aL, 0, 10f * rk * kotlin.math.sin(t * 13f + ph), 0f, 1f, 0f)
+                }
                 when (sp.type) {
                     PropLibrary.Anim.SPIN -> Matrix.rotateM(aL, 0, (t * sp.speed * 1.4f + ph) * deg, 0f, 0f, 1f)
                     PropLibrary.Anim.BOB -> {

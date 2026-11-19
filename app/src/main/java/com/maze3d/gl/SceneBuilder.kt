@@ -560,7 +560,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
 
     /** A moving prop (or moving part of one): [frame] maps prop units to local space (columns t1, t2, n scaled by size, then the origin). */
     class AnimInst(val spec: PropLibrary.AnimSpec?, val frame: FloatArray, val phase: Float, val delay: Float,
-                   val bird: PropLibrary.Bird? = null, val radius: Float = 0f, val height: Float = 0f, val dir: Float = 1f)
+                   val bird: PropLibrary.Bird? = null, val radius: Float = 0f, val height: Float = 0f, val dir: Float = 1f) {
+        /** 0..1: how startled the prop is by the ball rolling past (decays over time). */
+        var react = 0f
+    }
     val anims = ArrayList<AnimInst>()
     private fun frameOf(pos: Vec3, n: Vec3, t2in: Vec3, size: Float): FloatArray {
         val t2 = (t2in - n * (t2in dot n)).normalized(); val t1 = t2 cross n
@@ -570,6 +573,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     /** Records the animation of a placed prop; returns true when the whole prop moves (so it is left out of the static mesh). */
     private fun animate(lib: PropLibrary.ThemeProps, mesh: PropMesh, pos: Vec3, n: Vec3, t2: Vec3, size: Float, delay: Float, seed: Int): Boolean {
         val spec = lib.anims[mesh] ?: return false
+        if (anims.size >= 140) return false                              // keep the number of moving props (draw calls) in check
         anims.add(AnimInst(spec, frameOf(pos, n, t2, size), hash(seed + 7101) * 6.2831853f, delay))
         return spec.whole
     }
@@ -644,15 +648,17 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             if (!maze.isWall(e)) continue
             for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) {
                 if (!seen.add(v)) continue
-                if (!(v in special) && hash(v + 311) > 0.2f) continue
-                if (junctions > 70) continue
+                if (!(v in special) && hash(v + 311) > lib.junctionShare) continue
+                if (junctions > (if (lib.junctionShare > 0.3f) 160 else 70)) continue
                 val p = maze.mesh.vertices[v]
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
-                val jm = if (lib.junction2 != null && hash(v + 19) < 0.5f) lib.junction2 else lib.junction
+                val jopts = listOfNotNull(lib.junction, lib.junction2) + lib.junctionMore
+                val jm = jopts[(hash(v + 19) * jopts.size).toInt().coerceAtMost(jopts.size - 1)]
                 val jt = tangent(n, hash(v + 5))
-                val jw = animate(lib, jm, p + n * topH, n, jt, sizeJ, dl * 0.75f + 0.05f, v)
-                placed.add(Placed(jm, p + n * topH, n, jt, sizeJ, dl * 0.75f + 0.05f, jw))
+                val jScale = if (jm in lib.junctionMore) 2.2f else 1f            // plants are smaller models than toppers
+                val jw = animate(lib, jm, p + n * topH, n, jt, sizeJ * jScale, dl * 0.75f + 0.05f, v)
+                placed.add(Placed(jm, p + n * topH, n, jt, sizeJ * jScale, dl * 0.75f + 0.05f, jw))
                 if (!explicitLamps) lampFromProp(jm, p + n * topH, n, jt, sizeJ)
                 if (pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + n * (topH + sizeJ * (if (pal.themeId == 7) 0.95f else 0.7f)))
                 junctions++
@@ -679,6 +685,23 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             if (pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17) addLamp(p + surface.normal(p) * (size * 0.55f))
             deads++
         }
+        // 2b. undergrowth: small plants tucked against the foot of the walls (jungle)
+        if (lib.floor.isNotEmpty()) {
+            var n = 0
+            for (c in 0 until maze.cellCount) {
+                if (c == maze.start || c == maze.goal || hash(c + 4242) > 0.38f || n > 110) continue
+                val walls = (0..3).map { maze.cellEdges[c * 4 + it] }.filter { maze.isWall(it) }
+                if (walls.isEmpty()) continue
+                val e = walls[(hash(c + 77) * walls.size).toInt().coerceAtMost(walls.size - 1)]
+                val mid = (maze.mesh.vertices[maze.edgeA[e]] + maze.mesh.vertices[maze.edgeB[e]]) * 0.5f
+                val along = (maze.mesh.vertices[maze.edgeB[e]] - maze.mesh.vertices[maze.edgeA[e]]) * ((hash(c + 91) - 0.5f) * 0.6f)
+                val p = surface.project(Vec3.lerp(maze.centers[c], mid + along, 0.74f))
+                val n0 = surface.normal(p)
+                val mesh = lib.floor[(hash(c + 13) * lib.floor.size).toInt().coerceAtMost(lib.floor.size - 1)]
+                placed.add(Placed(mesh, p, n0, tangent(n0, hash(c + 5)), cs * (0.95f + 0.45f * hash(c + 3)), maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+                n++
+            }
+        }
         // 3. landmarks floating around the shape
         val count = 7
         for (i in 0 until count) {
@@ -692,8 +715,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, lw))
         }
         // 4. a few birds (or butterflies, drones...) circling over the maze
-        lib.bird?.let { bd ->
-            for (k in 0 until bd.count) {
+        for ((fi, bd) in listOfNotNull(lib.bird, lib.birds2).withIndex()) {
+            for (k0 in 0 until bd.count) { val k = k0 + fi * 50
                 val c = (hash(k * 977 + 31) * maze.cellCount).toInt().coerceIn(0, maze.cellCount - 1)
                 val ctr = maze.centers[c]; val n = surface.normal(ctr)
                 anims.add(AnimInst(null, frameOf(ctr, n, tangent(n, hash(k + 61)), cs), hash(k + 3) * 6.2831853f, 0.6f, bd,
