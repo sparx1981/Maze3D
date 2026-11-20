@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,19 +7,34 @@ plugins {
 
 android {
     namespace = "com.maze3d"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.rollabyrinth.game"
+        applicationId = "com.marblix.game"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 2
-        versionName = "0.2"
+        targetSdk = 36
+        versionCode = 3
+        versionName = "1.0"
+    }
+
+    // Upload key for Google Play. keystore.properties and the .jks file stay on your machine and are git-ignored.
+    val keyProps = Properties().apply {
+        val f = rootProject.file("release/keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    signingConfigs {
+        if (keyProps.isNotEmpty()) create("upload") {
+            storeFile = rootProject.file("release/" + keyProps.getProperty("storeFile"))
+            storePassword = keyProps.getProperty("storePassword")
+            keyAlias = keyProps.getProperty("keyAlias")
+            keyPassword = keyProps.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (keyProps.isNotEmpty()) signingConfig = signingConfigs.getByName("upload")
         }
     }
     compileOptions {

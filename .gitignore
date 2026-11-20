@@ -6,3 +6,8 @@ local.properties
 captures/
 .kotlin/
 tools/preview/node_modules/
+
+# Play upload key (never commit)
+release/
+*.jks
+*.keystore
