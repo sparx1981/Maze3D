@@ -202,33 +202,47 @@ def roll_planks(name, seed, joint_gap):
     add(name, loopify(y, xf), peak=0.6, loop=True)
 def roll_hard(): roll_planks("sfx_roll_hard", 4105, 0.12)
 def roll_wood(): roll_planks("sfx_roll_wood", 4205, 0.10)
+def _roll_common(r, n, v=0.5):
+    t = np.arange(n) / SR
+    return t, 2 * np.pi * v / (np.pi * 0.016) * t                         # time, 16 mm marble rotation phase
+def _small_room(r, y, amt):
+    L = int(0.4 * SR); ir = r.standard_normal(L) * np.exp(-np.arange(L) / SR / 0.08)
+    ir = lp(ir, 4000, 2); ir[:40] = 0; ir /= np.sqrt((ir ** 2).sum())
+    y = y + amt * signal.fftconvolve(y, ir)[:len(y)]
+    return np.tanh(1.2 * y / np.max(np.abs(y)))
 def roll_sand():
-    d = 2.4; n = int(d * SR) + int(0.2 * SR)
-    t = np.arange(n) / SR
-    hiss = bp(noise(n / SR), 900, 7500, 2) * (0.55 + 0.45 * np.sin(2 * np.pi * 4.3 * t + 1.0))
-    grains = np.zeros(n)
-    r = np.random.default_rng(31)
-    for _ in range(int(d * 520)):                       # crunchy individual grains
-        at = r.uniform(0, d + 0.2); k = int(r.uniform(0.0007, 0.003) * SR)
-        f = r.uniform(1800, 6500)
-        place(grains, np.sin(2 * np.pi * f * np.arange(k) / SR) * edecay(k, k / SR / 2.5) * r.uniform(0.2, 1.0), at)
-    low = lp(noise(n / SR), 260, 2) * 0.35
-    x = hiss * 0.5 + grains * 0.9 + low
-    add("sfx_roll_sand", loopify(x, int(0.2 * SR)), peak=0.6, loop=True)
+    """Dry, swishy sand (picked by ear): a bright 'shhh' that swells twice per marble turn as the ball sweeps
+    grains aside, with a sprinkle of tiny high grain ticks. Own random stream; recorded at a mid speed."""
+    r = np.random.default_rng(5116)
+    d = 4.0; xf = int(0.25 * SR); n = int(d * SR) + xf; vn = 0.6
+    t, rot = _roll_common(r, n)
+    e = r.standard_normal(n); sw = 0.5 + 0.5 * np.sin(rot * 0.5)
+    y = (bp(e, 2500, 9000, 2) * 0.5 + bp(e, 700, 2000, 2) * 0.3) * vn ** 1.2 * sw
+    g = np.zeros(n)
+    for _ in range(int(400 * d)):
+        if r.random() > vn ** 0.8: continue
+        k = int(r.uniform(0.0004, 0.0012) * SR); f = r.uniform(3000, 8000)
+        tick = np.sin(2 * np.pi * f * np.arange(k) / SR) * np.exp(-np.arange(k) / (k / 3)) * r.uniform(0.2, 1) * vn
+        place(g, tick, r.uniform(0, n / SR))
+    y = _small_room(r, y + g * 0.6, 0.05)
+    add("sfx_roll_sand", loopify(y, xf), peak=0.6, loop=True)
 def roll_mud():
-    d = 2.4; n = int(d * SR) + int(0.2 * SR)
-    t = np.arange(n) / SR
-    body = bp(noise(n / SR), 70, 650, 2) * (0.7 + 0.3 * np.sin(2 * np.pi * 2.7 * t + 0.4))
-    squelch = np.zeros(n)
-    r = np.random.default_rng(32)
-    for _ in range(int(d * 14)):                        # sticky bubbles popping
-        at = r.uniform(0, d + 0.2); f0 = r.uniform(180, 520); k = int(r.uniform(0.03, 0.09) * SR)
-        bub = glide(f0, f0 * r.uniform(1.6, 2.6), k / SR)
-        bub = bub * edecay(len(bub), k / SR / 3) * r.uniform(0.2, 0.7)
-        place(squelch, bub, at)
-    wet = bp(noise(n / SR), 600, 2200, 2) * 0.12 * (0.5 + 0.5 * np.sin(2 * np.pi * 5.1 * t))
-    x = body * 0.8 + squelch * 0.9 + wet + lp(noise(n / SR), 120, 2) * 0.5
-    add("sfx_roll_mud", loopify(x, int(0.2 * SR)), peak=0.6, loop=True)
+    """Thick, squelchy mud (picked by ear): a low wet rumble that wobbles with the marble's turn, with gloopy
+    rising bubbles. Own random stream; recorded at a mid speed."""
+    r = np.random.default_rng(5221)
+    d = 4.0; xf = int(0.25 * SR); n = int(d * SR) + xf; vn = 0.6
+    t, rot = _roll_common(r, n)
+    flut = 1 + 0.2 * np.sin(rot) + 0.07 * np.sin(2 * rot + 1.3)
+    e = hp(np.cumsum(r.standard_normal(n)), 40, 2)
+    y = bp(e, 120, 600, 2) * vn ** 1.2 * flut * 0.5
+    bub = np.zeros(n)
+    for _ in range(int(10 * d)):
+        if r.random() > vn: continue
+        k = int(r.uniform(0.04, 0.1) * SR); f0 = r.uniform(200, 450); f = f0 * np.geomspace(1, r.uniform(1.4, 2.4), k)
+        b_ = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * np.arange(k) / k) ** 0.5 * np.exp(-np.arange(k) / (k / 2.5))
+        place(bub, b_ * r.uniform(0.3, 1), r.uniform(0, n / SR))
+    y = _small_room(r, y + bub * 1.6, 0.06)
+    add("sfx_roll_mud", loopify(y, xf), peak=0.6, loop=True)
 roll_hard(); roll_wood(); roll_sand(); roll_mud()
 
 def wind():
