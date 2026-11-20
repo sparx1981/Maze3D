@@ -1,0 +1,22 @@
+Marblix Privacy Policy
+Last updated: 20 November 2026
+
+Marblix is a 3D marble maze game. This policy explains what happens to your information when you play it.
+
+Information we collect
+None. Marblix does not collect, store, send or share any personal information. The app has no internet access, no accounts, no advertising and no analytics or tracking.
+
+Information kept on your device
+Your settings, best times, race ghosts and game statistics are saved only on your own device so the game can remember them. They never leave your device and we cannot see them. Uninstalling the app, or clearing its data, deletes them. If you use Android's own device backup, Google may include this game data in your backup under Google's privacy policy.
+
+Device sensors
+If you choose tilt controls, the game reads your device's motion sensor to steer the marble. These readings are used instantly to move the marble and are never stored or sent anywhere.
+
+Children
+Marblix does not knowingly collect any information from anyone, including children.
+
+Changes
+If this policy changes, for example if an online feature is added, the new version will be posted on this page with a new date before the change takes effect.
+
+Contact
+Questions about this policy: YOUR-CONTACT-EMAIL
