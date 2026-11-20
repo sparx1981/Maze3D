@@ -11,7 +11,7 @@
 | Declarations | Tick both boxes |
 
 ## Upload
-- **App bundle:** `dist/Marblix-1.0-release.aab` (version 1.0, version code 3). Upload it under Testing → Internal testing (or Closed testing) first.
+- **App bundle:** `dist/Marblix-1.0.1-release.aab` (version 1.0.1, version code 4). Upload it under Testing → Internal testing (or Closed testing) first.
 - **Play App Signing:** accept Google's default ("Use Google-generated key"). Your upload key signs the files you upload, and Google re-signs the app for users.
 - Each later upload needs a higher `versionCode` in `app/build.gradle.kts`.
 

@@ -129,6 +129,7 @@ uniform float uMetal;
 uniform int uHoleN;
 uniform float uTrailR;
 uniform vec2 uStud;          // toy studs: x = 1 / pitch, y = stud height
+uniform vec2 uLava;          // lava crust: x = 1 / plate size, y = detail (0..1, from the quality setting)
 uniform vec4 uHoleC[48];     // xyz = hole centre (local space), w = cut radius; only set while drawing the floor
 uniform vec3 uFloor2;       // second floor colour for patterned themes (sRGB)
 uniform float uShadowOn;
@@ -184,6 +185,17 @@ vec3 triW(vec3 n) { vec3 w = pow(abs(n), vec3(6.0)); return w / (w.x + w.y + w.z
 
 
 float fade3(vec3 P) { return 1.0 - smoothstep(0.0012, 0.004, length(dFdx(P))); }
+vec3 hash33(vec3 p) {
+    p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+    return fract(sin(p) * 43758.5453);
+}
+// lava colour scale: black crust, dark brown, orange, yellow-white (linear)
+vec3 lavaRamp(float t) {
+    const vec3 c0 = vec3(0.0050, 0.0010, 0.0005), c1 = vec3(0.039, 0.0090, 0.0040);
+    const vec3 c2 = vec3(1.0, 0.101, 0.0037), c3 = vec3(1.0, 0.64, 0.116);
+    t = clamp(t, 0.0, 1.0) * 3.0;
+    return t < 1.0 ? mix(c0, c1, t) : (t < 2.0 ? mix(c1, c2, t - 1.0) : mix(c2, c3, t - 2.0));
+}
 float hash11(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 
@@ -568,15 +580,37 @@ void main() {
         albedo = mix(albedo, albedo * vec3(0.35, 0.33, 0.4), stain * 0.6);
         hgt = bump * 0.0016;
         metal = 0.85; rough = mix(0.33, 0.12, stain);
-    } else if (uMat == 29) {    // basalt veined with lava
-        float a = abs(vnoise(vec2(dot(P, vec3(30.0, 17.0, 24.0)), dot(P, vec3(-16.0, 28.0, 19.0)))) - 0.5);
-        float b = abs(vnoise(vec2(dot(P, vec3(78.0, 44.0, 62.0)), dot(P, vec3(-40.0, 72.0, 50.0)))) - 0.5);
-        float vein = max(smoothstep(0.06, 0.0, a), smoothstep(0.035, 0.0, b) * 0.7);
-        float rockN = vnoise(vec2(dot(P, vec3(160.0, 90.0, 130.0)), dot(P, vec3(-80.0, 150.0, 110.0))));
-        albedo *= 0.6 + 0.8 * rockN;
-        emit = vec3(1.0, 0.34, 0.05) * vein * (1.5 + 0.7 * sin(uTime * 1.4 + a * 30.0)) + vec3(0.4, 0.08, 0.0) * smoothstep(0.2, 0.0, a) * 0.4;
-        hgt = (rockN - 0.5) * 0.0010 - vein * 0.0014;
-        rough = 0.55;
+    } else if (uMat == 29) {    // cooling lava crust: dark basalt plates split by glowing cracks; the plates drift and the cracks breathe
+        vec3 q = P * uLava.x;
+        float t = uTime * 0.26;
+        vec2 w2 = vec2(dot(q, vec3(0.8, 0.5, 0.6)), dot(q, vec3(-0.4, 0.8, 0.5)));
+        vec3 wp = vec3(vnoise(w2 * 0.9 + t), vnoise(w2 * 0.9 + 5.0 - t), vnoise(w2 * 0.9 + vec2(9.0, 3.0) + t * 0.7));
+        if (uLava.y > 0.6) wp = wp * 0.67 + 0.33 * vec3(vnoise(w2 * 1.9 + t * 1.3 + 2.0), vnoise(w2 * 1.9 + 7.0 - t * 1.3), vnoise(w2 * 1.9 + 11.0 + t));
+        q += (wp - 0.5) * 0.55;                                  // slow flow: plates stretch and drift
+        vec3 cn = floor(q), cf = fract(q);
+        float d1 = 8.0, d2 = 8.0, id = 0.0;
+        for (int k = -1; k <= 1; k++) for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec3 g = vec3(float(i), float(j), float(k));
+            vec3 h = hash33(cn + g);
+            vec3 r = g + h - cf;
+            float d = dot(r, r);
+            if (d < d1) { d2 = d1; d1 = d; id = h.x; } else if (d < d2) d2 = d;
+        }
+        float edge = sqrt(d2) - sqrt(d1);                       // distance to the nearest crack
+        const float cw = 0.18;
+        float aa = fwidth(edge);
+        float crack = 1.0 - smoothstep(0.0, cw + aa, edge);
+        crack *= crack;
+        crack = mix(crack, cw * 0.3, smoothstep(cw * 0.6, cw * 1.6, aa));   // far away: settle to an even glow instead of shimmering
+        float pulse = 0.75 + 0.25 * sin(uTime * 2.1 + id * 20.0);           // each plate breathes on its own rhythm
+        float mott = vnoise(w2 * 4.0 + id * 7.0) * 0.65 + vnoise(w2 * 9.0 + 3.0) * 0.35 * mix(0.5, 1.0, fade3(P));
+        vec3 crust = mix(vec3(0.0050, 0.0010, 0.0005), vec3(0.039, 0.0090, 0.0040), clamp(mott * 1.2, 0.0, 1.0)) * 1.3;
+        albedo = mix(crust, vec3(0.01, 0.003, 0.001), crack);
+        vec3 heat = lavaRamp(0.45 + crack * 0.55) * pulse;
+        emit = (heat * crack + vec3(1.0, 0.64, 0.116) * crack * crack * 0.55) * 1.25
+             + vec3(1.0, 0.101, 0.0037) * exp(-edge * 5.0) * 0.12 * pulse;   // heat glow bleeding onto plate edges
+        hgt = (mott - 0.5) * 0.0005 - crack * 0.0016;          // crust sits proud of the cracks
+        rough = mix(0.72, 0.3, crack);
     } else if (uMat == 30) {    // jelly: glossy gel in colour blobs with an inner glow, rippling away from the ball
         float ja = vnoise(vec2(dot(P, vec3(26.0, 15.0, 21.0)), dot(P, vec3(-14.0, 25.0, 17.0))));
         albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.42, 0.62, ja));

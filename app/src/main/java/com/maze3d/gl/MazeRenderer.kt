@@ -1453,6 +1453,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             } else GLES30.glUniform4f(loc(sceneProg, "uCutA"), 0f, 0f, 0f, 0f)
         }
         run { val sp = studPitch(); GLES30.glUniform2f(loc(sceneProg, "uStud"), 1f / sp, sp * 0.12f) }
+        GLES30.glUniform2f(loc(sceneProg, "uLava"), 2.5f / (maze?.cellSize ?: 0.2f),
+            when { profile.shadows >= 2 -> 1f; profile.shadows >= 1 -> 0.7f; else -> 0.4f })
         GLES30.glUniform1f(loc(sceneProg, "uHedgeSnow"), if (pal.themeId == 7) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uHiero"), if (pal.themeId == 8) 1f else 0f)
         lampUniform.fill(0f); lampColUniform.fill(0f)
