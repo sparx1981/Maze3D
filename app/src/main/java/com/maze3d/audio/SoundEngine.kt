@@ -103,8 +103,9 @@ class SoundEngine(private val ctx: Context) : Audio {
         if (!sfxOn || paused) { silenceRolls(); return }
         for (k in rollNames.indices) if (rollStreams[k] == 0 && ready(rollNames[k]) != null) rollStreams[k] = loop(rollNames[k])
         val n = speed.coerceIn(0f, 1f)
-        val vol = if (n < 0.02f) 0f else Math.pow(n.toDouble(), 0.6).toFloat() * 0.85f
-        val rate = 0.55f + 1.15f * n
+        // louder and a little brighter with speed, but over a narrow pitch range so it stays a natural roll, never a whine
+        val vol = if (n < 0.015f) 0f else (Math.pow(n.toDouble(), 0.7).toFloat() * 0.8f).coerceAtMost(0.8f)
+        val rate = 0.78f + 0.5f * n
         val sel = kind.coerceIn(0, rollNames.size - 1)
         for (k in rollNames.indices) {
             rollVols[k] += ((if (k == sel) vol else 0f) - rollVols[k]) * 0.25f

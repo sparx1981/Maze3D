@@ -145,7 +145,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     // ---- themed wall shapes: walls need not be straight bars
-    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7 }
+    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7; const val FRIES = 8 }
     /** 1 = full wall detail; lower quality settings use fewer segments along the shaped walls. */
     var wallDetail = 1f
     private val wallStyle = when (pal.themeId) {
@@ -154,6 +154,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         15, 17 -> WallStyle.ROCK          // piled boulders, cooled lava rock
         4, 13, 16 -> WallStyle.BLOCKS     // hull panels, toy bricks, riveted steel sections
         19 -> WallStyle.CASTLE            // crenellated battlements
+        5 -> WallStyle.FRIES              // a row of French fries, each stick its own length and thickness
         8 -> WallStyle.BLOCKS             // dressed temple stone
         0, 18 -> WallStyle.BEADS          // candy ropes and gummy strings
         14 -> WallStyle.PILLOW            // stuffed, stitched fabric rolls
@@ -196,7 +197,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val segs = stripeSegs * per
         val nk = prof.size
         val freq = 1f / (cs * 0.16f)
-        val chunks = max(2, Math.round(len / (cs * (if (style == WallStyle.BLOCKS) 0.34f else 0.24f))))
+        val chunks = max(2, Math.round(len / (cs * (when (style) { WallStyle.BLOCKS -> 0.34f; WallStyle.FRIES -> 0.11f; else -> 0.24f }))))
         val beads = max(2, Math.round(len / (cs * (if (style == WallStyle.PILLOW) 0.32f else 0.17f))))
         // shared grid of positions (base + lift) so the surface stays watertight; normals come from the grid itself
         val basePos = Array(segs + 1) { arrayOfNulls<Vec3>(nk) }
@@ -231,6 +232,12 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                     hsc = hOf(ci) * (1f - (1f - sink) * maxOf(blendL, blendR)); wsc = wOf(ci) * (1f - 0.25f * maxOf(blendL, blendR))
                     seam[r] = maxOf(blendL, blendR)
                 }
+                WallStyle.FRIES -> {                                   // stick by stick: heights and thicknesses vary, with a crease between fries
+                    val cf = f * chunks; val ci = kotlin.math.floor(cf).toInt().coerceAtMost(chunks - 1); val fr = cf - ci
+                    val crease = 1f - smoothstep01(0f, 0.12f, fr) * (1f - smoothstep01(0.88f, 1f, fr))
+                    hsc = (0.88f + 0.34f * hash(e * 53 + ci)) * (1f - 0.08f * crease); wsc = (0.92f + 0.2f * hash(e * 29 + ci + 300)) * (1f - 0.12f * crease)
+                    seam[r] = crease
+                }
                 WallStyle.CASTLE -> {                                  // merlons and gaps along the top: a square-wave in height
                     val cf = f * beads * 1.5f; val fr = cf - kotlin.math.floor(cf)
                     val up = smoothstep01(0.08f, 0.14f, fr) * (1f - smoothstep01(0.56f, 0.62f, fr))
@@ -259,6 +266,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                     tint[r][k] = 0.84f + 0.3f * vnoise(p * (freq * 1.3f) + Vec3(e.toFloat() * 0.1f, 0f, 0f))
                 }
                 if (style == WallStyle.BLOCKS || style == WallStyle.PILLOW) tint[r][k] = 1f - (if (style == WallStyle.BLOCKS) 0.35f else 0.25f) * seam[r]
+                if (style == WallStyle.FRIES) {                         // golden sides, toasted-brown tips and creases
+                    val ci = kotlin.math.floor(f * chunks).toInt()
+                    tint[r][k] = (0.86f + 0.24f * hash(e * 71 + ci)) * (1f - 0.6f * seam[r]) * (1f - 0.38f * smoothstep01(0.75f, 1f, q[1]))
+                }
                 if (style == WallStyle.CASTLE) tint[r][k] = 0.85f + 0.25f * vnoise(p * (freq * 2f) + Vec3(k * 0.5f, 3f, 1f))
                 basePos[r][k] = p + side * (lat + bend * t)
                 liftV[r][k] = n * up

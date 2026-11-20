@@ -9,7 +9,7 @@ object Mat {
     const val SAND = 5; const val MUD = 6
     const val CANDY = 7; const val DEAD = 8; const val ASPHALT = 9; const val TURF = 10; const val SPACE = 11
     const val TABLE = 12; const val LAB = 13; const val ICE = 14; const val SANDSTONE = 15; const val NEON = 16; const val MOSS = 17
-    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24; const val TOY = 25; const val FELT = 26; const val ROCK = 27; const val PLATE = 28; const val LAVA = 29; const val JELLY = 30
+    const val STONE = 21; const val PROP = 22; const val HEDGE = 23; const val LEAF = 24; const val TOY = 25; const val FELT = 26; const val ROCK = 27; const val PLATE = 28; const val LAVA = 29; const val JELLY = 30; const val FRIES = 31
 }
 
 /** Wall cross-sections. */
@@ -86,9 +86,9 @@ class Palette(
                 c(18, 20, 48), c(2, 3, 10), c(84, 224, 255), c(255, 92, 182),
                 wallTop = c(60, 230, 255), profile = Profile.BLOCK, backdrop = Backdrop.STARS, glow = 1f, themeId = 4),
             // 5 Fast food: red/white tablecloth, French-fry walls
-            Palette("Fast food", c(222, 40, 40), Mat.TABLE, 0.75f, c(255, 205, 64), Mat.ENAMEL, 0.5f,
+            Palette("Fast food", c(222, 40, 40), Mat.TABLE, 0.75f, c(246, 196, 84), Mat.FRIES, 0.6f,
                 c(255, 192, 96), c(126, 44, 24), c(255, 72, 44), c(60, 200, 90),
-                floor2 = c(252, 246, 238), wall2 = c(238, 172, 44), profile = Profile.SQUARE,
+                floor2 = c(252, 246, 238), wall2 = c(232, 176, 64), profile = Profile.SQUARE,
                 backdrop = Backdrop.BOKEH, wallMetal = 0f, themeId = 5),
             // 6 Science: white lab tiles, glass tubes of coloured liquid with bead joints
             Palette("Science", c(236, 241, 246), Mat.LAB, 0.14f, c(120, 232, 255), Mat.ENAMEL, 0.04f,

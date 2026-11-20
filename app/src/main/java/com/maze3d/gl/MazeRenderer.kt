@@ -1163,8 +1163,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             doors[i].closed = closed
             val prev = doorPrevG[i]
             if (phase == Phase.PLAY) {
-                if (prev <= 0.02f && g > 0.02f) audio.doorClose(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
-                else if (prev >= 0.98f && g < 0.98f) audio.doorOpen(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
+                if (prev <= 0.02f && g > 0.02f && proximity(doors[i].mid, mb.position) > 0f) audio.doorClose(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
+                else if (prev >= 0.98f && g < 0.98f && proximity(doors[i].mid, mb.position) > 0f) audio.doorOpen(proximity(doors[i].mid, mb.position), panOf(doors[i].mid))
             }
             doorPrevG[i] = g
         }
@@ -1173,8 +1173,8 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             val o = hz.holeOpen(i, time)
             val c = m.centers[hz.holeCells[i]]
             if (phase == Phase.PLAY) {
-                if (holePrevOpen[i] < 0.05f && o >= 0.05f) audio.holeOpen(proximity(c, mb.position) * 0.8f, panOf(c))
-                else if (holePrevOpen[i] > 0.6f && o <= 0.6f) audio.holeClose(proximity(c, mb.position) * 0.7f, panOf(c))
+                if (holePrevOpen[i] < 0.05f && o >= 0.05f && proximity(c, mb.position) > 0f) audio.holeOpen(proximity(c, mb.position) * 0.8f, panOf(c))
+                else if (holePrevOpen[i] > 0.6f && o <= 0.6f && proximity(c, mb.position) > 0f) audio.holeClose(proximity(c, mb.position) * 0.7f, panOf(c))
             }
             holePrevOpen[i] = o
         }
@@ -1218,9 +1218,12 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
 
     /** Loudness of something at [local] as heard from the marble: near is loud, the far side of the piece is muffled. */
     private fun proximity(local: Vec3, from: Vec3): Float {
-        val d = (local - from).length()
-        val back = if (chaseBlend < 0.5f && orient.rotate(local).z < -0.1f) 0.5f else 1f
-        return (kotlin.math.exp(-d / 0.55f) * 1.1f * back).coerceIn(0f, 1f)
+        // hazards are heard only near the ball: full volume within about a cell and a half, silent beyond five cells
+        val cs = maze?.cellSize ?: 0.1f
+        val d = (local - from).length() / cs
+        val t = ((d - 1.5f) / 3.5f).coerceIn(0f, 1f)
+        val v = 1f - t * t * (3f - 2f * t)
+        return if (v < 0.03f) 0f else v * v
     }
 
     /** Footprints, kicked-up dust or mud, flying grains and clumps, and the dirt that builds up on the marble. */

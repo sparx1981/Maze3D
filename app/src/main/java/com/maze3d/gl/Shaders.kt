@@ -586,6 +586,18 @@ void main() {
         hgt = (rip * 0.35 + idle) * (uMarbleR > 0.0 ? uMarbleR : 0.02) * 0.1;
         emit = albedo * (0.16 + 0.1 * ja);
         rough = 0.08; coat = 1.0;
+    } else if (uMat == 31) {    // French fries: golden potato with a fluffy-crisp surface, toasted flecks and salt crystals
+        vec3 an = abs(normalize(vNL));
+        vec2 sq = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);
+        float crisp = vnoise(sq * 140.0) * 0.6 + vnoise(sq * 380.0) * 0.4;
+        float toast = smoothstep(0.62, 0.85, vnoise(sq * 55.0 + 3.0));
+        albedo *= 0.82 + 0.3 * crisp;
+        albedo = mix(albedo, albedo * vec3(0.72, 0.5, 0.28), toast * 0.7);
+        float salt = step(0.993, hash21(floor(sq * 2200.0))) * fade3(P);
+        albedo = mix(albedo, vec3(0.95), salt * 0.6);
+        emit = vec3(1.0) * salt * 0.12;
+        hgt = (crisp - 0.5) * 0.0008 - toast * 0.0003;
+        rough = 0.62 - 0.25 * salt; coat = 0.25;                 // a light sheen of oil
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
         float vm = max(vCol.r, max(vCol.g, vCol.b));
         vec3 baseC = vm > 1.0 ? vCol / vm : vCol;                // keep the hue of a glowing colour instead of clipping it to white
