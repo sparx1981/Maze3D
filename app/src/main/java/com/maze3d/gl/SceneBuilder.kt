@@ -735,6 +735,27 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 nb++
             }
         }
+        // 2d. motorsport: arches and a start gantry spanning some straight stretches of track
+        if (pal.themeId == 2) {
+            val bridges = listOf(PropLibrary.tyreArch(), PropLibrary.brandArch(), PropLibrary.startGantry())
+            val used = ArrayList<Vec3>()
+            var nb = 0
+            for (c in maze.solution.toList() + (0 until maze.cellCount).toList()) {
+                if (nb >= 12) break
+                if (c == maze.start || c == maze.goal || maze.links[c].size != 2 || hash(c + 8123) > 0.35f) continue
+                val p0 = maze.centers[c]
+                val a = maze.centers[maze.links[c][0]]; val b = maze.centers[maze.links[c][1]]
+                if (((p0 - a).normalized() dot (b - p0).normalized()) < 0.95f) continue
+                if (used.any { (it - p0).length() < cs * 4f }) continue
+                val n = surface.normal(p0)
+                val along = (b - a).normalized()
+                val across = (along cross n).normalized()
+                val mesh = bridges[nb % bridges.size]
+                placed.add(Placed(mesh, p0, n, across, cs, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+                if (mesh === bridges[2]) addLamp(p0 + n * (cs * 0.8f), Vec3(1f, 0.25f, 0.15f) * 1.2f, 3f)
+                used.add(p0); nb++
+            }
+        }
         // 3. landmarks floating around the shape
         val count = 7
         for (i in 0 until count) {

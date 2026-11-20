@@ -824,16 +824,35 @@ object PropLibrary {
     }.build()
 
     private fun idol() = PM().apply {
-        // a mossy carved stone head: heavy brow, glowing eyes, broad nose and a grimacing mouth
-        val stone = c(128, 126, 110); val dark = c(70, 72, 60); val moss = c(70, 130, 50)
-        col = stone; lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.36f, 0f), floatArrayOf(0.38f, 0.25f), floatArrayOf(0.36f, 0.7f), floatArrayOf(0.3f, 0.86f), floatArrayOf(0.18f, 0.95f), floatArrayOf(0f, 0.97f)), 18) { u, v ->
-            if (v > 0.8f && ((u * 7f).toInt() % 2 == 0)) moss else stone }
-        col = dark; at(0f, -0.33f, 0.66f) { box(0.56f, 0.12f, 0.08f) }                             // brow
-        col = c(255, 170, 40) * 1.7f; for (s in intArrayOf(-1, 1)) at(s * 0.13f, -0.36f, 0.56f) { scale(1f, 0.4f, 0.7f); sphere(0.06f, 10, 8) }
-        col = stone; at(0f, -0.38f, 0.43f) { scale(0.8f, 1f, 1.2f); cone(0.09f, 0.04f, 3) }; at(0f, -0.35f, 0.4f) { scale(1.2f, 0.7f, 0.8f); sphere(0.08f, 10, 8) }   // nose
-        col = dark; at(0f, -0.35f, 0.24f) { box(0.36f, 0.08f, 0.1f) }
-        col = c(230, 226, 210); for (i in 0 until 6) at(-0.15f + i * 0.06f, -0.39f, 0.24f) { box(0.04f, 0.02f, 0.06f) }
-        col = moss; for (i in 0 until 7) { val a = i * 0.9f; tube(listOf(Vec3(cos(a) * 0.36f, sin(a) * 0.36f, 0.9f), Vec3(cos(a) * 0.4f, sin(a) * 0.4f, 0.6f), Vec3(cos(a + 0.2f) * 0.39f, sin(a + 0.2f) * 0.39f, 0.3f)), 0.015f, 5) }
+        // an Olmec-style colossal head on a stepped plinth: a banded helmet with carved glyph studs, heavy lidded eyes
+        // that glow from deep sockets, a broad flat nose with flared nostrils, full lips, ear spools, cracks and draped moss
+        val stone = c(132, 128, 112); val shade = c(96, 94, 82); val moss = c(74, 128, 52); val mossD = c(46, 96, 40)
+        col = shade; push(); translate(0f, 0f, 0.04f); box(0.78f, 0.7f, 0.08f); pop(); col = stone; push(); translate(0f, 0f, 0.1f); box(0.66f, 0.6f, 0.06f); pop()
+        col = stone
+        at(0f, 0f, 0.5f) { scale(0.86f, 0.72f, 1.0f); sphere(0.36f, 26, 18) }                                     // head
+        at(0f, -0.06f, 0.24f) { scale(0.95f, 0.75f, 0.6f); sphere(0.3f, 20, 12) }                                // jaw and cheeks
+        // helmet: a band round the head with a raised rim and glyph studs, and a crest at the back
+        col = shade; at(0f, 0f, 0.66f) { scale(0.9f, 0.76f, 0.5f); torus(0.32f, 0.05f, 28, 8) }
+        col = stone; for (k in 0 until 9) { val a = -1.25f + k * 0.31f; at(sin(a) * 0.3f, -cos(a) * 0.27f, 0.68f) { scale(1f, 0.6f, 1f); sphere(0.03f, 8, 6) } }
+        col = shade; at(0f, 0.14f, 0.82f) { scale(0.5f, 0.9f, 0.4f); sphere(0.2f, 14, 8) }
+        // eyes: deep sockets, heavy lids, glowing irises
+        for (s in intArrayOf(-1, 1)) {
+            col = c(40, 38, 32); at(s * 0.12f, -0.24f, 0.5f) { scale(1.3f, 0.5f, 0.7f); sphere(0.065f, 12, 8) }
+            col = stone; at(s * 0.12f, -0.255f, 0.545f) { scale(1.5f, 0.6f, 0.45f); sphere(0.06f, 12, 8) }                           // upper lid
+            col = c(255, 190, 70) * 1.8f; at(s * 0.12f, -0.27f, 0.5f) { scale(1f, 0.5f, 0.8f); sphere(0.025f, 8, 6) }
+            col = stone; at(s * 0.31f, -0.02f, 0.45f) { scale(0.4f, 1f, 1.3f); sphere(0.07f, 10, 8) }                               // ears
+            col = shade; at(s * 0.34f, -0.02f, 0.42f) { rotY((PI / 2).toFloat()); torus(0.035f, 0.014f, 12, 5) }                  // ear spools
+        }
+        col = stone; at(0f, -0.29f, 0.4f) { scale(1.4f, 0.8f, 1f); sphere(0.07f, 12, 8) }; at(0f, -0.27f, 0.46f) { scale(0.6f, 0.6f, 1.4f); sphere(0.045f, 10, 8) }   // nose
+        col = c(40, 38, 32); for (s in intArrayOf(-1, 1)) at(s * 0.045f, -0.33f, 0.38f) { sphere(0.016f, 6, 4) }                // nostrils
+        col = stone; at(0f, -0.29f, 0.29f) { scale(1.7f, 0.7f, 0.45f); sphere(0.07f, 14, 8) }; at(0f, -0.28f, 0.24f) { scale(1.5f, 0.7f, 0.45f); sphere(0.065f, 14, 8) }   // lips
+        col = c(40, 38, 32); at(0f, -0.32f, 0.265f) { box(0.18f, 0.01f, 0.012f) }
+        // weathering: cracks and moss draped over the crown and down one side, with a few hanging tendrils
+        col = c(60, 58, 50); tube(listOf(Vec3(0.14f, -0.2f, 0.78f), Vec3(0.2f, -0.24f, 0.62f), Vec3(0.24f, -0.22f, 0.5f)), 0.006f, 3)
+        for (k in 0 until 14) { val a = k * 0.45f; col = if (k % 3 == 0) mossD else moss
+            at(cos(a) * 0.17f * (0.4f + 0.6f * (k % 4) / 3f), sin(a) * 0.14f, 0.8f + 0.02f * (k % 3)) { scale(1f, 1f, 0.35f); sphere(0.07f, 8, 6) } }
+        col = moss; for (k in 0 until 5) { val x = -0.25f + k * 0.03f; tube(listOf(Vec3(x, -0.05f, 0.78f), Vec3(x - 0.04f, -0.14f, 0.6f), Vec3(x - 0.05f, -0.12f, 0.4f)), 0.008f, 4) }
+        col = c(80, 160, 60); for (k in 0 until 6) at(-0.3f, -0.12f + k * 0.01f, 0.62f - k * 0.05f) { scale(1f, 0.4f, 0.2f); sphere(0.03f, 6, 4) }
     }.build()
 
     private fun jungleStump() = PM().apply {
@@ -1754,4 +1773,54 @@ object PropLibrary {
         }.build()
         return Bird(body, wing(1f), wing(-1f), 2, 1.5f, 4.5f, 2.6f, glide = true)
     }
+
+    // ---------------------------------------------------------------- racing bridges over the track (span along y, ±0.56 from the centre line)
+    /** A tyre-maker's arch: a black tyre-tread arch with a white brand, on yellow footings. */
+    fun tyreArch() = PM().apply {
+        col = c(250, 200, 30); for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * 0.56f, 0.06f); box(0.22f, 0.14f, 0.12f); pop() }
+        push(); rotY((PI / 2).toFloat())                         // the ring stands up across the track; its lower half is under the floor
+        torus(0.56f, 0.075f, 40, 10) { u, v ->
+            val a = u * 2f * PI.toFloat()
+            val onTop = cos(a) < 0f
+            val face = cos(v * 2f * PI.toFloat())
+            if (!onTop) c(20, 20, 22)
+            else if (face < -0.2f || face > 0.95f) c(24, 24, 26) * (if (((u * 160f).toInt() % 2) == 0) 0.8f else 1.1f)
+            else if (((u * 38f).toInt() % 3) != 0 && u in 0.36f..0.64f) c(245, 245, 245) else c(24, 24, 26)
+        }
+        pop()
+        col = c(250, 200, 30); for (s in floatArrayOf(-1f, 1f)) { push(); translate(s * 0.08f, 0f, 0f); rotY((PI / 2).toFloat()); torus(0.56f, 0.025f, 40, 5); pop() }
+    }.build()
+
+    /** An energy-drink style arch: navy legs and curved deck, red-and-gold emblem in the middle, brand panels on the legs. */
+    fun brandArch() = PM().apply {
+        val navy = c(18, 26, 70)
+        col = c(30, 30, 34); for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * 0.56f, 0.03f); box(0.24f, 0.16f, 0.06f); pop() }
+        for (s in intArrayOf(-1, 1)) {
+            col = navy; tube(listOf(Vec3(0f, s * 0.56f, 0.05f), Vec3(0f, s * 0.56f, 0.45f), Vec3(0f, s * 0.48f, 0.72f), Vec3(0f, s * 0.3f, 0.86f)), 0.05f, 6)
+            col = c(220, 30, 40); for (k in 0 until 4) { push(); translate(-0.051f, s * 0.56f, 0.18f + k * 0.07f); box(0.006f, 0.07f, 0.04f); pop() }
+        }
+        col = navy; push(); translate(0f, 0f, 0.88f); box(0.1f, 0.66f, 0.2f); pop()
+        col = c(255, 214, 40) * 1.1f; push(); translate(-0.052f, 0f, 0.88f); rotY((PI / 2).toFloat()); cylinder(0.075f, 0.004f, 20); pop()
+        col = c(220, 30, 40); for (s in intArrayOf(-1, 1)) { push(); translate(-0.056f, s * 0.12f, 0.87f); scale(0.2f, 1.6f, 0.9f); sphere(0.05f, 10, 6); pop()
+            push(); translate(-0.056f, s * 0.05f, 0.92f); rotX(s * 0.8f); cone(0.012f, 0.06f, 5); pop() }
+        col = c(250, 250, 250); for (s in intArrayOf(-1, 1)) for (k in 0 until 3) { push(); translate(-0.052f, s * (0.22f + k * 0.035f), 0.88f); box(0.004f, 0.025f, 0.05f); pop() }
+    }.build()
+
+    /** Start gantry: a lattice tower, an overhead beam with a black board and a grid of start lights (they glow and light the track). */
+    fun startGantry() = PM().apply {
+        val steel = c(70, 74, 82)
+        for (s in intArrayOf(-1, 1)) {
+            col = steel
+            for (cx in intArrayOf(-1, 1)) for (cy in intArrayOf(-1, 1)) { push(); translate(cx * 0.05f, s * 0.56f + cy * 0.05f, 0.5f); box(0.02f, 0.02f, 1f); pop() }
+            for (k in 0 until 8) { val z = 0.06f + k * 0.12f; tube(listOf(Vec3(-0.05f, s * 0.56f - 0.05f, z), Vec3(0.05f, s * 0.56f + 0.05f, z + 0.12f)), 0.006f, 3); tube(listOf(Vec3(0.05f, s * 0.56f - 0.05f, z), Vec3(-0.05f, s * 0.56f + 0.05f, z + 0.12f)), 0.006f, 3) }
+        }
+        col = steel; push(); translate(0f, 0f, 0.98f); box(0.06f, 1.24f, 0.05f); pop()
+        col = c(16, 16, 18); push(); translate(-0.04f, -0.24f, 0.86f); box(0.03f, 0.5f, 0.2f); pop()
+        col = c(245, 245, 245); for (k in 0 until 5) { push(); translate(-0.057f, -0.42f + k * 0.07f, 0.88f); box(0.004f, 0.045f, if (k % 2 == 0) 0.1f else 0.07f); pop() }
+        col = c(16, 16, 18); push(); translate(-0.04f, 0.28f, 0.84f); box(0.03f, 0.5f, 0.26f); pop()
+        for (cx in 0 until 5) for (cy in 0 until 3) {
+            col = if (cy == 0) c(255, 150, 30) * 2f else c(255, 40, 30) * 2.2f
+            push(); translate(-0.058f, 0.08f + cx * 0.1f, 0.76f + cy * 0.07f); rotY((PI / 2).toFloat()); cylinder(0.026f, 0.006f, 12); pop()
+        }
+    }.build()
 }

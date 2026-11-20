@@ -1346,16 +1346,34 @@ out vec4 outColor;
 void main() {
     if (uPass > 0.5) discard;
     float x = vUv.x, y = vUv.y;
-    if (uLeafKind > 0.5 && fract(vSeed * 3.17) > 0.72) {          // a fallen twig: a thin crooked stick with a side shoot
-        float bend = 0.08 * sin(x * 3.0 + vSeed * 9.0);
-        float stick = 0.06 - abs(y - bend);
-        float shoot = 0.035 - abs((y - bend) - (x - 0.2) * 0.9) ;
-        shoot *= step(0.2, x) * step(x, 0.7);
-        if (max(stick, shoot) < 0.0 || abs(x) > 0.95) discard;
-        vec3 bark = mix(vec3(0.32, 0.22, 0.13), vec3(0.45, 0.34, 0.2), fract(vSeed * 11.3));
-        bark *= 0.8 + 0.25 * sin(x * 40.0 + vSeed * 5.0);
+    if (uLeafKind > 0.5 && fract(vSeed * 3.17) > 0.72) {          // a fallen twig: tapering crooked stick, a forked side shoot with two leaves
+        float sd = fract(vSeed * 13.7);
+        float bend = 0.07 * sin(x * 2.4 + sd * 6.0) + 0.03 * sin(x * 7.0 + sd * 3.0);
+        float r0 = mix(0.075, 0.03, (x + 1.0) * 0.5);                 // thicker at the snapped end
+        float stem = r0 - abs(y - bend);
+        vec2 fs = vec2(-0.15 + sd * 0.2, bend);                        // the fork
+        vec2 fe = fs + vec2(0.55, 0.42 * (sd > 0.5 ? 1.0 : -1.0));
+        vec2 pa = vec2(x, y) - fs, ba = fe - fs;
+        float hh = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        float shoot = mix(0.035, 0.014, hh) - length(pa - ba * hh);
+        vec2 lq = vec2(x, y) - fe;                                     // two small leaves at the tip of the shoot
+        float lf1 = 0.07 - length(vec2(dot(lq, normalize(ba)) - 0.07, dot(lq, vec2(-ba.y, ba.x) / length(ba)) * 2.2));
+        float lf2 = 0.06 - length(vec2(dot(lq + ba * 0.25, normalize(ba + vec2(0.0, 0.3))) * 1.0 - 0.0, (dot(lq + ba * 0.25, vec2(-ba.y, ba.x) / length(ba)) + 0.06) * 2.4));
+        if (abs(x) > 0.97) stem = -1.0;
+        float wood = max(stem, shoot);
+        float leaf = max(lf1, lf2);
+        if (wood < 0.0 && leaf < 0.0) discard;
         float lit = 0.45 + 0.75 * abs(dot(normalize(vNrm), uLightDir));
-        outColor = vec4(bark * lit, smoothstep(0.0, 0.35, vAge));
+        vec3 col;
+        if (wood >= 0.0) {
+            vec3 bark = mix(vec3(0.30, 0.20, 0.12), vec3(0.46, 0.34, 0.2), sd);
+            float grain = 0.82 + 0.18 * sin((y - bend) * 120.0 + x * 6.0);
+            float knot = smoothstep(0.03, 0.0, length(vec2(x - (sd - 0.5), y - bend)) - 0.02);
+            float edge = smoothstep(0.0, 0.025, wood);
+            col = bark * grain * (1.0 - 0.45 * knot) * (0.6 + 0.4 * edge);
+            col = mix(col, vec3(0.62, 0.52, 0.36), step(0.94, abs(x)) * step(0.0, stem));    // pale snapped end
+        } else col = mix(vec3(0.18, 0.44, 0.12), vec3(0.4, 0.6, 0.18), sd);
+        outColor = vec4(col * lit, smoothstep(0.0, 0.35, vAge));
         return;
     }
     // pointed leaf outline with a stalk, midrib and side veins
