@@ -124,26 +124,36 @@ def add(name, x, peak=0.89, loop=False):
 
 
 def impact(tier, i):
-    r = np.random.default_rng(100 + tier * 10 + i)
-    d = [0.5, 1.0, 2.0][tier]
-    f0 = r.uniform(950, 1750) * [1.15, 1.0, 0.85][tier]
-    ratios = np.array([1, 2.32, 3.97, 5.82, 8.11, 11.2])
-    amps = np.array([1, 0.62, 0.42, 0.26, 0.16, 0.08]) * [0.7, 1, 1][tier]
-    taus = np.array([1, 0.62, 0.45, 0.33, 0.22, 0.14]) * [0.05, 0.14, 0.34][tier]
-    x = modal(f0 * ratios, amps, taus, d, phases=r.uniform(0, 6.28, 6))
-    # glassy marble "tick" transient
-    n = int(0.006 * SR)
-    click = hp(noise(0.02), 2500)[:int(0.02 * SR)] * edecay(int(0.02 * SR), 0.0016)
-    x[:len(click)] += click * [0.9, 1.1, 1.4][tier]
-    # body thud of the wall
-    f_body = r.uniform(140, 260) * [1.2, 1, 0.8][tier]
-    body = np.sin(2 * np.pi * f_body * T(d)) * edecay(int(d * SR), [0.012, 0.03, 0.07][tier])
-    x += body * [0.35, 0.6, 0.9][tier]
-    if tier == 2:
-        sub = glide(110, 55, d) * edecay(int(d * SR), 0.09)
-        x += sub * 0.7
-    x = reverb(x, rt=[0.18, 0.28, 0.45][tier], wet=[0.1, 0.14, 0.2][tier], seed=tier * 10 + i)
-    add(f"sfx_impact_{'smh'[tier]}{i}", fade(trim(x), 0.5, 12), peak=[0.45, 0.65, 0.88][tier])
+    """A hard ball striking a hard wall: a sharp contact 'clack' (broadband click plus a very short, high, heavily
+    damped resonance - no ringing), a dull knock from the wall body, and for harder hits a low thump and a tiny
+    second tap as the ball skips. Three tiers (soft, medium, hard) with three slightly different takes each."""
+    r = np.random.default_rng(700 + tier * 10 + i)
+    d = [0.18, 0.28, 0.42][tier]
+    n = int(d * SR)
+    x = np.zeros(n)
+    # contact click: a 1-3 ms burst of bright noise
+    cl = int(r.uniform(0.0012, 0.0028) * SR)
+    click = bp(noise(0.01), 1800, 9000, 2)[:cl] * edecay(cl, [0.0005, 0.0007, 0.0009][tier])
+    x[:cl] += click * [0.9, 1.1, 1.3][tier]
+    # the clack: a couple of high partials that die within a few milliseconds (hard materials, no sustain)
+    f_c = r.uniform(2300, 3400) * [1.1, 1.0, 0.92][tier]
+    for k, (rat, amp) in enumerate([(1.0, 1.0), (1.48, 0.55), (2.31, 0.3)]):
+        x += np.sin(2 * np.pi * f_c * rat * T(d) + r.uniform(0, 6.28)) * edecay(n, [0.0035, 0.0045, 0.0055][tier] / (1 + 0.4 * k)) * amp * 0.6
+    # the knock: low-mid body of the wall, short and dull
+    f_k = r.uniform(320, 520) * [1.15, 1.0, 0.85][tier]
+    knock = (np.sin(2 * np.pi * f_k * T(d)) + 0.4 * np.sin(2 * np.pi * f_k * 1.9 * T(d))) * edecay(n, [0.012, 0.02, 0.03][tier])
+    x += lp(knock, 2000) * [0.5, 0.75, 1.0][tier]
+    if tier >= 1:                                   # a little skip: a quieter second tap just after the first
+        at = r.uniform(0.018, 0.035) + 0.01 * tier
+        m = int(0.012 * SR)
+        tap = bp(noise(0.012), 1500, 7000, 2)[:m] * edecay(m, 0.0012) + np.sin(2 * np.pi * f_c * 1.05 * T(0.012))[:m] * edecay(m, 0.003) * 0.4
+        place(x, tap, at, [0, 0.22, 0.3][tier])
+    if tier == 2:                                   # a hard hit also thumps the whole board
+        thump = np.sin(2 * np.pi * r.uniform(95, 130) * T(d)) * edecay(n, 0.04)
+        x += lp(thump, 400) * 0.8
+    x = soft(x * [1.0, 1.15, 1.35][tier], 1.2)
+    x = reverb(x, rt=[0.12, 0.16, 0.22][tier], wet=[0.06, 0.08, 0.1][tier], seed=tier * 10 + i)
+    add(f"sfx_impact_{'smh'[tier]}{i}", fade(trim(x), 0.2, 8), peak=[0.5, 0.7, 0.9][tier])
 
 for tier in range(3):
     for i in range(3): impact(tier, i)

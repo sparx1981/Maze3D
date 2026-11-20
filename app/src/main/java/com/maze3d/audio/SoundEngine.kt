@@ -94,9 +94,9 @@ class SoundEngine(private val ctx: Context) : Audio {
         var v = Random.nextInt(3)
         if (v == lastVariant) v = (v + 1) % 3
         lastVariant = v
-        val vol = 0.3f + 0.7f * s
-        play("sfx_impact_$tier$v", vol, pan, jitter(0.06f) * (1.08f - 0.16f * s))
-        if (s > 0.4f) play("sfx_spark_${Random.nextInt(2)}", 0.25f + 0.4f * s, pan, jitter(0.1f))
+        // a hard ball on a hard wall: soft taps are quick and light, hard hits heavier and slightly lower; no metallic ring on top
+        val vol = 0.25f + 0.75f * s
+        play("sfx_impact_$tier$v", vol, pan, jitter(0.05f) * (1.06f - 0.12f * s))
     }
 
     override fun roll(speed: Float, kind: Int) {
