@@ -172,40 +172,36 @@ def zing(i):
 for i in range(2): zing(i)
 
 # --- rolling loops (pitch/volume are driven live by marble speed)
-def roll_hard():
-    """A solid ball rolling on a hard, smooth surface: a warm, steady rumble (the ball and the board resonating), a soft
-    fine-grained texture on top that flickers with tiny surface imperfections, and very occasional faint grit ticks.
-    No whistling resonances: pitch and level are driven live by the ball's speed."""
-    d = 3.0; n = int(d * SR) + int(0.25 * SR)
+def roll_planks(name, seed, joint_gap):
+    """Marble rolling over wood or a hard floor (picked by ear from eight candidates): a warm low-mid rumble made from
+    brown noise, gently wobbling once per marble turn, plus a soft knock each time the ball crosses a board joint.
+    Uses its own random stream so it doesn't disturb the other sounds. Recorded at a mid speed; the game shifts
+    rate/volume with real speed, so joints come faster as the ball speeds up."""
+    r = np.random.default_rng(seed)
+    d = 4.0; xf = int(0.25 * SR); n = int(d * SR) + xf
     t = np.arange(n) / SR
-    r = np.random.default_rng(41)
-    rumble = bp(noise(n / SR), 70, 520, 2)
-    body = sum(bp(noise(n / SR), f * 0.85, f * 1.15, 2) * a for f, a in [(190, 0.9), (380, 0.5), (610, 0.25)])
-    slow = 0.82 + 0.18 * np.clip(lp(noise(n / SR), 2.5, 2) * 10, -1, 1)              # gentle swell as the contact patch varies
-    flicker = 0.6 + 0.4 * np.clip(np.abs(lp(noise(n / SR), 70, 2)) * 9, 0, 1)        # micro-roughness of the surface
-    texture = bp(noise(n / SR), 900, 4200, 2) * flicker
-    grit = np.zeros(n)
-    for _ in range(int(d * 9)):
-        at = r.uniform(0, d + 0.2); k = int(r.uniform(0.0015, 0.004) * SR)
-        place(grit, bp(noise((k + 4) / SR), 1500, 6000, 2)[:k] * edecay(k, k / SR / 3), at, r.uniform(0.08, 0.25))
-    x = (rumble * 1.0 + body * 0.8) * slow + texture * 0.22 + grit
-    x = lp(x, 6500, 2)
-    add("sfx_roll_hard", loopify(x, int(0.25 * SR)), peak=0.6, loop=True)
-def roll_wood():
-    """Rolling over wood: a hollower, boomy body (the plank resonating), with the grain giving a soft irregular patter."""
-    d = 3.0; n = int(d * SR) + int(0.25 * SR)
-    t = np.arange(n) / SR
-    r = np.random.default_rng(42)
-    rumble = bp(noise(n / SR), 60, 420, 2)
-    boom = sum(bp(noise(n / SR), f * 0.88, f * 1.12, 2) * a for f, a in [(140, 1.0), (285, 0.6), (470, 0.3)])
-    grain = 0.7 + 0.3 * np.clip(lp(noise(n / SR), 25, 2) * 8, -1, 1)
-    patter = np.zeros(n)
-    for _ in range(int(d * 14)):
-        at = r.uniform(0, d + 0.2); k = int(r.uniform(0.006, 0.014) * SR)
-        place(patter, bp(noise((k + 4) / SR), 300, 1800, 2)[:k] * edecay(k, k / SR / 3), at, r.uniform(0.1, 0.3))
-    x = (rumble * 0.9 + boom * 0.9) * grain + patter + bp(noise(n / SR), 1200, 3200, 2) * 0.08 * grain
-    x = lp(x, 5000, 2)
-    add("sfx_roll_wood", loopify(x, int(0.25 * SR)), peak=0.6, loop=True)
+    v = 0.5                                                              # m/s at playback rate 1
+    rot = 2 * np.pi * v / (np.pi * 0.016) * t                            # 16 mm marble rotation phase
+    flut = 1 + 0.15 * np.sin(rot) + 0.05 * np.sin(2 * rot + 1.3)
+    e = hp(np.cumsum(r.standard_normal(n)), 60, 2)
+    y = bp(e, 150, 800, 2) * flut
+    y /= np.std(y)
+    hits = np.zeros(n); at = r.uniform(0, 0.1)
+    while at < n / SR:
+        hits[int(at * SR)] = r.uniform(0.75, 1.0)
+        at += joint_gap / v * r.uniform(0.85, 1.15)
+    knock = np.zeros(n)
+    for f, q, g in [(260, 10, 2.0), (540, 12, 1.4), (1250, 15, 0.8), (2600, 20, 0.4)]:
+        w = 2 * np.pi * f / SR; rr = np.exp(-w / (2 * q))
+        knock += signal.lfilter([g * (1 - rr * rr)], [1, -2 * rr * np.cos(w), rr * rr], hits)
+    y = y + knock * 6
+    L = int(0.4 * SR); ir = r.standard_normal(L) * np.exp(-np.arange(L) / SR / 0.08)
+    ir = lp(ir, 4000, 2); ir[:40] = 0; ir /= np.sqrt((ir ** 2).sum())
+    y = y + 0.15 * signal.fftconvolve(y, ir)[:n]
+    y = np.tanh(1.2 * y / np.max(np.abs(y)))
+    add(name, loopify(y, xf), peak=0.6, loop=True)
+def roll_hard(): roll_planks("sfx_roll_hard", 4105, 0.12)
+def roll_wood(): roll_planks("sfx_roll_wood", 4205, 0.10)
 def roll_sand():
     d = 2.4; n = int(d * SR) + int(0.2 * SR)
     t = np.arange(n) / SR
