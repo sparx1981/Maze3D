@@ -11,3 +11,4 @@ tools/preview/node_modules/
 release/
 *.jks
 *.keystore
+backup/
