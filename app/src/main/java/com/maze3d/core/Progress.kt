@@ -8,6 +8,8 @@ interface ProgressStore { fun get(key: String): String?; fun put(key: String, va
  * and a maze on a surface also unlocks that surface's ball. Medium opens after one completed maze, Hard after a completed Medium.
  */
 class Progress(private val store: ProgressStore) {
+    /** Testing switch (see [UNLOCK_ALL]); unit tests turn it off to check the real unlock order. */
+    var unlockAll = UNLOCK_ALL
     @Volatile var completed = store.get("completed")?.toIntOrNull() ?: 0
         private set
     @Volatile private var byDiff = (store.get("byDiff") ?: "0,0,0,0").split(",").mapNotNull { it.toIntOrNull() }.let { l -> IntArray(4) { l.getOrElse(it) { 0 } } }
@@ -17,16 +19,16 @@ class Progress(private val store: ProgressStore) {
         val any get() = surface != null || shape != null || difficulty != null || ball != null
     }
 
-    fun surfaceUnlocked(key: String): Boolean { val i = SURFACE_CHAIN.indexOf(key); return i >= 0 && i < 2 + completed }
-    fun shapeUnlocked(s: ShapeKind): Boolean { val i = SHAPE_CHAIN.indexOf(s); return i >= 0 && i < shapeCount() }
-    fun difficultyUnlocked(d: Difficulty) = when (d) { Difficulty.EASY -> true; Difficulty.MEDIUM -> completed >= 1; Difficulty.HARD -> byDiff[1] >= 1; Difficulty.ULTRA -> byDiff[2] >= 1 }
+    fun surfaceUnlocked(key: String): Boolean { if (unlockAll) return SURFACE_CHAIN.contains(key); val i = SURFACE_CHAIN.indexOf(key); return i >= 0 && i < 2 + completed }
+    fun shapeUnlocked(s: ShapeKind): Boolean { if (unlockAll) return true; val i = SHAPE_CHAIN.indexOf(s); return i >= 0 && i < shapeCount() }
+    fun difficultyUnlocked(d: Difficulty) = unlockAll || when (d) { Difficulty.EASY -> true; Difficulty.MEDIUM -> completed >= 1; Difficulty.HARD -> byDiff[1] >= 1; Difficulty.ULTRA -> byDiff[2] >= 1 }
     private fun shapeCount() = 2 + completed / 2
 
     /** Mazes still to finish before [key] opens (0 = open). */
-    fun surfaceMazesToGo(key: String): Int { val i = SURFACE_CHAIN.indexOf(key); return if (i < 0) 0 else maxOf(0, i - 1 - completed) }
-    fun shapeMazesToGo(s: ShapeKind): Int { val i = SHAPE_CHAIN.indexOf(s); return if (i < 0) 0 else maxOf(0, (i - 1) * 2 - completed) }
+    fun surfaceMazesToGo(key: String): Int { if (unlockAll) return 0; val i = SURFACE_CHAIN.indexOf(key); return if (i < 0) 0 else maxOf(0, i - 1 - completed) }
+    fun shapeMazesToGo(s: ShapeKind): Int { if (unlockAll) return 0; val i = SHAPE_CHAIN.indexOf(s); return if (i < 0) 0 else maxOf(0, (i - 1) * 2 - completed) }
 
-    fun ballUnlocked(skin: Int): Boolean = skin == 0 || keysForSkin(skin).any { it in balls }
+    fun ballUnlocked(skin: Int): Boolean = unlockAll || skin == 0 || keysForSkin(skin).any { it in balls }
 
     fun record(surfaceKey: String, shape: ShapeKind, diff: Difficulty): Unlocked {
         val beforeSurf = 2 + completed; val beforeShape = shapeCount(); val diffBefore = Difficulty.values().filter { difficultyUnlocked(it) }
@@ -35,11 +37,14 @@ class Progress(private val store: ProgressStore) {
         val newBall = if (skinForKey(surfaceKey) > 0 && surfaceKey !in balls) surfaceKey else null
         if (newBall != null) balls = balls + surfaceKey
         store.put("completed", completed.toString()); store.put("byDiff", byDiff.joinToString(",")); store.put("balls", balls.joinToString(","))
+        if (unlockAll) return Unlocked(null, null, null, null)     // everything is already open: nothing to announce
         return Unlocked(SURFACE_CHAIN.getOrNull(beforeSurf), SHAPE_CHAIN.getOrNull(beforeShape).takeIf { shapeCount() > beforeShape },
             Difficulty.values().firstOrNull { difficultyUnlocked(it) && it !in diffBefore }, newBall)
     }
 
     companion object {
+        /** TESTING: every surface, shape, difficulty and ball is open. Set to false before a public release. */
+        const val UNLOCK_ALL = true
         /** Order in which surfaces open. */
         val SURFACE_CHAIN = listOf("classic", "sand", "mud", "t0", "water", "t3", "t2", "fog", "t5", "t1", "t6", "t4", "t7", "t8", "t9", "t10", "t11", "t12", "t13", "t14", "t15", "t16", "t17", "t18", "t19", "storm", "gas")
         val SHAPE_CHAIN = listOf(ShapeKind.SPHERE, ShapeKind.CUBE, ShapeKind.CAPSULE, ShapeKind.BARREL, ShapeKind.TORUS, ShapeKind.BRICK,

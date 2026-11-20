@@ -18,7 +18,7 @@ import kotlin.random.Random
 class SoundEngine(private val ctx: Context) : Audio {
 
     private val prefs = ctx.getSharedPreferences("maze3d_audio", Context.MODE_PRIVATE)
-    @Volatile var sfxOn = prefs.getBoolean("sfx", true)
+    @Volatile var sfxOn = prefs.getBoolean("sfx", false)
     @Volatile var impactOn = prefs.getBoolean("impact", true)
         private set
     @Volatile var musicOn = prefs.getBoolean("music", true)

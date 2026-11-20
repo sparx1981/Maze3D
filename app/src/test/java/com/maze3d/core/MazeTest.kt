@@ -288,7 +288,7 @@ class MazeTest {
     fun progressUnlocksInOrderAndPersists() {
         val mem = HashMap<String, String>()
         val store = object : ProgressStore { override fun get(key: String) = mem[key]; override fun put(key: String, value: String) { mem[key] = value } }
-        val p = Progress(store)
+        val p = Progress(store).apply { unlockAll = false }
         assertTrue(p.surfaceUnlocked("classic") && p.surfaceUnlocked("sand") && !p.surfaceUnlocked("mud"))
         assertTrue(p.shapeUnlocked(ShapeKind.SPHERE) && !p.shapeUnlocked(ShapeKind.CAPSULE))
         assertTrue(p.difficultyUnlocked(Difficulty.EASY) && !p.difficultyUnlocked(Difficulty.MEDIUM))

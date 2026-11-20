@@ -62,6 +62,14 @@ float vnoise(vec2 p) {
     return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x),
                mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y);
 }
+// 3D value noise: looks the same from every direction, so surface patterns never stretch or swirl on any face of a shape
+float hash31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float vnoise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash31(i), hash31(i + vec3(1, 0, 0)), f.x), mix(hash31(i + vec3(0, 1, 0)), hash31(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(hash31(i + vec3(0, 0, 1)), hash31(i + vec3(1, 0, 1)), f.x), mix(hash31(i + vec3(0, 1, 1)), hash31(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
 
 // Studio environment: sky gradient, a big key softbox, a cool fill strip and a warm kicker.
 // Highlights widen and dim with roughness, which stands in for a prefiltered cube map.
@@ -393,25 +401,29 @@ void main() {
         coat = 0.6;
     } else if (uMat == 5) {     // sand: fine grain, wind ripples
         float fade = 1.0 - smoothstep(0.0012, 0.004, length(dFdx(P)));      // grain averages out at a distance
-        float grain = vnoise(vec2(dot(P, vec3(310.0, 170.0, 250.0)), dot(P, vec3(-190.0, 330.0, 120.0))));
-        float lump = vnoise(vec2(dot(P, vec3(14.0, 9.0, 11.0)), dot(P, vec3(-8.0, 15.0, 10.0))));
-        float rip = sin(dot(P, vec3(70.0, 20.0, 45.0)) + 3.0 * lump - uTime * 0.35);                // ripples creep with the wind
+        float grain = vnoise3(P * 416.1 + vec3(7.31, 3.17, 5.71));
+        float lump = vnoise3(P * 19.8 + vec3(1.62, 6.34, 2.42));
+        vec3 sn = normalize(vNL);                               // wind ripples run across the surface (never face-on, so no swirls)
+        vec3 wA = vec3(0.82, 0.23, 0.53) - sn * dot(vec3(0.82, 0.23, 0.53), sn);
+        vec3 wB = vec3(-0.27, 0.93, 0.25) - sn * dot(vec3(-0.27, 0.93, 0.25), sn);
+        vec3 wd = normalize(mix(wB, wA, smoothstep(0.25, 0.55, length(wA))) + 1e-5);
+        float rip = sin(dot(P, wd) * 85.0 + 3.0 * lump - uTime * 0.35);                // ripples creep with the wind
         albedo *= 0.80 + 0.2 * lump + 0.22 * (grain - 0.5) * 2.0 * fade;
         hgt = (rip * 0.0004 + (grain - 0.5) * 0.0004 * fade);
         rough = 0.96;
     } else if (uMat == 6) {     // mud: dark, lumpy, wet sheen
-        float lump = vnoise(vec2(dot(P, vec3(26.0, 14.0, 20.0)), dot(P, vec3(-12.0, 28.0, 16.0))));
-        float fine = vnoise(vec2(dot(P, vec3(150.0, 90.0, 120.0)), dot(P, vec3(-80.0, 160.0, 70.0))));
+        float lump = vnoise3(P * 35.0 + vec3(8.93, 9.51, 8.13));
+        float fine = vnoise3(P * 202.1 + vec3(3.24, 1.68, 4.84));
         albedo *= 0.55 + 0.75 * lump;
         hgt = (lump - 0.5) * 0.0014 + (fine - 0.5) * 0.0003;
         rough = 0.22 + 0.4 * (1.0 - lump);
         coat = 0.85;
     } else if (uMat == 7) {     // candy: marbled pastel base with sprinkles
-        float n = vnoise(vec2(dot(P, vec3(5.0, 3.0, 4.0)), dot(P, vec3(-3.0, 5.0, 2.0))));
+        float n = vnoise3(P * 6.6 + vec3(10.55, 4.85, 1.55));
         albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.35, 0.65, n));
         vec4 sp = sprinkles(P.yz) * tw.x + sprinkles(P.xz) * tw.y + sprinkles(P.xy) * tw.z;
         albedo = mix(albedo, sp.rgb / max(sp.a, 1e-3), clamp(sp.a, 0.0, 1.0));
-        float tw2 = vnoise(vec2(dot(P, vec3(60.0, 35.0, 50.0)), dot(P, vec3(-30.0, 55.0, 40.0))) + uTime * 0.8);
+        float tw2 = vnoise3(P * 80.0 + vec3(4.86, 8.02, 7.26) + uTime * 0.8);
         emit = vec3(1.0, 0.9, 0.95) * clamp(sp.a, 0.0, 1.0) * smoothstep(0.78, 0.95, tw2) * 0.9;     // sugar glints
         rough = 0.22; coat = 1.0;
     } else if (uMat == 8) {     // day of the dead: marigold flowers and papel-picado dots on purple
@@ -420,9 +432,9 @@ void main() {
         albedo = mix(albedo, fl.rgb, clamp(fl.a, 0.0, 1.0));
         rough = 0.42; coat = 0.6;
     } else if (uMat == 9) {     // asphalt: aggregate grit and dark rubber smears
-        float grit = vnoise(vec2(dot(P, vec3(420.0, 260.0, 310.0)), dot(P, vec3(-250.0, 410.0, 190.0))));
-        float smear = vnoise(vec2(dot(P, vec3(9.0, 3.0, 6.0)), dot(P, vec3(-4.0, 8.0, 5.0))));
-        float spk = step(0.93, vnoise(vec2(dot(P, vec3(900.0, 120.0, 400.0)), dot(P, vec3(-300.0, 800.0, 250.0)))));
+        float grit = vnoise3(P * 549.8 + vec3(12.17, 0.19, 3.97));
+        float smear = vnoise3(P * 10.7 + vec3(6.48, 3.36, 0.68));
+        float spk = step(0.93, vnoise3(P * 941.2 + vec3(0.79, 6.53, 6.39)));
         albedo *= (0.65 + 0.7 * grit) * (0.75 + 0.4 * smear);
         albedo += vec3(0.25) * spk * fade3(P);
         hgt = (grit - 0.5) * 0.0004;
@@ -430,7 +442,7 @@ void main() {
     } else if (uMat == 10) {    // mown turf: alternating bands and fine blades
         float band = step(0.5, fract(P.y * 4.2 + 0.15 * vnoise(vec2(P.x * 2.0, P.z * 2.0))));
         albedo = mix(albedo, pow(uFloor2, vec3(2.2)), band);
-        float blade = vnoise(vec2(dot(P, vec3(900.0, 500.0, 700.0)), dot(P, vec3(-600.0, 800.0, 400.0))));
+        float blade = vnoise3(P * 1161.0 + vec3(8.10, 9.70, 3.10));
         albedo *= 0.78 + 0.4 * blade * fade3(P) + 0.2 * (1.0 - fade3(P));
         hgt = (blade - 0.5) * 0.0006 * fade3(P);
         rough = 0.92;
@@ -468,20 +480,20 @@ void main() {
         hgt = (tl.r - 0.8) * 0.0006;
         rough = 0.12 + 0.3 * (1.0 - tl.r); coat = 1.0;
     } else if (uMat == 14) {    // ice: frosted surface with deep cracks
-        float cr = vnoise(vec2(dot(P, vec3(13.0, 7.0, 9.0)), dot(P, vec3(-6.0, 12.0, 8.0))));
+        float cr = vnoise3(P * 16.5 + vec3(2.41, 1.87, 8.81));
         float crack = 1.0 - smoothstep(0.0, 0.035, abs(cr - 0.5));
-        float frost = vnoise(vec2(dot(P, vec3(240.0, 130.0, 180.0)), dot(P, vec3(-120.0, 230.0, 150.0))));
+        float frost = vnoise3(P * 313.3 + vec3(9.72, 5.04, 5.52));
         albedo = mix(albedo * (0.8 + 0.3 * frost), vec3(0.45, 0.62, 0.8) * albedo, crack * 0.7);
         hgt = -crack * 0.0008 + (frost - 0.5) * 0.0003;
         rough = 0.09 + 0.12 * frost; coat = 1.0;
-        float glint = smoothstep(0.86, 0.97, vnoise(vec2(dot(P, vec3(520.0, 300.0, 410.0)), dot(P, vec3(-280.0, 510.0, 330.0))) + uTime * 1.3)) * fade3(P);
+        float glint = smoothstep(0.86, 0.97, vnoise3(P * 697.9 + vec3(4.03, 8.21, 2.23) + uTime * 1.3)) * fade3(P);
         emit = vec3(0.35, 0.55, 0.8) * 0.12 * (1.0 - crack) + vec3(0.9, 0.97, 1.0) * glint * 1.4;
     } else if (uMat == 15) {    // sandstone with carved bands and glyph blocks
         float band = fract(P.y * 3.4);
         float line = 1.0 - smoothstep(0.0, 0.03, abs(band - 0.5) - 0.44);
         vec4 g1 = glyphs(P.xz * 1.0 + vec2(0.0, P.y * 3.4)), g2 = glyphs(P.zy * 1.0 + vec2(P.x * 3.4, 0.0));
         float gl = max(g1.a * tw.y, g2.a * (tw.x + tw.z));
-        float grain = vnoise(vec2(dot(P, vec3(200.0, 100.0, 160.0)), dot(P, vec3(-90.0, 210.0, 130.0))));
+        float grain = vnoise3(P * 268.9 + vec3(11.34, 0.38, 7.94));
         albedo *= (0.82 + 0.3 * grain) * (1.0 - 0.45 * line) * (1.0 - 0.38 * gl);
         hgt = -(line * 0.0006 + gl * 0.0008);
         rough = 0.88;
@@ -493,15 +505,15 @@ void main() {
         emit = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 0.9, 1.0), pick) * l1 * 1.8 * fade3(P) * pulse;
         rough = 0.18; coat = 1.0;
     } else if (uMat == 17) {    // jungle moss: layered greens, damp sheen
-        float m1 = vnoise(vec2(dot(P, vec3(30.0, 14.0, 21.0)), dot(P, vec3(-12.0, 28.0, 17.0))));
-        float m2 = vnoise(vec2(dot(P, vec3(160.0, 80.0, 120.0)), dot(P, vec3(-70.0, 170.0, 100.0))));
+        float m1 = vnoise3(P * 37.0 + vec3(5.65, 3.55, 4.65));
+        float m2 = vnoise3(P * 212.3 + vec3(12.96, 6.72, 1.36));
         albedo *= 0.5 + 0.9 * m1;
         albedo = mix(albedo, albedo * vec3(1.3, 1.25, 0.6), smoothstep(0.55, 0.8, m2));
         hgt = (m2 - 0.5) * 0.0010 + (m1 - 0.5) * 0.0006;
         rough = 0.5 + 0.3 * m2; coat = 0.25 + 0.15 * sin(uTime * 0.7 + m1 * 6.0);
     } else if (uMat == 21) {    // carved stone: weathered blocks
-        float n1 = vnoise(vec2(dot(P, vec3(45.0, 22.0, 33.0)), dot(P, vec3(-20.0, 40.0, 26.0))));
-        float n2 = vnoise(vec2(dot(P, vec3(260.0, 150.0, 200.0)), dot(P, vec3(-140.0, 250.0, 170.0))));
+        float n1 = vnoise3(P * 55.9 + vec3(7.27, 9.89, 7.07));
+        float n2 = vnoise3(P * 346.9 + vec3(1.58, 2.06, 3.78));
         albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
         hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
         rough = 0.86;
@@ -513,8 +525,8 @@ void main() {
             hgt -= g.a * 0.00035;                                                        // and lightly carved
         }
     } else if (uMat == 23) {    // snow-capped hedge: dense leaf clumps with powder on top
-        float leaf = vnoise(vec2(dot(P, vec3(190.0, 110.0, 150.0)), dot(P, vec3(-90.0, 170.0, 120.0))));
-        float clump = vnoise(vec2(dot(P, vec3(42.0, 24.0, 32.0)), dot(P, vec3(-20.0, 38.0, 28.0))));
+        float leaf = vnoise3(P * 246.3 + vec3(8.89, 5.23, 0.49));
+        float clump = vnoise3(P * 54.6 + vec3(3.20, 8.40, 6.20));
         float snowK = uHedgeSnow * smoothstep(0.72, 0.86, clump * 0.55 + leaf * 0.25 + vCol.g * 0.6);
         vec3 foliage = albedo * (0.45 + 1.0 * leaf) * (0.65 + 0.7 * clump);
         vec3 powder = vec3(0.62, 0.68, 0.8) * (0.85 + 0.2 * leaf);
@@ -522,9 +534,9 @@ void main() {
         hgt = mix((leaf - 0.5) * 0.0010 + (clump - 0.5) * 0.0016, (clump - 0.5) * 0.0010, snowK);
         rough = mix(0.93, 0.8, snowK);
     } else if (uMat == 24) {    // forest-floor leaf litter: overlapping gold, orange and rust
-        float la = vnoise(vec2(dot(P, vec3(55.0, 32.0, 44.0)), dot(P, vec3(-30.0, 52.0, 38.0))));
-        float lb = vnoise(vec2(dot(P, vec3(170.0, 100.0, 140.0)), dot(P, vec3(-90.0, 160.0, 110.0))));
-        float lc = vnoise(vec2(dot(P, vec3(420.0, 250.0, 330.0)), dot(P, vec3(-230.0, 400.0, 290.0))));
+        float la = vnoise3(P * 74.2 + vec3(10.51, 0.57, 2.91));
+        float lb = vnoise3(P * 227.9 + vec3(4.82, 3.74, 8.62));
+        float lc = vnoise3(P * 567.4 + vec3(12.13, 6.91, 5.33));
         vec3 leafA = vec3(0.62, 0.26, 0.05), leafB = vec3(0.86, 0.55, 0.09), leafC = vec3(0.36, 0.10, 0.04);
         vec3 lcol = mix(mix(leafA, leafB, smoothstep(0.35, 0.65, la)), leafC, smoothstep(0.55, 0.82, lb));
         albedo = mix(albedo * 0.4, lcol * (0.5 + 0.45 * lc), 0.9);
@@ -561,11 +573,11 @@ void main() {
         hgt = (fuzz - 0.5) * 0.0007 + weave * 0.0002;
         rough = 0.97; coat = 0.0;
     } else if (uMat == 27) {    // prehistoric ground: cracked ochre earth with pebbles
-        float a = vnoise(vec2(dot(P, vec3(36.0, 21.0, 29.0)), dot(P, vec3(-19.0, 34.0, 24.0))));
-        float b = vnoise(vec2(dot(P, vec3(120.0, 70.0, 95.0)), dot(P, vec3(-62.0, 110.0, 80.0))));
+        float a = vnoise3(P * 48.3 + vec3(6.44, 10.08, 2.04));
+        float b = vnoise3(P * 158.9 + vec3(0.75, 2.25, 7.75));
         float crack = smoothstep(0.045, 0.0, abs(a - 0.5));
         albedo *= 0.65 + 0.7 * b;
-        albedo = mix(albedo, albedo * vec3(0.5, 0.62, 0.35), smoothstep(0.55, 0.8, vnoise(vec2(dot(P, vec3(14.0, 8.0, 11.0)), dot(P, vec3(-8.0, 14.0, 9.0))))) * 0.6);
+        albedo = mix(albedo, albedo * vec3(0.5, 0.62, 0.35), smoothstep(0.55, 0.8, vnoise3(P * 19.0 + vec3(8.06, 5.42, 4.46))) * 0.6);
         albedo *= 1.0 - 0.6 * crack;
         hgt = (b - 0.5) * 0.0012 - crack * 0.0012;
         rough = 0.9;
@@ -575,7 +587,7 @@ void main() {
         float chk = mod(floor(q.x) + floor(q.y), 2.0);
         vec2 sc = chk < 0.5 ? vec2(1.0, 3.2) : vec2(3.2, 1.0);
         float bump = smoothstep(0.34, 0.2, length(fp * sc * 0.75));
-        float stain = smoothstep(0.55, 0.8, vnoise(vec2(dot(P, vec3(12.0, 7.0, 9.0)), dot(P, vec3(-6.0, 12.0, 8.0)))));
+        float stain = smoothstep(0.55, 0.8, vnoise3(P * 16.1 + vec3(2.37, 8.59, 1.17)));
         albedo *= 0.8 + 0.3 * bump;
         albedo = mix(albedo, albedo * vec3(0.35, 0.33, 0.4), stain * 0.6);
         hgt = bump * 0.0016;
@@ -583,9 +595,8 @@ void main() {
     } else if (uMat == 29) {    // cooling lava crust: dark basalt plates split by glowing cracks; the plates drift and the cracks breathe
         vec3 q = P * uLava.x;
         float t = uTime * 0.26;
-        vec2 w2 = vec2(dot(q, vec3(0.8, 0.5, 0.6)), dot(q, vec3(-0.4, 0.8, 0.5)));
-        vec3 wp = vec3(vnoise(w2 * 0.9 + t), vnoise(w2 * 0.9 + 5.0 - t), vnoise(w2 * 0.9 + vec2(9.0, 3.0) + t * 0.7));
-        if (uLava.y > 0.6) wp = wp * 0.67 + 0.33 * vec3(vnoise(w2 * 1.9 + t * 1.3 + 2.0), vnoise(w2 * 1.9 + 7.0 - t * 1.3), vnoise(w2 * 1.9 + 11.0 + t));
+        vec3 wp = vec3(vnoise3(q * 0.9 + vec3(t, 0.0, 0.0)), vnoise3(q * 0.9 + vec3(5.0, -t, 0.0)), vnoise3(q * 0.9 + vec3(9.0, 3.0, t * 0.7)));
+        if (uLava.y > 0.6) wp = wp * 0.67 + 0.33 * vec3(vnoise3(q * 1.9 + vec3(2.0, t * 1.3, 0.0)), vnoise3(q * 1.9 + vec3(7.0, 0.0, -t * 1.3)), vnoise3(q * 1.9 + vec3(t, 11.0, 0.0)));
         q += (wp - 0.5) * 0.55;                                  // slow flow: plates stretch and drift
         vec3 cn = floor(q), cf = fract(q);
         float d1 = 8.0, d2 = 8.0, id = 0.0;
@@ -603,7 +614,7 @@ void main() {
         crack *= crack;
         crack = mix(crack, cw * 0.3, smoothstep(cw * 0.6, cw * 1.6, aa));   // far away: settle to an even glow instead of shimmering
         float pulse = 0.75 + 0.25 * sin(uTime * 2.1 + id * 20.0);           // each plate breathes on its own rhythm
-        float mott = vnoise(w2 * 4.0 + id * 7.0) * 0.65 + vnoise(w2 * 9.0 + 3.0) * 0.35 * mix(0.5, 1.0, fade3(P));
+        float mott = vnoise3(q * 4.0 + id * 7.0) * 0.65 + vnoise3(q * 9.0 + 3.0) * 0.35 * mix(0.5, 1.0, fade3(P));
         vec3 crust = mix(vec3(0.0050, 0.0010, 0.0005), vec3(0.039, 0.0090, 0.0040), clamp(mott * 1.2, 0.0, 1.0)) * 1.3;
         albedo = mix(crust, vec3(0.01, 0.003, 0.001), crack);
         vec3 heat = lavaRamp(0.45 + crack * 0.55) * pulse;
@@ -612,7 +623,7 @@ void main() {
         hgt = (mott - 0.5) * 0.0005 - crack * 0.0016;          // crust sits proud of the cracks
         rough = mix(0.72, 0.3, crack);
     } else if (uMat == 30) {    // jelly: glossy gel in colour blobs with an inner glow, rippling away from the ball
-        float ja = vnoise(vec2(dot(P, vec3(26.0, 15.0, 21.0)), dot(P, vec3(-14.0, 25.0, 17.0))));
+        float ja = vnoise3(P * 35.0 + vec3(9.68, 0.76, 6.88));
         albedo = mix(albedo, pow(uFloor2, vec3(2.2)), smoothstep(0.42, 0.62, ja));
         float jd = uMarbleR > 0.0 ? length(vWorld - uMarbleL) / uMarbleR : 30.0;
         float rip = sin(jd * 2.6 - uTime * 7.0) * exp(-jd * 0.28) * smoothstep(0.0, 1.5, jd);
@@ -796,8 +807,18 @@ in vec3 vNrmL;
 out vec4 outColor;
 """ + COMMON + """
 // Studio lighting blended with the live reflection of the maze around the marble.
+// The balls see a dim sky and the sun only: the studio's big white fill and back softboxes used to paint a pale
+// sheen across every ball, which washed out their colours.
+vec3 ballEnv(vec3 r, float rough) {
+    float up = r.y * 0.5 + 0.5;
+    vec3 c = mix(vec3(0.03, 0.032, 0.04), vec3(0.30, 0.33, 0.40), smoothstep(0.05, 1.0, up));
+    c = mix(c, vec3(0.15, 0.16, 0.18), rough * 0.5);
+    float w = 0.02 + rough * rough * 0.7;
+    float k = 1.0 / (1.0 + rough * rough * 14.0);
+    return c + vec3(5.5, 5.2, 4.8) * k * smoothstep(0.95 - w, 0.975 + w * 0.2, dot(r, uLightDir));
+}
 vec3 surroundings(vec3 d, float rough) {
-    vec3 st = envMap(d, rough);
+    vec3 st = ballEnv(d, rough);
     if (uCubeOn > 0.5) {
         vec4 c = texture(uCube, d);
         st = mix(st, pow(c.rgb, vec3(2.2)), c.a);
@@ -820,7 +841,6 @@ vec3 shadeBall(vec3 alb, float rough, float metal, vec3 emit, float coat, vec3 N
     if (coat > 0.0) col += surroundings(R, 0.04) * (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coat;
     vec3 H = normalize(uLightDir + V);
     col += pow(max(dot(N, H), 0.0), mix(60.0, 700.0, 1.0 - rough)) * vec3(2.5) * (0.3 + 0.7 * (1.0 - rough));
-    col += pow(1.0 - NoV, 3.5) * vec3(0.10, 0.12, 0.16) * 0.5;
     return col + emit;
 }
 
@@ -1160,7 +1180,7 @@ void main() {
     refr *= mix(1.0, 0.3, pow(1.0 - NoV, 1.6));                 // thicker glass toward the rim
     refr = mix(refr, acc * 1.6 + refr * 0.25, band * 0.85);
     vec3 refl = surroundings(R, 0.03);
-    vec3 col = refr * (1.0 - F) + refl * (0.18 + 0.82 * F);
+    vec3 col = refr * (1.0 - F) + refl * (0.05 + 0.95 * F);
     col = mix(col, uDirtCol * (0.25 + 0.75 * max(dot(N, uLightDir), 0.0) * 0.8 + 0.15), uDirt * 0.62);   // sand or mud caked on the marble
     vec3 H = normalize(uLightDir + V);
     col += pow(max(dot(N, H), 0.0), 500.0) * vec3(7.0);

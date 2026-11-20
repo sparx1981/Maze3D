@@ -10,6 +10,10 @@ Package (Google Play): `com.marblix.game`. Namespace in code: `com.maze3d`.
 - Sounds are generated from maths: `python3 tools/audio/generate.py <out dir>` (copy only the files you changed into `app/src/main/res/raw`).
 - Store listing text and graphics: `dist/playstore/`.
 
+## Testing switches (turn off before a public release)
+- `Progress.UNLOCK_ALL` in `app/src/main/java/com/maze3d/core/Progress.kt` opens every surface, shape, difficulty and ball.
+  It is `true` while testing; set it to `false` before building a release bundle for Google Play.
+
 ## Signing key and backups
 - The Play **upload key** lives in `release/` (`marblix-upload.jks` + `keystore.properties`). It is git-ignored and must
   never be committed.
