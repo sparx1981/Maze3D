@@ -69,8 +69,11 @@ object PropLibrary {
         8 -> { val sx = sphinx()
             val tq = torch(); val pt = palmTree()
             ThemeProps(obelisk(), canopicJar(), sx, pyramidProp(), pt, tq, mapOf(whole(pt, Anim.SWAY, 0.8f, 1f), part(tq, flame(0.06f, 0.2f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.78f)))), falcon(), listOf(mummy())) }
-        9 -> { val hg = hologram(); val nr = neonRing(); val ns = neonStar()
-            ThemeProps(neonSign(), terminal(), hg, cityTower(), nr, ns, mapOf(whole(hg, Anim.SPIN, 1.1f), whole(nr, Anim.SPIN, 0.8f), whole(ns, Anim.SPIN, 0.5f)), drone()) }
+        9 -> { val hg = hologram(); val sA = holoSign(1, nMag); val sB = holoSign(2, nCyan); val mast = roofMast(); val bl = adBlimp(); val pl = palmPlanter()
+            ThemeProps(sA, vendingMachine(), noodleStall(), bl, neonTriangle(), sB,
+                mapOf(whole(hg, Anim.SPIN, 1.1f), whole(bl, Anim.BOB, 0.4f, 0.6f), whole(pl, Anim.SWAY, 0.6f, 0.5f)), hoverCar(),
+                listOf(chevronBarrier(), hg, neonSign(), terminal()), junctionMore = listOf(mast, holoSign(3, nYel)), floor = listOf(streetLamp(), pl, streetLamp(), chevronBarrier()),
+                birds2 = drone(), junctionShare = 0.4f) }
         10 -> { val fn = fern(); val jt = bigJungleTree(); val mk = monkey(); val bn = bananaPlant(); val br = bromeliad(); val bb = bamboo(); val ms = monstera(); val hl = heliconia()
             val sn = snake(); val jt2 = jungleTree()
             ThemeProps(fn, idol(), jungleStump(), jt, mk, br,
@@ -259,6 +262,183 @@ object PropLibrary {
             col = c(190, 196, 200); push(); translate(-0.02f, sgn * 0.12f, 0.03f); rotZ(sgn * 0.35f); scale(0.035f, 0.12f, 0.004f); sphere(1f, 12, 6); pop()
         }.build()
         return Bird(body, wing(1f), wing(-1f), 4, 0.75f, 1.1f, 30f)
+    }
+
+    // ---------------------------------------------------------------- neon megacity
+    private val nMag = c(255, 40, 170); private val nCyan = c(30, 235, 255); private val nYel = c(255, 214, 60); private val nRed = c(255, 50, 60)
+    private val steel = c(34, 38, 48); private val darkSteel = c(18, 20, 26)
+
+    /** Made-up glyphs: each one a few strokes on a 3x4 grid (never a real word), lit in [glow] on a dark panel. */
+    private fun PM.glyphs(n: Int, seed: Int, x: Float, w: Float, z0: Float, h: Float, glow: Vec3, vertical: Boolean = true) {
+        val cell = h / n
+        for (g in 0 until n) {
+            val gz = if (vertical) z0 + h - (g + 0.5f) * cell else z0 + h * 0.5f
+            val gy = if (vertical) 0f else (g - (n - 1) / 2f) * cell
+            col = glow * 2.2f
+            for (k in 0 until 4) {
+                val hsh = ((seed * 131 + g * 37 + k * 11) * 2654435761L).toInt().let { (it ushr 8) % 1000 } / 1000f
+                val horiz = hsh < 0.5f
+                val oy = ((((seed + g * 7 + k * 13) * 97) % 3) - 1) * cell * 0.22f
+                val oz = ((((seed + g * 5 + k * 17) * 89) % 4) - 1.5f) * cell * 0.18f
+                at(x, gy + oy, gz + oz) { if (horiz) box(w, cell * 0.5f, cell * 0.08f) else box(w, cell * 0.08f, cell * 0.42f) }
+            }
+        }
+    }
+
+    /** Rooftop sign: a tall dark blade on two struts with a column of glowing glyphs and a neon outline. */
+    private fun holoSign(seed: Int, glow: Vec3) = PM().apply {
+        col = darkSteel; for (sy in floatArrayOf(-0.08f, 0.08f)) at(0f, sy, 0f) { cylinder(0.018f, 0.25f, 6) }
+        col = c(10, 10, 16); at(0f, 0f, 0.62f) { box(0.05f, 0.26f, 0.78f) }
+        col = glow * 2.0f; for (sy in floatArrayOf(-0.135f, 0.135f)) at(0f, sy, 0.62f) { box(0.06f, 0.016f, 0.8f) }
+        for (sz in floatArrayOf(0.22f, 1.02f)) at(0f, 0f, sz) { box(0.06f, 0.29f, 0.016f) }
+        glyphs(5, seed, 0.03f, 0.012f, 0.26f, 0.72f, if (seed % 2 == 0) nYel else nCyan)
+        glyphs(5, seed + 3, -0.03f, 0.012f, 0.26f, 0.72f, if (seed % 2 == 0) nCyan else nYel)
+        col = nRed * 2.4f; at(0f, 0f, 1.06f) { sphere(0.022f, 8, 6) }           // aircraft warning light
+    }.build()
+
+    /** Rooftop water tank and antenna mast with blinking lights (a common city skyline silhouette). */
+    private fun roofMast() = PM().apply {
+        col = steel; for (sx in floatArrayOf(-0.1f, 0.1f)) for (sy in floatArrayOf(-0.1f, 0.1f)) at(sx, sy, 0f) { cylinder(0.012f, 0.2f, 5) }
+        col = c(60, 54, 50); at(z = 0.2f) { cylinder(0.16f, 0.26f, 14) }; at(z = 0.46f) { cone(0.17f, 0.1f, 14) }
+        col = darkSteel; at(0.12f, 0f, 0f) { cylinder(0.012f, 1.0f, 5) }
+        for (k in 0 until 3) { col = (if (k % 2 == 0) nRed else nCyan) * 2.4f; at(0.12f, 0f, 0.4f + k * 0.3f) { sphere(0.02f, 6, 4) } }
+    }.build()
+
+    /** Street lamp: slim post, swan-neck arm and a long cyan-white light bar. */
+    private fun streetLamp() = PM().apply {
+        col = darkSteel; cylinder(0.05f, 0.05f, 10, 0.045f)
+        col = steel; cylinder(0.022f, 0.9f, 8, 0.016f)
+        tube(listOf(Vec3(0f, 0f, 0.88f), Vec3(0.04f, 0f, 0.97f), Vec3(0.14f, 0f, 1.0f), Vec3(0.26f, 0f, 0.98f)), 0.014f, 6)
+        col = darkSteel; at(0.24f, 0f, 0.965f) { box(0.18f, 0.06f, 0.03f) }
+        col = c(200, 245, 255) * 2.6f; at(0.24f, 0f, 0.948f) { box(0.16f, 0.04f, 0.012f) }
+        col = nMag * 1.8f; at(0.0f, 0f, 0.5f) { torus(0.03f, 0.007f, 12, 4) }       // neon collar
+    }.build()
+
+    /** Vending machine: dark cabinet, glowing product window in a grid of colours, a lit header and coin slot. */
+    private fun vendingMachine() = PM().apply {
+        col = c(26, 28, 36); at(z = 0.42f) { box(0.36f, 0.5f, 0.84f) }
+        col = c(10, 12, 18); at(0.181f, 0f, 0.5f) { box(0.01f, 0.4f, 0.56f) }
+        val cols = listOf(nMag, nCyan, nYel, c(120, 255, 140), c(255, 120, 40))
+        for (r in 0 until 5) for (k in 0 until 4) { col = cols[(r * 3 + k) % cols.size] * 1.6f; at(0.188f, -0.14f + k * 0.093f, 0.29f + r * 0.1f) { box(0.008f, 0.06f, 0.06f) } }
+        col = nCyan * 2.2f; at(0.186f, 0f, 0.8f) { box(0.012f, 0.44f, 0.07f) }
+        glyphs(4, 77, 0.193f, 0.006f, 0.77f, 0.06f, nMag, vertical = false)
+        col = c(70, 74, 86); at(0.185f, 0.17f, 0.12f) { box(0.012f, 0.1f, 0.12f) }
+        col = nYel * 2f; at(0.19f, 0.17f, 0.15f) { box(0.006f, 0.05f, 0.012f) }
+    }.build()
+
+    /** Street-food stall: counter, striped awning, a row of red paper lanterns, stools and a hanging glyph sign. */
+    private fun noodleStall() = PM().apply {
+        col = c(60, 32, 26); at(z = 0.22f) { box(0.36f, 0.86f, 0.44f) }
+        col = c(110, 70, 48); at(0.02f, 0f, 0.45f) { box(0.44f, 0.9f, 0.03f) }
+        col = steel; for (sy in floatArrayOf(-0.42f, 0.42f)) at(-0.16f, sy, 0f) { cylinder(0.014f, 0.86f, 6) }
+        for (k in 0 until 8) { col = if (k % 2 == 0) c(200, 30, 40) else c(240, 230, 220)
+            at(0.06f, -0.42f + k * 0.12f + 0.06f, 0.84f) { rotY(-0.35f); box(0.5f, 0.12f, 0.02f) } }
+        col = nRed * 2.3f; for (k in 0 until 5) at(0.26f, -0.36f + k * 0.18f, 0.7f) { scale(1f, 1f, 1.25f); sphere(0.045f, 10, 8) }
+        col = c(40, 20, 16); for (k in 0 until 5) at(0.26f, -0.36f + k * 0.18f, 0.765f) { cylinder(0.006f, 0.04f, 4) }
+        col = c(30, 30, 36); for (k in 0 until 3) { at(0.36f, -0.26f + k * 0.26f, 0f) { cylinder(0.012f, 0.24f, 5) }; at(0.36f, -0.26f + k * 0.26f, 0.24f) { cylinder(0.06f, 0.025f, 10) } }
+        col = c(12, 10, 14); at(0.2f, 0f, 0.98f) { box(0.03f, 0.5f, 0.12f) }
+        glyphs(4, 21, 0.218f, 0.008f, 0.96f, 0.04f, nYel, vertical = false)
+        col = c(255, 236, 200) * 1.5f; at(0.0f, 0f, 0.47f) { cylinder(0.05f, 0.04f, 10, 0.06f) }   // steaming bowl lit by the counter lamp
+    }.build()
+
+    /** An inverted triangle of neon tube on two dark posts, buzzing red-pink. */
+    private fun neonTriangle() = PM().apply {
+        col = darkSteel; for (sy in floatArrayOf(-0.4f, 0.4f)) at(0f, sy, 0f) { cylinder(0.03f, 0.95f, 6) }
+        val pts = listOf(Vec3(0f, -0.38f, 0.95f), Vec3(0f, 0.38f, 0.95f), Vec3(0f, 0f, 0.3f))
+        col = c(255, 60, 90) * 2.4f; tube(pts + listOf(pts[0]), 0.022f, 8)
+        col = c(255, 160, 180) * 2.8f; tube(listOf(Vec3(0.01f, -0.2f, 0.84f), Vec3(0.01f, 0.2f, 0.84f), Vec3(0.01f, 0f, 0.5f), Vec3(0.01f, -0.2f, 0.84f)), 0.01f, 6)
+    }.build()
+
+    /** Road barrier with glowing orange chevrons. */
+    private fun chevronBarrier() = PM().apply {
+        col = darkSteel; for (sy in floatArrayOf(-0.3f, 0.3f)) at(0f, sy, 0f) { cylinder(0.02f, 0.3f, 6) }
+        col = c(14, 14, 18); at(z = 0.32f) { box(0.04f, 0.74f, 0.14f) }
+        col = c(255, 130, 20) * 2.3f
+        for (k in 0 until 6) { val y = -0.28f + k * 0.112f
+            tube(listOf(Vec3(0.022f, y - 0.025f, 0.37f), Vec3(0.022f, y + 0.02f, 0.32f), Vec3(0.022f, y - 0.025f, 0.27f)), 0.008f, 4) }
+        col = nRed * 2.4f; for (sy in floatArrayOf(-0.37f, 0.37f)) at(0f, sy, 0.41f) { sphere(0.02f, 6, 4) }
+    }.build()
+
+    /** Palm in a concrete planter with a cyan neon edge. */
+    private fun palmPlanter() = PM().apply {
+        col = c(70, 72, 78); at(z = 0.09f) { box(0.36f, 0.36f, 0.18f) }
+        col = nCyan * 2.0f; at(z = 0.185f) { box(0.37f, 0.37f, 0.01f) }
+        col = c(30, 26, 20); at(z = 0.18f) { box(0.32f, 0.32f, 0.01f) }
+        val trunk = (0..10).map { k -> val v = k / 10f; Vec3(0.12f * v * v, 0.04f * v, 0.18f + 0.95f * v) }
+        col = c(92, 72, 52); tube(trunk, 0.035f, 8, colorFn = { v -> if (((v * 18f).toInt() % 2) == 0) c(92, 72, 52) else c(70, 54, 40) }, taper = { 1f - 0.35f * it })
+        val top = trunk.last()
+        for (f in 0 until 9) {
+            val a = f * 6.2832f / 9f; val ca = cos(a); val sa = sin(a)
+            val fr = (0..6).map { k -> val v = k / 6f; Vec3(top.x + ca * 0.42f * v, top.y + sa * 0.42f * v, top.z + 0.08f * v - 0.3f * v * v) }
+            for (k in 0 until fr.size - 1) {
+                val d = fr[k + 1] - fr[k]; val side = Vec3(-sa, ca, 0f) * (0.07f * (1f - k / 6f) + 0.015f)
+                col = if (k % 2 == 0) c(30, 90, 60) else c(24, 72, 50)
+                flat(fr[k] - side, fr[k] + side, fr[k + 1] + side * 0.85f, fr[k + 1] - side * 0.85f)
+            }
+        }
+    }.build()
+
+    /** Megatower for the skyline ring: stepped dark slab, rows of lit windows, neon edges, a giant screen and a spire. */
+    private val towerCache = HashMap<Int, PropMesh>()
+    /** Skyline megatowers in a few varieties (cached). */
+    fun megaTowerFor(i: Int): PropMesh = towerCache.getOrPut(i % 4) { megaTower(i % 4) }
+    private fun megaTower(seed: Int) = PM().apply {
+        val h = 2.6f + 0.8f * ((seed * 37) % 5) / 4f
+        col = c(12, 16, 24); at(z = h * 0.5f) { box(0.7f, 0.7f, h) }
+        col = c(16, 20, 30); at(z = h + 0.25f) { box(0.45f, 0.45f, 0.5f) }
+        val edge = if (seed % 2 == 0) nCyan else nMag
+        col = edge * 2.2f; for (sx in floatArrayOf(-0.355f, 0.355f)) for (sy in floatArrayOf(-0.355f, 0.355f)) at(sx, sy, h * 0.5f) { box(0.014f, 0.014f, h) }
+        at(z = h) { box(0.72f, 0.72f, 0.015f) }
+        for (r in 0 until 22) for (k in 0 until 6) {                                     // lit windows on two faces
+            val hh = ((seed * 977 + r * 131 + k * 71) * 2654435761L).toInt().let { (it ushr 9) % 1000 } / 1000f
+            if (hh < 0.55f) continue
+            col = (if (hh > 0.93f) nMag else if (hh > 0.85f) nCyan else c(255, 190, 110)) * 1.4f
+            val z = 0.15f + r * (h - 0.4f) / 22f; val y = -0.26f + k * 0.104f
+            at(y, 0.352f, z) { box(0.06f, 0.006f, 0.05f) }; at(0.352f, y, z) { box(0.006f, 0.06f, 0.05f) }; at(-0.352f, y, z) { box(0.006f, 0.06f, 0.05f) }
+        }
+        val s0 = h * (0.45f + 0.2f * ((seed * 13) % 3) / 2f)                               // giant screen: bands of colour like a frozen frame
+        for (b in 0 until 10) { val v = b / 9f
+            col = Vec3.lerp(if (seed % 3 == 0) nMag else nYel, if (seed % 3 == 2) c(120, 255, 160) else nCyan, v) * 1.9f
+            at(0f, 0.356f, s0 + b * 0.05f) { box(0.6f, 0.008f, 0.045f) } }
+        col = darkSteel; at(z = h + 0.5f) { cylinder(0.02f, 0.6f, 6) }
+        col = nRed * 2.6f; at(z = h + 1.1f) { sphere(0.035f, 8, 6) }
+    }.build()
+
+    /** Advertising blimp drifting over the city: grey envelope, fins, a gondola and a glowing screen band down its side. */
+    private fun adBlimp() = PM().apply {
+        col = c(70, 76, 88); at(z = 0.5f) { scale(2.4f, 1f, 1f); sphere(0.22f, 20, 12) }
+        for ((ry, rz) in listOf(0f to 1f, 1f to 0f, 0f to -1f, -1f to 0f)) { col = c(50, 54, 64)
+            push(); translate(-0.46f, ry * 0.1f, 0.5f + rz * 0.1f); box(0.16f, 0.02f + kotlin.math.abs(ry) * 0.16f, 0.02f + kotlin.math.abs(rz) * 0.16f); pop() }
+        col = c(30, 32, 40); at(0.05f, 0f, 0.27f) { box(0.18f, 0.08f, 0.06f) }
+        for (b in 0 until 8) { col = Vec3.lerp(nCyan, nMag, b / 7f) * 2.0f; for (sy in floatArrayOf(-1f, 1f)) at(-0.25f + b * 0.07f, sy * 0.215f, 0.5f) { box(0.06f, 0.012f, 0.16f) } }
+        col = nRed * 2.4f; at(-0.53f, 0f, 0.62f) { sphere(0.02f, 6, 4) }
+    }.build()
+
+    /** Sky bridge over a street: a glass-walled deck on two pylons standing on the walls, neon strips under and along it. */
+    fun skyBridge(seed: Int) = PM().apply {
+        val glow = if (seed % 2 == 0) nCyan else nMag
+        col = steel; for (sy in floatArrayOf(-0.56f, 0.56f)) { at(0f, sy, 0f) { box(0.16f, 0.12f, 1.4f) } }
+        col = c(22, 26, 34); at(z = 1.0f) { box(0.3f, 1.3f, 0.1f) }
+        col = c(40, 90, 110); at(z = 1.12f) { box(0.28f, 1.24f, 0.14f) }                   // glazing
+        col = c(16, 20, 28); at(z = 1.2f) { box(0.32f, 1.3f, 0.03f) }
+        col = glow * 2.4f; for (sx in floatArrayOf(-0.15f, 0.15f)) at(sx, 0f, 0.945f) { box(0.016f, 1.3f, 0.016f) }
+        at(z = 1.22f) { box(0.012f, 1.3f, 0.012f) }
+        for (k in 0 until 6) { col = c(255, 210, 150) * 1.5f; at(0.142f, -0.5f + k * 0.2f, 1.12f) { box(0.004f, 0.12f, 0.08f) } }  // lit windows of the walkway
+        col = c(12, 12, 18); at(0.17f, 0f, 1.32f) { box(0.03f, 0.56f, 0.14f) }                 // sign on its side
+        glyphs(5, seed + 40, 0.188f, 0.006f, 1.27f, 0.1f, if (seed % 2 == 0) nYel else nCyan, vertical = false)
+    }.build()
+
+    /** Hover car: sleek wedge body with a glass canopy, white headlights and a wide red tail-light bar; short fins as 'wings'. */
+    private fun hoverCar(): Bird {
+        val body = PM().apply {
+            col = c(28, 30, 38); at { scale(2.4f, 1f, 0.42f); sphere(0.11f, 16, 10) }
+            col = c(60, 140, 170); at(0.03f, 0f, 0.04f) { scale(1.3f, 0.75f, 0.45f); sphere(0.08f, 12, 8) }
+            col = c(255, 40, 50) * 2.6f; at(-0.26f, 0f, 0.0f) { box(0.012f, 0.16f, 0.018f) }
+            col = c(230, 245, 255) * 2.6f; for (sy in floatArrayOf(-0.06f, 0.06f)) at(0.26f, sy, -0.005f) { box(0.012f, 0.035f, 0.014f) }
+            col = nCyan * 2.0f; for (sy in floatArrayOf(-1f, 1f)) at(0f, sy * 0.095f, -0.03f) { box(0.36f, 0.006f, 0.006f) }   // underglow
+        }.build()
+        fun fin(sgn: Float) = PM().apply { col = c(22, 24, 30); at(-0.12f, sgn * 0.12f, 0f) { box(0.1f, 0.06f, 0.012f) } }.build()
+        return Bird(body, fin(1f), fin(-1f), 5, 0.75f, 2.4f, 0f, glide = true)
     }
 
     // ---------------------------------------------------------------- ground animals

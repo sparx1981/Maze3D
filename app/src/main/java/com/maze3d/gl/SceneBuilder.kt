@@ -115,7 +115,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val dl = (maze.depthFromStart[maze.edgeCellL[e]] + maze.depthFromStart[maze.edgeCellR[e]]) * 0.5f / maze.maxDepth
             val delay = dl * 0.75f + 0.05f * hash(e)
             val altEdge = hash(e + 9000) < 0.5f
-            val c1 = wallColors(pal.wall); val c2 = wallColors(pal.wall2)
+            val c1 = wallColors(pal.wall); val c2 = if (pal.themeId == 9) wallColors(pal.wall2).first to Vec3(0.1f, 0.95f, 1.1f) * (1.05f * pal.glow) else wallColors(pal.wall2)
             addWall(mb, e, delay, prof, c1, c2, if (pal.stripes) 1 else if (altEdge && pal.wall2 !== pal.wall) 2 else 0, styled = true)
             if (pal.knobs) for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) if (bulbs.add(v)) bulb(mb, v, delay, if (hash(v + 77) < 0.5f) c1 else c2)
         }
@@ -145,7 +145,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     // ---- themed wall shapes: walls need not be straight bars
-    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7; const val FRIES = 8 }
+    private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7; const val FRIES = 8; const val TOWERS = 9 }
     /** 1 = full wall detail; lower quality settings use fewer segments along the shaped walls. */
     var wallDetail = 1f
     private val wallStyle = when (pal.themeId) {
@@ -154,6 +154,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         15, 17 -> WallStyle.ROCK          // piled boulders, cooled lava rock
         4, 13, 16 -> WallStyle.BLOCKS     // hull panels, toy bricks, riveted steel sections
         19 -> WallStyle.CASTLE            // crenellated battlements
+        9 -> WallStyle.TOWERS             // a row of dark city blocks of different heights, neon along their tops
         5 -> WallStyle.FRIES              // a row of French fries, each stick its own length and thickness
         8 -> WallStyle.BLOCKS             // dressed temple stone
         0, 18 -> WallStyle.BEADS          // candy ropes and gummy strings
@@ -197,7 +198,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val segs = stripeSegs * per
         val nk = prof.size
         val freq = 1f / (cs * 0.16f)
-        val chunks = max(2, Math.round(len / (cs * (when (style) { WallStyle.BLOCKS -> 0.34f; WallStyle.FRIES -> 0.11f; else -> 0.24f }))))
+        val chunks = max(2, Math.round(len / (cs * (when (style) { WallStyle.BLOCKS -> 0.34f; WallStyle.TOWERS -> 0.3f; WallStyle.FRIES -> 0.11f; else -> 0.24f }))))
         val beads = max(2, Math.round(len / (cs * (if (style == WallStyle.PILLOW) 0.32f else 0.17f))))
         // shared grid of positions (base + lift) so the surface stays watertight; normals come from the grid itself
         val basePos = Array(segs + 1) { arrayOfNulls<Vec3>(nk) }
@@ -221,11 +222,11 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             when (style) {
                 WallStyle.ROOT -> { bend = vnoise(p * (freq * 0.5f) + Vec3(3.1f, 0f, 0f)) * 1.8f * taper; wsc = 1f + 0.35f * vnoise(p * freq); hsc = 1.08f + 0.12f * vnoise(p * (freq * 0.7f) + Vec3(7f, 1f, 2f)) }
                 WallStyle.HEDGE -> { hsc = 1.05f + 0.16f * vnoise(p * (freq * 0.8f) + Vec3(5f, 2f, 1f)); wsc = 1.12f }
-                WallStyle.ROCK, WallStyle.BLOCKS -> {
+                WallStyle.ROCK, WallStyle.BLOCKS, WallStyle.TOWERS -> {
                     val cf = f * chunks; val ci = kotlin.math.floor(cf).toInt().coerceAtMost(chunks - 1); val fr = cf - ci
-                    fun hOf(i: Int) = if (style == WallStyle.ROCK) 0.95f + 0.35f * hash(e * 31 + i) else 0.97f + 0.08f * hash(e * 31 + i)
+                    fun hOf(i: Int) = when (style) { WallStyle.ROCK -> 0.95f + 0.35f * hash(e * 31 + i); WallStyle.TOWERS -> 0.92f + 0.42f * hash(e * 31 + i); else -> 0.97f + 0.08f * hash(e * 31 + i) }
                     fun wOf(i: Int) = if (style == WallStyle.ROCK) 0.95f + 0.4f * hash(e * 17 + i + 500) else 1.03f
-                    val edgeK = if (style == WallStyle.ROCK) 0.22f else 0.08f
+                    val edgeK = when (style) { WallStyle.ROCK -> 0.22f; WallStyle.TOWERS -> 0.04f; else -> 0.08f }
                     val blendL = (1f - (fr / edgeK).coerceIn(0f, 1f)).let { it * it }
                     val blendR = (1f - ((1f - fr) / edgeK).coerceIn(0f, 1f)).let { it * it }
                     val sink = if (style == WallStyle.ROCK) 0.88f else 0.94f        // stones round off where they meet, but never leave a gap
@@ -266,6 +267,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                     tint[r][k] = 0.84f + 0.3f * vnoise(p * (freq * 1.3f) + Vec3(e.toFloat() * 0.1f, 0f, 0f))
                 }
                 if (style == WallStyle.BLOCKS || style == WallStyle.PILLOW) tint[r][k] = 1f - (if (style == WallStyle.BLOCKS) 0.35f else 0.25f) * seam[r]
+                if (style == WallStyle.TOWERS) tint[r][k] = 1f - 0.5f * seam[r]
                 if (style == WallStyle.FRIES) {                         // golden sides, toasted-brown tips and creases
                     val ci = kotlin.math.floor(f * chunks).toInt()
                     tint[r][k] = (0.86f + 0.24f * hash(e * 71 + ci)) * (1f - 0.6f * seam[r]) * (1f - 0.38f * smoothstep01(0.75f, 1f, q[1]))
@@ -302,7 +304,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val r = sgi + rr
                 IntArray(nk) { k ->
                     val q = prof[k]
-                    var col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * tint[r][k]
+                    var col = Vec3.lerp(lowC, topC, if (style == WallStyle.TOWERS) smoothstep01(0.93f, 1f, q[1]) else kotlin.math.sqrt(max(0f, q[1]))) * (if (style == WallStyle.TOWERS && q[1] > 0.9f) 1f else tint[r][k])
                     if (snow[r][k] > 0f) col = Vec3.lerp(col, snowC, snow[r][k])
                     mb.vertex(basePos[r][k]!!, nrm[r][k], col, liftV[r][k]!!, delay)
                 }
@@ -316,7 +318,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val (lowC, topC) = if (mode == 2 || (mode == 1 && rr == 1 && stripeSegs % 2 == 0)) c2 else c1
             val idx = IntArray(nk) { k ->
                 val q = prof[k]
-                var col = Vec3.lerp(lowC, topC, kotlin.math.sqrt(max(0f, q[1]))) * 0.9f * tint[r][k]
+                var col = Vec3.lerp(lowC, topC, if (style == WallStyle.TOWERS) smoothstep01(0.93f, 1f, q[1]) else kotlin.math.sqrt(max(0f, q[1]))) * 0.9f * tint[r][k]
                 if (snow[r][k] > 0f) col = Vec3.lerp(col, snowC, snow[r][k])
                 mb.vertex(basePos[r][k]!!, cn, col, liftV[r][k]!!, delay)
             }
@@ -767,6 +769,24 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 used.add(p0); nb++
             }
         }
+        // 2e. neon city: sky bridges spanning some straight streets, lit from below
+        if (pal.themeId == 9) {
+            val used = ArrayList<Vec3>()
+            var nb = 0
+            for (c in maze.solution.toList() + (0 until maze.cellCount).toList()) {
+                if (nb >= 10) break
+                if (c == maze.start || c == maze.goal || maze.links[c].size != 2 || hash(c + 9311) > 0.4f) continue
+                val p0 = maze.centers[c]
+                val a = maze.centers[maze.links[c][0]]; val b = maze.centers[maze.links[c][1]]
+                if (((p0 - a).normalized() dot (b - p0).normalized()) < 0.95f) continue
+                if (used.any { (it - p0).length() < cs * 3.5f }) continue
+                val n = surface.normal(p0)
+                val across = ((b - a).normalized() cross n).normalized()
+                placed.add(Placed(PropLibrary.skyBridge(nb), p0, n, across, cs, maze.depthFromStart[c].toFloat() / maze.maxDepth * 0.75f + 0.05f))
+                addLamp(p0 + n * (cs * 0.9f), if (nb % 2 == 0) Vec3(0.2f, 0.9f, 1f) else Vec3(1f, 0.28f, 0.85f), 3f)
+                used.add(p0); nb++
+            }
+        }
         // 3. landmarks floating around the shape
         val count = 7
         for (i in 0 until count) {
@@ -780,8 +800,9 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             placed.add(Placed(lib.landmark, d * (outerRadius * 1.30f), d, lt, size, 0.9f, lw))
         }
         // 3b. a ring of grandstands all round the shape, facing in, so the whole circuit is watched (motorsport)
-        lib.ring?.let { rm ->
+        lib.ring?.let { rm0 ->
             for (i in 0 until lib.ringCount) {
+                val rm = if (pal.themeId == 9) PropLibrary.megaTowerFor(i) else rm0
                 // upright stands in a ring round the shape's equator, like a stadium round a pitch
                 val phi = i * 6.2831853f / lib.ringCount
                 val d = Vec3(cos(phi), 0f, sin(phi))

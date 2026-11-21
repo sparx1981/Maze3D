@@ -1426,7 +1426,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(sceneProg, "uGrowT"), growT)
         GLES30.glUniform1f(loc(sceneProg, "uDoorMode"), 0f)
         GLES30.glUniform1f(loc(sceneProg, "uAlpha"), 1f)
-        GLES30.glUniform1f(loc(sceneProg, "uWet"), rainWet)
+        GLES30.glUniform1f(loc(sceneProg, "uWet"), if (pal.themeId == 9) max(rainWet, 0.3f) else rainWet)   // the neon city is always rain-soaked
         GLES30.glUniform3f(loc(sceneProg, "uFloor2"), pal.floor2.x, pal.floor2.y, pal.floor2.z)
         val night = pal.themeId == 7 || pal.themeId == 9 || pal.themeId == 11 || pal.themeId == 17
         GLES30.glUniform1f(loc(sceneProg, "uNight"), if (night) 1f else if (medium == Medium.STORM) 0.62f else 0f)
@@ -1495,8 +1495,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             if (pal.themeId == 11) GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), 0.4f, 1f, 0.55f) else if (pal.themeId == 9) GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), 1f, 0.4f, 0.9f) else GLES30.glUniform3f(loc(sceneProg, "uMarbleC"), (0.45f + pal.accent.x * 0.3f) * (1f - poison) + 0.5f * poison, (0.6f + pal.accent.y * 0.25f) * (1f - poison) + 1.0f * poison, 0.9f * (1f - poison) + 0.1f * poison)
         } else GLES30.glUniform1f(loc(sceneProg, "uMarbleR"), 0f)
         val fogK = ease01(chaseBlend)
-        GLES30.glUniform1f(loc(sceneProg, "uFog"), 0f)
-        GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
+        if (pal.themeId == 9) {                                  // neon city: a teal glow haze that thickens down at street level (chase view)
+            GLES30.glUniform1f(loc(sceneProg, "uFog"), 0.06f + 0.32f * fogK)
+            GLES30.glUniform3f(loc(sceneProg, "uFogCol"), 0.02f, 0.12f, 0.13f)
+        } else {
+            GLES30.glUniform1f(loc(sceneProg, "uFog"), 0f)
+            GLES30.glUniform3f(loc(sceneProg, "uFogCol"), pal.bgTop.x * 0.5f, pal.bgTop.y * 0.5f, pal.bgTop.z * 0.55f)
+        }
         GLES30.glUniform1f(loc(sceneProg, "uShadowOn"), if (sm != null) 1f else 0f)
         GLES30.glUniform1f(loc(sceneProg, "uTexel"), if (sm != null) 1f / sm.size else 0f)
         if (sm != null) { sm.bind(0); GLES30.glUniform1i(loc(sceneProg, "uShadow"), 0) }
@@ -2352,7 +2357,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
     private var cutAmt = 0f
     private var fogLast = 0f
 
-    private fun exposure() = (if (medium == Medium.STORM) 0.85f * (1f + 2.4f * stormFlash) else 1f) * when (pal.themeId) { 0 -> 0.66f; 6 -> 0.64f; 18 -> 0.62f; 12, 13, 14, 5, 2, 3 -> 0.8f; 7, 9, 11, 17 -> 1f; else -> 0.86f }
+    private fun exposure() = (if (medium == Medium.STORM) 0.85f * (1f + 2.4f * stormFlash) else 1f) * when (pal.themeId) { 0 -> 0.66f; 6 -> 0.64f; 18 -> 0.62f; 12, 13, 14, 5, 2, 3 -> 0.8f; 9 -> 0.86f; 7, 11, 17 -> 1f; else -> 0.86f }
 
     private fun studPitch() = (maze?.marbleRadius ?: 0.02f) * 1.7f
 

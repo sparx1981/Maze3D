@@ -497,13 +497,29 @@ void main() {
         albedo *= (0.82 + 0.3 * grain) * (1.0 - 0.45 * line) * (1.0 - 0.38 * gl);
         hgt = -(line * 0.0006 + gl * 0.0008);
         rough = 0.88;
-    } else if (uMat == 16) {    // neon arcade: black floor with a glowing grid
-        vec3 gp = fract(P * 6.0 + 0.5) - 0.5;
-        float l1 = 1.0 - smoothstep(0.0, 0.025, min(abs(gp.x), min(abs(gp.y), abs(gp.z))));
-        float pick = step(0.5, fract(floor(P.x * 6.0) * 0.37 + floor(P.y * 6.0) * 0.61 + floor(P.z * 6.0) * 0.43));
-        float pulse = 0.6 + 0.4 * sin(dot(P, vec3(9.0, 5.0, 7.0)) * 2.0 - uTime * 3.0);
-        emit = mix(vec3(1.0, 0.2, 0.8), vec3(0.2, 0.9, 1.0), pick) * l1 * 1.8 * fade3(P) * pulse;
-        rough = 0.18; coat = 1.0;
+    } else if (uMat == 16) {    // rain-soaked city street: dark asphalt, standing puddles that mirror the neon, drizzle rings
+        float grit = vnoise3(P * 520.0 + 3.0);
+        float tar = vnoise3(P * 14.0 + 7.0);
+        albedo *= (0.62 + 0.5 * grit * fade3(P)) * (0.75 + 0.35 * tar);
+        float pud = smoothstep(0.52, 0.62, vnoise3(P * 9.0 + vec3(1.0, 4.0, 2.0)) * 0.75 + vnoise3(P * 31.0) * 0.25);  // puddles
+        // drizzle: a ring spreading in each little patch of puddle, each on its own clock
+        vec3 rq = P * 70.0; vec3 ri = floor(rq); vec3 rf = fract(rq) - 0.5;
+        float rh = hash31(ri + 17.0);
+        float rt = fract(uTime * 0.7 + rh);
+        float ring = sin((length(rf) - rt * 0.5) * 40.0) * smoothstep(0.5, 0.0, rt) * smoothstep(0.5 * rt + 0.06, 0.5 * rt, length(rf)) * step(0.55, rh);
+        hgt = (grit - 0.5) * 0.0005 * (1.0 - pud) + ring * 0.00025 * pud;
+        albedo *= mix(1.0, 0.45, pud);
+        // neon city mirrored in the wet ground: tall coloured streaks from the signs and screens above
+        vec3 Rw = reflect(-V, normalize(vNrm));
+        float az = atan(Rw.z, Rw.x) * 9.0;
+        float sid = floor(az); float sf = fract(az);
+        float hs = hash11(sid * 1.7 + 3.0);
+        vec3 sc = hs < 0.35 ? vec3(1.0, 0.12, 0.6) : (hs < 0.7 ? vec3(0.1, 0.85, 1.0) : (hs < 0.85 ? vec3(1.0, 0.75, 0.25) : vec3(0.5, 0.25, 1.0)));
+        float streak = smoothstep(0.5, 0.15, abs(sf - 0.5)) * step(0.35, hash11(sid + 9.0)) * (0.6 + 0.4 * sin(uTime * (1.0 + 2.0 * hs) + sid));
+        float wetF = 0.08 + 0.92 * pow(1.0 - max(dot(normalize(vNrm), V), 0.0), 4.0);
+        emit = (sc * streak * 0.55 + vec3(0.02, 0.16, 0.18) * 0.6) * mix(0.18, 1.0, pud) * wetF;
+        albedo *= 0.6;
+        rough = mix(0.5, 0.04, pud); coat = mix(0.12, 0.85, pud); metal = 0.0;
     } else if (uMat == 17) {    // jungle moss: layered greens, damp sheen
         float m1 = vnoise3(P * 37.0 + vec3(5.65, 3.55, 4.65));
         float m2 = vnoise3(P * 212.3 + vec3(12.96, 6.72, 1.36));
@@ -643,6 +659,23 @@ void main() {
         emit = vec3(1.0) * salt * 0.12;
         hgt = (crisp - 0.5) * 0.0008 - toast * 0.0003;
         rough = 0.62 - 0.25 * salt; coat = 0.25;                 // a light sheen of oil
+    } else if (uMat == 32) {    // neon city blocks: dark glass and steel, rows of lit windows, LED strips; the neon tube on top glows from its vertex colour
+        vec3 an = abs(normalize(vNL));
+        vec2 wv = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);
+        float k = uLava.x * 3.2;
+        vec2 wq = wv * vec2(k, k * 1.7);
+        vec2 wi = floor(wq), wf = fract(wq);
+        float hw = hash21(wi + 31.0);
+        float pane = step(abs(wf.x - 0.5), 0.32) * step(abs(wf.y - 0.5), 0.26);
+        float lit = step(0.58, hw) * pane;
+        vec3 wc = hw > 0.9 ? vec3(1.0, 0.25, 0.75) : (hw > 0.78 ? vec3(0.2, 0.9, 1.0) : vec3(1.0, 0.72, 0.36));
+        float onWall = 1.0 - smoothstep(0.55, 0.9, max(vCol.r, max(vCol.g, vCol.b)));      // not on the glowing top tube
+        float flick = 0.75 + 0.25 * step(0.2, fract(uTime * (0.3 + hw) + hw * 7.0));
+        float led = smoothstep(0.06, 0.0, abs(fract(wv.x * k * 0.25 + 0.5) - 0.5)) * step(0.5, hash21(vec2(floor(wv.x * k * 0.25 + 0.5), 3.0)));
+        albedo = mix(albedo, albedo * 0.55, pane);
+        emit = (wc * lit * flick * 0.9 + vec3(0.1, 0.9, 1.0) * led * 0.8) * onWall;
+        hgt = -pane * 0.0006;
+        rough = mix(0.35, 0.06, pane); coat = 0.6; metal = 0.3;
     } else if (uMat == 22) {    // theme props: vertex colour is the paint, anything above 1.0 glows
         float vm = max(vCol.r, max(vCol.g, vCol.b));
         vec3 baseC = vm > 1.0 ? vCol / vm : vCol;                // keep the hue of a glowing colour instead of clipping it to white
@@ -764,7 +797,15 @@ void main() {
         col += diffC * uMarbleC * att * 0.45 * max(dot(N, normalize(Lm)), 0.0);
         col *= 1.0 - 0.42 * exp(-dm2 / (r2 * 6.0));
     }
-    if (uFog > 0.0) col = mix(col, uFogCol, 1.0 - exp(-length(uCam - vWorld) * uFog));
+    if (uFog > 0.0) {                                         // haze; near lamps and signs it glows in their colour
+        vec3 fc = uFogCol;
+        if (uLampGain > 0.0) for (int i = 0; i < 12; i++) {
+            if (uLamp[i].w <= 0.0) continue;
+            float x = length(uLamp[i].xyz - vLocal) / uLamp[i].w;
+            fc += uLampC[i] * 0.22 / (1.0 + 14.0 * x * x);
+        }
+        col = mix(col, fc, 1.0 - exp(-length(uCam - vWorld) * uFog));
+    }
 
     outColor = vec4(finish(col, gl_FragCoord.xy), 1.0);
 }
@@ -2042,26 +2083,77 @@ void main() {
         }
         c += vec3(0.75, 1.0, 0.5) * beam * 0.10 * smoothstep(0.2, 1.0, vUv.y);
         c += uTop * 0.18 * (1.0 - smoothstep(0.0, 0.6, v));
-    } else {                                                    // cyberpunk skyline: three layers of towers with lit windows and neon roof lines
-        c += mix(vec3(0.95, 0.10, 0.55), vec3(0.05, 0.65, 1.0), vUv.x) * 0.22 * exp(-abs(vUv.y - 0.30) * 4.5);
-        for (int i = 0; i < 3; i++) {
-            float fl = float(2 - i);
-            float x = p.x * (6.0 + 5.0 * fl) + fl * 7.3;
-            float id = floor(x), fx = fract(x);
-            float top = 0.24 + 0.26 * h21(vec2(id, fl + 3.0)) + 0.05 * fl;
-            float inside = step(vUv.y, top) * step(0.05, fx) * step(fx, 0.95);
-            vec3 col = mix(vec3(0.015, 0.015, 0.04), vec3(0.05, 0.03, 0.09), 1.0 - fl * 0.5);
-            vec2 w = vec2(fx * 7.0, vUv.y * (46.0 + 8.0 * fl));
-            vec2 wi = floor(w), wf = fract(w);
-            float win = step(0.52, h21(wi + id * 7.0 + fl * 3.0)) * step(abs(wf.x - 0.5), 0.28) * step(abs(wf.y - 0.5), 0.3);
-            float hh = h21(wi + id);
-            vec3 wc = hh < 0.4 ? vec3(1.0, 0.78, 0.28) : (hh < 0.7 ? vec3(0.2, 0.9, 1.0) : vec3(1.0, 0.2, 0.7));
-            col += wc * win * (0.95 - 0.22 * fl);
-            vec3 ne = h21(vec2(id, 9.0 + fl)) < 0.5 ? vec3(0.1, 0.9, 1.0) : vec3(1.0, 0.15, 0.7);
-            col += ne * smoothstep(0.008, 0.0, abs(vUv.y - top)) * 1.6 * inside;
-            c = mix(c, col, inside);
+    } else {                                                    // rain-soaked neon megacity in a teal haze
+        float y = vUv.y;
+        c = mix(vec3(0.006, 0.03, 0.036), vec3(0.0015, 0.004, 0.008), smoothstep(0.2, 0.85, y));
+        c += vec3(0.04, 0.38, 0.40) * exp(-abs(y - 0.28) * 5.5) * 0.4;                 // glowing smog at street level
+        c += vec3(0.5, 0.05, 0.35) * exp(-abs(y - 0.22) * 9.0) * 0.05;                 // a magenta under-glow from the streets
+        // searchlights sweeping up into the haze
+        for (int i = 0; i < 4; i++) {
+            float fi = float(i);
+            vec2 o = vec2((0.15 + 0.24 * fi) * uAspect, 0.12);
+            float ang = 1.57 + 0.38 * sin(uTime * (0.13 + 0.05 * fi) + fi * 2.1);
+            vec2 dir = vec2(cos(ang), sin(ang));
+            vec2 d = p - o; float along = dot(d, dir);
+            float dist = abs(d.x * dir.y - d.y * dir.x);
+            float beam = exp(-dist * (60.0 - 40.0 * clamp(along, 0.0, 1.0))) * step(0.0, along) * exp(-along * 1.2);
+            c += mix(vec3(0.3, 0.95, 1.0), vec3(1.0, 0.85, 0.6), step(2.5, fi)) * beam * 0.22;
         }
-        c += vec3(0.9, 0.2, 0.7) * 0.07 * vn(p * vec2(3.0, 9.0) + vec2(uTime * 0.05, 0.0));    // smog
+        // four layers of towers, far ones lost in the haze
+        for (int i = 0; i < 4; i++) {
+            float fl = float(3 - i);                                // 3 = farthest
+            float sc = 3.0 + 3.2 * fl;
+            float x = p.x * sc + fl * 7.3;
+            float id = floor(x), fx = fract(x);
+            float wdt = 0.55 + 0.4 * h21(vec2(id, fl + 8.0));
+            float top = 0.3 + 0.42 * h21(vec2(id, fl + 3.0)) * (1.0 - 0.16 * fl) + 0.05 * fl;
+            float inside = step(y, top) * step(abs(fx - 0.5), wdt * 0.5);
+            if (inside < 0.5) continue;
+            float tx = (fx - 0.5) / wdt + 0.5;                      // 0..1 across this tower
+            vec3 col = vec3(0.006, 0.012, 0.02) + vec3(0.0, 0.02, 0.025) * (1.0 - tx);
+            vec2 w = vec2(tx * (10.0 + 4.0 * fl), y * (80.0 + 20.0 * fl));
+            vec2 wi = floor(w), wf = fract(w);
+            float hh = h21(wi + id * 7.0 + fl * 3.0);
+            float win = step(0.62, hh) * step(abs(wf.x - 0.5), 0.3) * step(abs(wf.y - 0.5), 0.28);
+            col += (hh > 0.93 ? vec3(1.0, 0.3, 0.8) : (hh > 0.85 ? vec3(0.3, 0.95, 1.0) : vec3(1.0, 0.75, 0.4))) * win * 0.55;
+            float hs = h21(vec2(id, fl + 11.0));
+            vec3 ne = hs < 0.5 ? vec3(0.1, 0.95, 1.0) : vec3(1.0, 0.15, 0.7);
+            col += ne * (smoothstep(0.03, 0.0, abs(tx - 0.03)) + smoothstep(0.03, 0.0, abs(tx - 0.97))) * step(0.55, hs) * 0.9;   // neon edge strips
+            col += ne * smoothstep(0.006, 0.0, abs(y - top)) * 1.4;                                                                  // roof line
+            // giant animated screen on some towers
+            float sh = h21(vec2(id, fl + 21.0));
+            float sy0 = top - 0.06 - 0.25 * sh, sy1 = sy0 + 0.11 + 0.1 * sh;
+            if (sh > 0.45 && y > sy0 && y < sy1 && tx > 0.14 && tx < 0.86) {
+                vec2 su = vec2((tx - 0.14) / 0.72, (y - sy0) / (sy1 - sy0));
+                float t = uTime * 0.35 + sh * 10.0;
+                vec3 a1 = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + t * 0.2 + su.y * 0.6 + sh));
+                float blob = smoothstep(0.35, 0.0, length((su - vec2(0.5, 0.55 + 0.1 * sin(t))) * vec2(1.0, 0.7)));
+                vec3 scr = mix(a1 * 0.5, vec3(1.0, 0.85, 0.3), blob * 0.8);
+                scr *= 0.75 + 0.25 * step(0.5, fract(su.y * 90.0));                                  // scan lines
+                scr *= 0.6 + 0.4 * step(0.08, abs(fract(su.y - t * 0.4) - 0.5));                     // rolling bar
+                col = mix(col, scr * 1.1, 1.0);
+            }
+            // a vertical neon sign of glyph blocks down one side
+            if (hs > 0.7 && tx > 0.78 && tx < 0.93 && y < top - 0.05 && y > top - 0.32) {
+                vec2 g = vec2((tx - 0.78) / 0.15, (top - 0.05 - y) * 28.0);
+                vec2 gi = floor(g * vec2(3.0, 1.0)), gf = fract(g * vec2(3.0, 1.0));
+                float stroke = step(0.5, h21(gi + id + fl)) * step(abs(gf.y - 0.5), 0.32) * step(abs(gf.x - 0.5), 0.36);
+                col += ne.yzx * stroke * (0.8 + 0.2 * sin(uTime * 3.0 + id));
+            }
+            float haze = 0.1 + 0.2 * fl;                                      // atmospheric depth
+            col = mix(col, vec3(0.012, 0.1, 0.11) * (0.5 + 0.8 * exp(-abs(y - 0.28) * 5.0)), haze);
+            c = col;
+        }
+        // flying traffic: streams of head and tail lights crossing the sky
+        for (int i = 0; i < 3; i++) {
+            float fi = float(i);
+            float ly = 0.55 + 0.12 * fi;
+            float lane = exp(-abs(y - ly - 0.03 * sin(p.x * 2.0 + fi)) * 900.0);
+            float xs = p.x * (9.0 + 4.0 * fi) - uTime * (0.3 + 0.2 * fi) * (mod(fi, 2.0) < 0.5 ? 1.0 : -1.0);
+            float dots = step(0.9, fract(xs)) * step(0.55, h21(vec2(floor(xs), fi)));
+            c += (mod(fi, 2.0) < 0.5 ? vec3(1.0, 0.18, 0.15) : vec3(1.0, 0.95, 0.85)) * lane * dots * 0.9;
+        }
+        c += vec3(0.6, 0.9, 1.0) * 0.06 * step(0.985, fract((p.x * 1.0 + y * 0.25) * 60.0 + h21(floor(vec2(p.x * 60.0, 0.0)))) ) * step(0.7, fract(y * 3.0 + uTime * 2.6 + h21(vec2(floor(p.x * 60.0), 1.0))));   // rain streaks
     }
     c *= 1.0 - 0.6 * smoothstep(0.35, 1.05, v);                 // vignette
     c = pow(max(c, 0.0), vec3(1.0 / 2.2));
