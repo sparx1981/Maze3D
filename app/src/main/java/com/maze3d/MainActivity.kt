@@ -51,6 +51,8 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
     private var camPill: TextView? = null
     private var ctrlPill: TextView? = null
     private var controlMode = 0
+    /** Which TV-remote arrows are held: left, right, up, down. */
+    private val dpadHeld = BooleanArray(4)
     private lateinit var pulseView: PulseView
     private var joyOriginX = 0f
     private var joyOriginY = 0f
@@ -175,6 +177,9 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
     }
+
+    /** A bright outline round the focused button, easy to follow from the sofa with a TV remote or gamepad. */
+    private fun focusRing() = GradientDrawable().apply { cornerRadius = dp(20f).toFloat(); setStroke(dp(2.5f), Color.WHITE); setColor(Color.TRANSPARENT) }
 
     private fun dp(v: Float) = (v * resources.displayMetrics.density).toInt()
 
@@ -500,6 +505,27 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 }
             }
         }
+        // TV remote (and gamepad D-pad): the arrows steer the ball during a game, select asks for a hint, menu opens the menu
+        if (menuLayer.visibility != View.VISIBLE) {
+            val k = ev.keyCode
+            val dir = when (k) {
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT -> 0; android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> 1
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> 2; android.view.KeyEvent.KEYCODE_DPAD_DOWN -> 3; else -> -1
+            }
+            if (dir >= 0) {
+                dpadHeld[dir] = ev.action == android.view.KeyEvent.ACTION_DOWN
+                val x = (if (dpadHeld[1]) 1f else 0f) - (if (dpadHeld[0]) 1f else 0f)
+                val y = (if (dpadHeld[3]) 1f else 0f) - (if (dpadHeld[2]) 1f else 0f)
+                val on = x != 0f || y != 0f
+                val len = kotlin.math.sqrt(x * x + y * y).coerceAtLeast(1f)
+                glView.queueEvent { renderer.padInput(x / len, y / len, on) }
+                return true
+            }
+            if (ev.action == android.view.KeyEvent.ACTION_DOWN && ev.repeatCount == 0) when (k) {
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> { glView.queueEvent { renderer.requestHint() }; return true }
+                android.view.KeyEvent.KEYCODE_MENU -> { showMenu(); return true }
+            }
+        } else if (dpadHeld.any { it }) { java.util.Arrays.fill(dpadHeld, false); glView.queueEvent { renderer.padInput(0f, 0f, false) } }
         if (pad && menuLayer.visibility == View.VISIBLE && ev.action == android.view.KeyEvent.ACTION_DOWN && ev.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B) {
             onBackPressed(); return true
         }
@@ -517,7 +543,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
         setPadding(dp(20f), dp(15f), dp(20f), dp(15f))
         background = glass(primary)
         isFocusable = true
-        setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.05f else 1f; v.scaleY = if (f) 1.05f else 1f; v.alpha = if (f) 1f else 0.92f }
+        setOnFocusChangeListener { v, f -> v.foreground = if (f) focusRing() else null; v.scaleX = if (f) 1.05f else 1f; v.scaleY = if (f) 1.05f else 1f; v.alpha = if (f) 1f else 0.92f }
         setOnClickListener { engine.uiClick(); onClick() }
     }
 
@@ -618,7 +644,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 setPadding(dp(4f), dp(12f), dp(4f), dp(12f))
                 background = glass(get() == i)
                 isFocusable = true
-                setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
+                setOnFocusChangeListener { v, f -> v.foreground = if (f) focusRing() else null; v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
                 setOnClickListener {
                     val msg = locked?.invoke(i)
                     if (msg != null) { engine.uiToggle(false); onToast(msg) }
@@ -791,7 +817,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
                 setPadding(dp(12f), dp(10f), dp(12f), dp(10f)); minWidth = dp(48f)
                 background = glass(get() == i)
                 isFocusable = true
-                setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
+                setOnFocusChangeListener { v, f -> v.foreground = if (f) focusRing() else null; v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
                 setOnClickListener { set(i); refresh(); engine.uiClick() }
             }
             chips.add(c)
@@ -859,7 +885,7 @@ class MainActivity : Activity(), MazeRenderer.Host, SensorEventListener {
             text = "\u2039  BACK"; setTextColor(Color.WHITE); textSize = 12f; letterSpacing = 0.12f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
             setPadding(dp(16f), dp(11f), dp(18f), dp(11f)); background = glass(false); isFocusable = true
-            setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
+            setOnFocusChangeListener { v, f -> v.foreground = if (f) focusRing() else null; v.scaleX = if (f) 1.06f else 1f; v.scaleY = if (f) 1.06f else 1f }
             setOnClickListener { engine.uiClick(); showMainMenu() }
         }, LinearLayout.LayoutParams(-2, -2))
         top.addView(TextView(this).apply {

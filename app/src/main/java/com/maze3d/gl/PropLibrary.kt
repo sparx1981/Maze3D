@@ -1879,18 +1879,66 @@ object PropLibrary {
         col = c(250, 250, 250); for (k in 0 until 4) { push(); translate(-0.36f + k * 0.24f, 0.341f, 0.05f); box(0.12f, 0.004f, 0.04f); pop() }
     }.build()
 
-    /** One row of spectators (heads and shoulders in mixed shirt colours), to sit on a tier; animated to cheer and do the wave. */
-    private fun crowdRow() = PM().apply {
-        val shirts = listOf(c(220, 40, 40), c(40, 90, 220), c(250, 214, 40), c(250, 250, 250), c(40, 160, 70), c(240, 120, 30))
-        val skins = listOf(c(240, 200, 160), c(200, 150, 110), c(150, 100, 70), c(110, 70, 50))
+    /** One row of spectators, to sit on a tier and be animated to cheer and do the wave. Each fan has shoulders and a shirt,
+     *  a head with hair, a cap or a beanie, two arms (some waving, some clapping, some holding a flag or a team scarf
+     *  overhead) and a slightly different size, so the rows never look cloned. */
+    private fun crowdRow(seed: Int = 0) = PM().apply {
+        val shirts = listOf(c(220, 40, 40), c(40, 90, 220), c(250, 214, 40), c(245, 245, 245), c(40, 160, 70), c(240, 120, 30), c(30, 32, 40), c(150, 60, 170))
+        val skins = listOf(c(244, 206, 170), c(222, 176, 136), c(190, 140, 100), c(150, 100, 70), c(108, 70, 48))
+        val hairs = listOf(c(30, 24, 20), c(90, 60, 30), c(200, 160, 90), c(150, 70, 30), c(120, 120, 124))
+        val team = listOf(c(220, 30, 40), c(250, 250, 250))
+        fun h(k: Int, salt: Int) = ((((seed * 7919 + k * 131 + salt * 977) * 2654435761L) ushr 9) % 1000).toInt() / 1000f
         for (k in 0 until 9) {
-            val x = -0.44f + k * 0.11f
-            col = shirts[(k * 5 + 3) % shirts.size]; at(x, 0f, 0.04f) { scale(1f, 0.7f, 1.1f); sphere(0.04f, 8, 6) }
-            col = skins[(k * 3) % skins.size]; at(x, 0f, 0.1f) { sphere(0.026f, 8, 6) }
-            if (k % 3 == 0) { col = shirts[(k + 2) % shirts.size]; tube(listOf(Vec3(x + 0.03f, 0f, 0.07f), Vec3(x + 0.05f, 0f, 0.14f)), 0.008f, 4) }      // a raised arm / scarf
+            val x = -0.44f + k * 0.11f + (h(k, 1) - 0.5f) * 0.02f
+            val sc = 0.88f + 0.22f * h(k, 2)                                     // kids and grown-ups
+            val shirt = shirts[(h(k, 3) * shirts.size).toInt().coerceAtMost(shirts.size - 1)]
+            val skin = skins[(h(k, 4) * skins.size).toInt().coerceAtMost(skins.size - 1)]
+            push(); translate(x, 0f, 0f); scale(sc)
+            col = shirt; at(z = 0.045f) { scale(1.15f, 0.7f, 1.0f); sphere(0.036f, 10, 8) }                 // chest
+            at(z = 0.075f) { scale(1.5f, 0.75f, 0.5f); sphere(0.028f, 10, 6) }                              // shoulders
+            col = skin; at(z = 0.096f) { cylinder(0.011f, 0.014f, 6) }                                    // neck
+            at(z = 0.122f) { scale(0.92f, 0.9f, 1.05f); sphere(0.024f, 10, 8) }                             // head
+            at(0.0f, 0.021f, 0.122f) { sphere(0.006f, 5, 4) }                                            // nose
+            val hat = h(k, 5)
+            when {
+                hat < 0.25f -> { col = team[k % 2]; at(z = 0.132f) { scale(1f, 1f, 0.75f); sphere(0.026f, 10, 6) }        // beanie
+                    col = team[(k + 1) % 2]; at(z = 0.16f) { sphere(0.009f, 6, 4) } }
+                hat < 0.45f -> { col = shirts[(k * 3) % shirts.size]; at(z = 0.135f) { scale(1f, 1f, 0.6f); sphere(0.025f, 10, 6) }  // cap
+                    at(0f, 0.025f, 0.128f) { box(0.034f, 0.024f, 0.005f) } }
+                else -> { col = hairs[(h(k, 6) * hairs.size).toInt().coerceAtMost(hairs.size - 1)]
+                    at(0f, -0.004f, 0.13f) { scale(1f, 1f, 0.82f); sphere(0.026f, 10, 6) } }                         // hair
+            }
+            if (h(k, 7) < 0.3f) { col = team[0]; at(z = 0.09f) { torus(0.022f, 0.008f, 12, 5) } }                    // team scarf
+            // arms: pose by fan
+            val pose = h(k, 8)
+            col = shirt
+            for (sd in intArrayOf(-1, 1)) {
+                val sh = Vec3(sd * 0.04f, 0f, 0.075f)
+                val hand: Vec3 = when {
+                    pose < 0.28f -> Vec3(sd * 0.06f, 0.01f, 0.2f)                         // both arms up, cheering
+                    pose < 0.45f && sd == 1 -> Vec3(0.07f, 0.01f, 0.19f)                   // one arm waving
+                    pose < 0.62f -> Vec3(sd * 0.008f, 0.04f, 0.095f)                       // clapping in front
+                    else -> Vec3(sd * 0.045f, 0.03f, 0.02f)                                // arms down, resting
+                }
+                val elbow = (sh + hand) * 0.5f + Vec3(sd * 0.018f, 0.005f, 0f)
+                tube(listOf(sh, elbow, hand), 0.01f, 5)
+                col = skin; at(hand.x, hand.y, hand.z) { sphere(0.011f, 6, 4) }; col = shirt
+            }
+            if (pose < 0.28f && h(k, 9) < 0.45f) {                                       // a scarf held up between both hands
+                col = team[0]; at(0f, 0.012f, 0.205f) { box(0.12f, 0.004f, 0.022f) }
+                col = team[1]; at(0f, 0.014f, 0.205f) { box(0.03f, 0.004f, 0.022f) }
+            }
+            if (pose in 0.28f..0.45f && h(k, 10) < 0.6f) {                               // a flag on a pole
+                col = c(200, 200, 205); tube(listOf(Vec3(0.07f, 0.01f, 0.17f), Vec3(0.07f, 0.01f, 0.32f)), 0.003f, 4)
+                col = team[0]; flat(Vec3(0.072f, 0.01f, 0.32f), Vec3(0.15f, 0.01f, 0.31f), Vec3(0.15f, 0.01f, 0.27f), Vec3(0.072f, 0.01f, 0.26f))
+                col = team[1]; flat(Vec3(0.098f, 0.011f, 0.315f), Vec3(0.124f, 0.011f, 0.312f), Vec3(0.124f, 0.011f, 0.266f), Vec3(0.098f, 0.011f, 0.263f))
+            }
+            pop()
         }
     }.build()
-    private fun crowdSpec(host: PropMesh) = part(host, crowdRow(), Anim.CROWD, (0 until 4).map { r -> Vec3(0f, 0.18f - r * 0.13f - 0.01f, 0.13f + 0.16f * r) }, 1f, 1f)
+    private val crowdRowMesh by lazy { crowdRow(1) }
+    // alternate tiers sit half a seat apart so the same row of fans never lines up in columns
+    private fun crowdSpec(host: PropMesh) = part(host, crowdRowMesh, Anim.CROWD, (0 until 4).map { r -> Vec3(if (r % 2 == 1) 0.055f else 0f, 0.18f - r * 0.13f - 0.01f, 0.13f + 0.16f * r) }, 1f, 1f)
 
     // ---------------------------------------------------------------- sweets
     private fun fruitPastilles() = PM().apply {
