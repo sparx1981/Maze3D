@@ -14,9 +14,11 @@ object PropLibrary {
     private fun glow(v: Vec3, k: Float) = v * k
 
     /** How a placed prop (or a part of it) moves. Parts are drawn at each offset in [at], in the prop's own units. */
-    object Anim { const val SPIN = 0; const val BOB = 1; const val SWAY = 2; const val FLICKER = 3; const val WOBBLE = 4; const val NOD = 5; const val SCREW = 6; const val CROWD = 7 }
+    object Anim { const val SPIN = 0; const val BOB = 1; const val SWAY = 2; const val FLICKER = 3; const val WOBBLE = 4; const val NOD = 5; const val SCREW = 6; const val CROWD = 7; const val FLAG = 8 }
     class AnimSpec(val part: PropMesh, val type: Int, val speed: Float = 1f, val amp: Float = 1f, val whole: Boolean = false,
-                   val at: List<Vec3> = listOf(Vec3.ZERO), val pivotZ: Float = 0f)
+                   val at: List<Vec3> = listOf(Vec3.ZERO), val pivotZ: Float = 0f,
+                   /** Flag cloth (type [Anim.FLAG]): wave height and waves per unit length, and the cloth length (negative = hangs from a bar). */
+                   val flagAmp: Float = 0f, val flagWaves: Float = 0f, val flagLen: Float = 0f)
     /** A small flock circling above the maze: body plus two flapping wings (left wing along +y, right along -y). */
     class Bird(val body: PropMesh, val wingL: PropMesh, val wingR: PropMesh, val count: Int, val size: Float, val height: Float, val flap: Float, val glide: Boolean = false)
     /** Extra flocks beyond the first (e.g. toucans as well as parrots). */
@@ -28,6 +30,26 @@ object PropLibrary {
 
     private fun whole(m: PropMesh, type: Int, speed: Float = 1f, amp: Float = 1f, pivotZ: Float = 0f) = m to AnimSpec(m, type, speed, amp, true, pivotZ = pivotZ)
     private fun part(host: PropMesh, part: PropMesh, type: Int, at: List<Vec3>, speed: Float = 1f, amp: Float = 1f) = host to AnimSpec(part, type, speed, amp, false, at)
+    /** Cloth [cloth] flying from the poles of [host] at [at]: rippling in a gusty wind (see SCENE_VS uFlag). */
+    private fun flagPart(host: PropMesh, cloth: PropMesh, len: Float, at: List<Vec3>, waveH: Float = 0.09f, waves: Float = 1.6f, speed: Float = 1f) =
+        host to flagSpec(cloth, len, at, waveH, waves, speed)
+    /** Preview only: the cloth of a flag spec bent into one frame of its ripple (mirrors SCENE_VS uFlag). */
+    fun flagPose(sp: AnimSpec, phase: Float): PropMesh {
+        val m = sp.part; val pos = m.pos.copyOf(); val L = kotlin.math.abs(sp.flagLen); val hang = sp.flagLen < 0f
+        val k = sp.flagWaves * 6.2831853f
+        for (i in 0 until m.vertexCount) {
+            val x = pos[i * 3]; val z = pos[i * 3 + 2]
+            val d = if (hang) maxOf(-z, 0f) else maxOf(x, 0f)
+            val sN = (d / L).coerceIn(0f, 1f); val env = sN * (0.35f + 0.65f * sN)
+            val wave = sin(k * d - phase) + 0.35f * sin(2.3f * k * d - 1.7f * phase + 1.3f) + 0.25f * sin(0.6f * k * d - 0.55f * phase + 0.4f)
+            val off = sp.flagAmp * env * wave
+            pos[i * 3 + 1] += off
+            if (!hang) { pos[i * 3 + 2] -= sp.flagAmp * 0.25f * sN * sN * (1f - 0.5f * sin(phase * 0.37f)); pos[i * 3] -= 0.12f * kotlin.math.abs(off) * sN }
+        }
+        return PropMesh(pos, m.nrm, m.col, m.idx)
+    }
+    fun flagSpec(cloth: PropMesh, len: Float, at: List<Vec3>, waveH: Float = 0.09f, waves: Float = 1.6f, speed: Float = 1f) =
+        AnimSpec(cloth, Anim.FLAG, speed, 1f, false, at, 0f, waveH * kotlin.math.abs(len), waves / kotlin.math.abs(len), len)
 
 
     private val cache = HashMap<Int, ThemeProps>()
@@ -46,10 +68,10 @@ object PropLibrary {
                 butterfly(c(255, 130, 20), c(40, 20, 10))) }
         2 -> { val tr = trophy(); val fp = flagPole()
             val gs = grandstand(c(220, 30, 30), c(250, 250, 250), c(30, 30, 34))
-            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), whole(fp, Anim.SWAY, 1.6f, 1.4f), crowdSpec(gs)), null, listOf(gs, gs, gs), ring = gs, ringCount = 18) }
+            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), flagPart(fp, chequerCloth, flagLen, listOf(Vec3(0.02f, 0f, 0.62f))), crowdSpec(gs)), null, listOf(gs, gs, gs), ring = gs, ringCount = 18) }
         3 -> { val cf = cornerFlag(); val fb = football(); val tr = trophy()
             val gs = grandstand(c(40, 90, 220), c(250, 214, 40), c(40, 140, 60))
-            ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(whole(cf, Anim.SWAY, 1.8f, 1.6f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f), crowdSpec(gs)),
+            ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(flagPart(cf, cornerCloth, 0.3f, listOf(Vec3(0.018f, 0f, 0.68f)), 0.08f, 1.4f, 1.1f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f), crowdSpec(gs)),
                 bird(c(250, 250, 250), c(200, 200, 205), 5, 0.5f, 3.2f, 7f), listOf(gs, gs)) }
         4 -> { val ds = dish(); val rk = rocket()
             val mr = moonRover()
@@ -118,7 +140,8 @@ object PropLibrary {
     private fun medieval(): ThemeProps {
         val cf = campfire(); val bn = banner(); val ca = cage(); val sw = swordInStone(); val sh = shieldStand(); val cs = castle()
         return ThemeProps(bn, sw, sh, cs, ca, bn,
-            mapOf(part(cf, flame(0.12f, 0.36f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.08f)), 1.1f), whole(bn, Anim.SWAY, 1.4f, 1.2f), whole(ca, Anim.NOD, 0.7f, 0.5f)),
+            mapOf(part(cf, flame(0.12f, 0.36f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.08f)), 1.1f), flagPart(bn, gonfalonCloth, -0.52f, listOf(Vec3(0.02f, 0f, 0.865f)), 0.07f, 0.9f, 0.6f), whole(ca, Anim.NOD, 0.7f, 0.5f),
+                flagPart(cs, castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f, 1.4f)),
             dragon(), listOf(cf, cf, ca, sw), birds2 = bird(c(40, 40, 46), c(30, 30, 36), 4, 0.45f, 2.6f, 6f))
     }
 
@@ -221,7 +244,19 @@ object PropLibrary {
     }
 
     /** Preview harness only: the props and flocks being worked on, shown side by side. */
-    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(monkey(), dino(), raptor()) to listOf(dragonfly(), mosquito())
+    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> {
+        fun withFlag(host: PropMesh, sp: AnimSpec, ph: Float): PropMesh {
+            val parts = listOf(host) + sp.at.map { o -> flagPose(sp, ph + o.x * 5f).let { m -> PropMesh(FloatArray(m.pos.size) { i -> m.pos[i] + when (i % 3) { 0 -> o.x; 1 -> o.y; else -> o.z } }, m.nrm, m.col, m.idx) } }
+            val pos = parts.flatMap { it.pos.toList() }.toFloatArray(); val nrm = parts.flatMap { it.nrm.toList() }.toFloatArray(); val col = parts.flatMap { it.col.toList() }.toFloatArray()
+            var base = 0; val idx = ArrayList<Int>(); for (pm in parts) { for (i in pm.idx) idx.add(i + base); base += pm.vertexCount }
+            return PropMesh(pos, nrm, col, idx.toIntArray())
+        }
+        val fp = flagPole(); val cf = cornerFlag(); val bn = banner(); val cs = castle()
+        return listOf(raceCar(), withFlag(fp, flagSpec(chequerCloth, flagLen, listOf(Vec3(0.02f, 0f, 0.62f))), 1.3f),
+            withFlag(cf, flagSpec(cornerCloth, 0.3f, listOf(Vec3(0.018f, 0f, 0.68f)), 0.08f, 1.4f), 2.1f),
+            withFlag(bn, flagSpec(gonfalonCloth, -0.52f, listOf(Vec3(0.02f, 0f, 0.865f)), 0.07f, 0.9f), 0.7f),
+            withFlag(cs, flagSpec(castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f), 1.9f)) to emptyList()
+    }
 
     /** A big dragonfly: long banded abdomen, huge compound eyes, two pairs of long clear wings with dark tip spots. */
     private fun dragonfly(): Bird {
@@ -441,6 +476,55 @@ object PropLibrary {
         return Bird(body, fin(1f), fin(-1f), 5, 0.75f, 2.4f, 0f, glide = true)
     }
 
+    // ---------------------------------------------------------------- flags (cloth that ripples in the wind; see SCENE_VS uFlag)
+    /** Flag cloth in the standard frame: the hoist (fixed edge) runs up the pole at x = 0 and the cloth flies out along +x in
+     *  the y = 0 plane, double-sided and finely gridded so it can ripple. [top]/[bot] give the upper/lower edge height at
+     *  u (0 at the pole .. 1 at the fly end); [paint] colours the cloth at (u, v), v running bottom to top. */
+    private fun PM.cloth(len: Float, nu: Int, nv: Int, top: (Float) -> Float, bot: (Float) -> Float, paint: (Float, Float) -> Vec3) {
+        for (i in 0 until nu) for (j in 0 until nv) {
+            val u0 = i / nu.toFloat(); val u1 = (i + 1) / nu.toFloat(); val v0 = j / nv.toFloat(); val v1 = (j + 1) / nv.toFloat()
+            fun at(u: Float, v: Float) = Vec3(0.004f + len * u, 0f, bot(u) + (top(u) - bot(u)) * v)
+            val cm = paint((u0 + u1) * 0.5f, (v0 + v1) * 0.5f)
+            flat(at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1), cm, cm, cm, cm)
+        }
+    }
+    /** A banner hanging from a bar at z = 0, across x in [0, width], down to [drop] (swallowtail at the bottom). */
+    private fun PM.hangingCloth(width: Float, drop: Float, nu: Int, nv: Int, tail: Float, paint: (Float, Float) -> Vec3) {
+        for (i in 0 until nu) for (j in 0 until nv) {
+            val u0 = i / nu.toFloat(); val u1 = (i + 1) / nu.toFloat(); val v0 = j / nv.toFloat(); val v1 = (j + 1) / nv.toFloat()
+            fun bottom(u: Float) = -drop + tail * (1f - kotlin.math.abs(2f * u - 1f))        // swallowtail: the notch rises in the middle
+            fun at(u: Float, v: Float) = Vec3(width * u, 0f, -0.004f + (bottom(u) + 0.004f) * v)
+            val cm = paint((u0 + u1) * 0.5f, (v0 + v1) * 0.5f)
+            flat(at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1), cm, cm, cm, cm)
+        }
+    }
+
+    private val flagLen = 0.46f
+    /** The chequered flag: 8 x 5 squares. */
+    private val chequerCloth by lazy { PM().apply {
+        cloth(flagLen, 24, 10, { 0.3f }, { 0f }) { u, v -> if (((u * 8f).toInt() + (v * 5f).toInt()) % 2 == 0) c(24, 24, 26) else c(246, 246, 246) }
+    }.build() }
+    /** Football corner flag: red and yellow quarters. */
+    private val cornerCloth by lazy { PM().apply {
+        cloth(0.3f, 16, 8, { 0.2f }, { 0f }) { u, v -> if ((u < 0.5f) == (v < 0.5f)) c(250, 214, 40) else c(220, 40, 40) }
+    }.build() }
+    /** Long tapering pennant (castle towers, turret tops) in two colours split along its length. */
+    fun pennantCloth(a: Vec3, b: Vec3, len: Float = 0.22f, h: Float = 0.07f) = PM().apply {
+        cloth(len, 18, 4, { u -> h * (1f - 0.5f * u) }, { u -> h * 0.5f * u }) { _, v -> if (v > 0.5f) a else b }
+    }.build()
+    private val castlePennantA by lazy { pennantCloth(c(220, 40, 40), c(250, 214, 40), 0.16f, 0.05f) }
+    /** Medieval gonfalon: crimson with a gold border and cross, swallowtailed, hanging from its crossbar. */
+    private val gonfalonCloth by lazy { PM().apply {
+        hangingCloth(0.29f, 0.52f, 8, 14, 0.1f) { u, v ->
+            val border = u < 0.08f || u > 0.92f || v > 0.93f
+            val cross = kotlin.math.abs(u - 0.5f) < 0.07f || kotlin.math.abs(v - 0.62f) < 0.05f
+            if (border) c(214, 168, 70) else if (cross) c(250, 214, 40) else c(150, 26, 30)
+        }
+    }.build() }
+    /** Checkpoint pennants: orange until reached, then green; slightly glowing. */
+    val checkpointClothOn by lazy { pennantCloth(c(90, 255, 130) * 1.25f, c(60, 220, 110) * 1.25f, 0.36f, 0.3f) }
+    val checkpointClothOff by lazy { pennantCloth(c(255, 190, 60) * 1.25f, c(255, 150, 40) * 1.25f, 0.36f, 0.3f) }
+
     // ---------------------------------------------------------------- castle grounds
     /** A broad oak for the courtyard lawns: gnarled trunk, spreading boughs and clumped leafy crown. */
     fun oakTree() = PM().apply {
@@ -489,6 +573,14 @@ object PropLibrary {
 
     /** Crown of a turret: a round parapet of merlons with gaps where the path comes in and leaves ([gaps] are angles in
      *  the prop's xy plane), a flagpole with a pennant and two torches. About one cell across. */
+    /** Where on the turret crown ring its flagpole stands: the first spot clear of the path gaps. */
+    fun turretFlagAngle(gaps: List<Float>): Float {
+        fun inGap(a: Float) = gaps.any { g -> val d = kotlin.math.abs(((a - g + 9.42478f) % 6.28318f) - 3.14159f); d < 0.62f }
+        var fa = 0f; while (inGap(fa)) fa += 0.7f
+        return fa
+    }
+    val turretPennant by lazy { pennantCloth(c(200, 30, 40), c(250, 214, 40), 0.3f, 0.1f) }
+
     fun turretCrown(gaps: List<Float>) = PM().apply {
         val stone = c(160, 152, 138); val dark = c(120, 114, 104)
         fun inGap(a: Float) = gaps.any { g -> val d = kotlin.math.abs(((a - g + 9.42478f) % 6.28318f) - 3.14159f); d < 0.62f }
@@ -501,10 +593,9 @@ object PropLibrary {
             push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a); box(0.12f, 0.2f, 0.34f); pop()                // parapet
             if (k % 2 == 0) { col = stone; push(); translate(cos(a) * r, sin(a) * r, 0.24f); rotZ(a); box(0.13f, 0.18f, 0.14f); pop() }   // merlon
         }
-        var fa = 0f; while (inGap(fa)) fa += 0.7f
-        col = c(80, 60, 40); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.3f) { cylinder(0.012f, 0.6f, 6) }
-        col = c(200, 30, 40); push(); translate(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.82f)
-        prism(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.22f, 0.05f), floatArrayOf(0f, 0.1f)), 0.008f); pop()
+        val fa = turretFlagAngle(gaps)
+        col = c(80, 60, 40); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.3f) { cylinder(0.012f, 0.62f, 6) }      // flagpole (its pennant flies as cloth)
+        col = c(214, 168, 70); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.93f) { sphere(0.016f, 6, 4) }
         var ta = fa + 3.14f; while (inGap(ta)) ta += 0.7f
         for (dt in floatArrayOf(-0.45f, 0.45f)) { val a = ta + dt; if (inGap(a)) continue
             col = c(60, 44, 30); at(cos(a) * 0.52f, sin(a) * 0.52f, 0.3f) { cylinder(0.012f, 0.12f, 5) }
@@ -765,20 +856,18 @@ object PropLibrary {
     }.build()
 
     private fun flagPole() = PM().apply {
-        col = c(220, 222, 228); cylinder(0.02f, 1f, 8)
-        col = c(255, 214, 80); at(z = 1f) { sphere(0.035f, 8, 6) }
-        for (i in 0 until 4) for (j in 0 until 3) {
-            col = if ((i + j) % 2 == 0) c(20, 20, 20) else c(250, 250, 250)
-            val x0 = 0.02f + i * 0.1f; val z0 = 0.62f + j * 0.1f; val w0 = sin(x0 * 9f) * 0.02f; val w1 = sin((x0 + 0.1f) * 9f) * 0.02f
-            flat(Vec3(x0, w0, z0), Vec3(x0 + 0.1f, w1, z0), Vec3(x0 + 0.1f, w1, z0 + 0.1f), Vec3(x0, w0, z0 + 0.1f))
-        }
+        col = c(60, 62, 70); cylinder(0.07f, 0.05f, 12, 0.05f)                                         // base
+        col = c(220, 222, 228); cylinder(0.02f, 1f, 10, 0.014f)
+        col = c(255, 214, 80); at(z = 1f) { sphere(0.032f, 10, 8) }                                    // gilt finial
+        col = c(240, 240, 236); tube(listOf(Vec3(0.022f, 0f, 0.97f), Vec3(0.03f, 0.01f, 0.5f), Vec3(0.024f, 0.012f, 0.32f)), 0.004f, 3)   // halyard
+        col = c(120, 120, 128); at(0.024f, 0f, 0.3f) { box(0.012f, 0.03f, 0.04f) }                    // cleat
     }.build()
 
     // ---------------------------------------------------------------- football
     private fun cornerFlag() = PM().apply {
-        col = c(250, 250, 250); cylinder(0.02f, 0.9f, 8)
-        col = c(255, 214, 40); flat(Vec3(0.02f, 0f, 0.9f), Vec3(0.34f, 0f, 0.82f), Vec3(0.02f, 0f, 0.7f), Vec3(0.02f, 0f, 0.7f))
-        col = c(30, 30, 30); cylinder(0.12f, 0.03f, 14)
+        col = c(250, 250, 250); cylinder(0.018f, 0.9f, 8, 0.014f)
+        col = c(220, 40, 40); for (k in 0 until 4) at(z = 0.1f + k * 0.2f) { cylinder(0.0185f, 0.1f, 8) }   // red bands on the pole
+        col = c(30, 30, 30); cylinder(0.1f, 0.025f, 14, 0.06f)
     }.build()
 
     private fun football() = PM().apply {
@@ -1598,20 +1687,73 @@ object PropLibrary {
 
     // ---------------------------------------------------------------- extra props (second quality pass)
     private fun raceCar() = PM().apply {
-        // open-wheel race car: tub, sidepods, wings, halo, four fat tyres
-        val paint = c(220, 30, 30); val dark = c(30, 30, 34)
-        col = paint
-        push(); translate(0f, 0f, 0.14f); scale(0.42f, 0.11f, 0.07f); sphere(1f, 18, 10); pop()               // nose and tub
-        for (s in intArrayOf(-1, 1)) { push(); translate(-0.08f, s * 0.12f, 0.13f); scale(0.2f, 0.06f, 0.06f); sphere(1f, 12, 8); pop() }
-        col = c(250, 250, 250); push(); translate(0.06f, 0f, 0.2f); box(0.3f, 0.05f, 0.015f); pop()
-        col = dark; push(); translate(0.42f, 0f, 0.08f); box(0.06f, 0.36f, 0.02f); pop()                         // front wing
-        col = paint; push(); translate(-0.4f, 0f, 0.3f); box(0.1f, 0.3f, 0.02f); pop()                            // rear wing
-        col = dark; for (s in intArrayOf(-1, 1)) { push(); translate(-0.38f, s * 0.13f, 0.22f); box(0.03f, 0.02f, 0.16f); pop() }
-        tube(listOf(Vec3(0.02f, -0.06f, 0.2f), Vec3(-0.04f, 0f, 0.29f), Vec3(0.02f, 0.06f, 0.2f)), 0.012f, 6)       // halo
-        col = c(250, 214, 40); at(-0.06f, 0f, 0.22f) { sphere(0.045f, 10, 8) }                                   // helmet
-        for (x in floatArrayOf(0.28f, -0.3f)) for (s in intArrayOf(-1, 1)) {
-            col = dark; push(); translate(x, s * 0.2f, 0.09f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.05f); cylinder(0.09f, 0.1f, 16); pop()
-            col = c(200, 200, 210); push(); translate(x, s * 0.252f, 0.09f); rotX((PI / 2).toFloat()); cylinder(0.04f, 0.004f, 10); pop()
+        // a modern single-seater, nose along +x: tapered nose, three-element front wing, survival cell with halo and driver,
+        // sculpted sidepods with intakes, engine cover with airbox and shark fin, two-element rear wing, floor and diffuser,
+        // pushrod-style wishbones, and shaped tyres with coloured sidewall stripes on spoked rims
+        val paint = c(200, 20, 28); val white = c(245, 245, 245); val carbon = c(26, 26, 30); val tyre = c(22, 22, 24)
+        fun loft(pts: List<Vec3>, r: Float, rr: (Float) -> Float, sy: Float = 1f, sz: Float = 1f, cf: ((Float) -> Vec3)? = null) {
+            push(); scale(1f, sy, sz); tube(pts.map { Vec3(it.x, it.y / sy, it.z / sz) }, r, 14, colorFn = cf, taper = rr); pop()
+        }
+        // nose cone and survival cell
+        loft((0..8).map { k -> val v = k / 8f; Vec3(0.5f - 0.38f * v, 0f, 0.085f + 0.06f * v) }, 0.06f, { v -> 0.22f + 0.78f * v }, 1.25f, 0.75f,
+            { v -> if (v < 0.25f) white else paint })
+        loft((0..8).map { k -> val v = k / 8f; Vec3(0.12f - 0.3f * v, 0f, 0.145f + 0.01f * kotlin.math.sin(v * 3f)) }, 0.065f, { 1f - 0.08f * it }, 1.15f, 0.9f)
+        col = c(12, 12, 14); at(-0.03f, 0f, 0.19f) { scale(1.7f, 0.85f, 0.25f); sphere(0.042f, 14, 8) }                  // cockpit opening
+        col = white; at(0.2f, 0f, 0.177f) { box(0.26f, 0.016f, 0.004f) }                                                  // nose stripe
+        // driver: helmet with a dark visor
+        col = c(250, 214, 40); at(-0.03f, 0f, 0.215f) { sphere(0.034f, 14, 10) }
+        col = c(20, 24, 34); at(-0.005f, 0f, 0.218f) { scale(0.7f, 1.05f, 0.42f); sphere(0.03f, 12, 6) }
+        // halo
+        col = c(50, 52, 58)
+        tube(listOf(Vec3(0.07f, 0f, 0.16f), Vec3(0.06f, 0f, 0.235f)), 0.009f, 6)
+        tube((0..10).map { k -> val a = PI.toFloat() * (k / 10f - 0.5f); Vec3(0.06f - 0.09f * (1f - cos(a)) * 1.1f, 0.055f * sin(a) * 1.15f, 0.235f - 0.03f * (1f - cos(a))) }, 0.008f, 6)
+        // sidepods with intakes, and mirrors
+        for (s in intArrayOf(-1, 1)) {
+            loft((0..8).map { k -> val v = k / 8f; Vec3(0.06f - 0.36f * v, s * (0.115f - 0.03f * v * v), 0.12f - 0.025f * v) }, 0.055f, { v -> 1f - 0.6f * v * v }, 1.1f, 0.85f,
+                { v -> if (v in 0.35f..0.55f) white else paint })
+            col = c(10, 10, 12); at(0.065f, s * 0.115f, 0.125f) { scale(0.3f, 1f, 0.8f); sphere(0.045f, 10, 6) }      // intake
+            col = carbon; tube(listOf(Vec3(0.05f, s * 0.07f, 0.17f), Vec3(0.06f, s * 0.14f, 0.2f)), 0.004f, 4)
+            col = paint; at(0.06f, s * 0.15f, 0.2f) { box(0.012f, 0.04f, 0.022f) }
+        }
+        // engine cover, airbox and shark fin
+        loft((0..8).map { k -> val v = k / 8f; Vec3(-0.06f - 0.36f * v, 0f, 0.235f - 0.1f * v) }, 0.042f, { v -> 1f - 0.65f * v }, 1.3f, 1.1f)
+        col = c(12, 12, 14); at(-0.055f, 0f, 0.255f) { scale(0.4f, 1f, 1f); sphere(0.022f, 10, 6) }                   // airbox mouth
+        col = c(250, 214, 40); at(-0.05f, 0f, 0.285f) { box(0.03f, 0.014f, 0.012f) }                                     // camera pod
+        col = paint; push(); translate(-0.4f, 0f, 0.15f); rotX((PI / 2).toFloat())
+        prism(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.28f, 0.08f), floatArrayOf(0.3f, 0.12f), floatArrayOf(0f, 0.06f)), 0.004f); pop()
+        col = white; at(-0.26f, 0f, 0.2f) { box(0.06f, 0.088f, 0.006f) }                                                // sponsor patch
+        // front wing: three elements with endplates
+        for (e in 0 until 3) { col = if (e == 2) paint else carbon
+            at(0.48f - e * 0.035f, 0f, 0.035f + e * 0.018f) { rotY(-0.15f - e * 0.12f); box(0.05f, 0.46f, 0.008f) } }
+        for (s in intArrayOf(-1, 1)) { col = carbon; at(0.45f, s * 0.235f, 0.06f) { box(0.12f, 0.008f, 0.06f) }
+            col = paint; at(0.45f, s * 0.236f, 0.08f) { box(0.1f, 0.009f, 0.015f) } }
+        // rear wing: main plane and flap between tall endplates, on a centre pillar
+        col = carbon; at(-0.47f, 0f, 0.3f) { rotY(0.12f); box(0.07f, 0.27f, 0.01f) }
+        col = paint; at(-0.5f, 0f, 0.33f) { rotY(0.45f); box(0.05f, 0.27f, 0.008f) }
+        for (s in intArrayOf(-1, 1)) { col = carbon; at(-0.48f, s * 0.14f, 0.27f) { box(0.12f, 0.008f, 0.14f) }
+            col = white; at(-0.48f, s * 0.141f, 0.3f) { box(0.08f, 0.009f, 0.03f) } }
+        col = carbon; at(-0.45f, 0f, 0.2f) { box(0.02f, 0.012f, 0.1f) }
+        // floor and diffuser
+        col = carbon; at(-0.05f, 0f, 0.035f) { box(0.62f, 0.34f, 0.01f) }
+        at(-0.43f, 0f, 0.06f) { rotY(-0.35f); box(0.12f, 0.24f, 0.008f) }
+        for (k in 0 until 4) at(-0.44f, -0.09f + k * 0.06f, 0.06f) { box(0.1f, 0.004f, 0.05f) }
+        // wheels and suspension
+        for ((x, w) in listOf(0.3f to 0.085f, -0.31f to 0.115f)) for (s in intArrayOf(-1, 1)) {
+            val y = s * (0.21f + w * 0.5f)
+            col = carbon
+            tube(listOf(Vec3(x + 0.05f, s * 0.05f, 0.15f), Vec3(x, y - s * w * 0.4f, 0.12f)), 0.005f, 4)          // upper wishbone
+            tube(listOf(Vec3(x - 0.06f, s * 0.05f, 0.15f), Vec3(x, y - s * w * 0.4f, 0.12f)), 0.005f, 4)
+            tube(listOf(Vec3(x + 0.05f, s * 0.06f, 0.07f), Vec3(x, y - s * w * 0.4f, 0.06f)), 0.005f, 4)          // lower wishbone
+            tube(listOf(Vec3(x - 0.06f, s * 0.06f, 0.07f), Vec3(x, y - s * w * 0.4f, 0.06f)), 0.005f, 4)
+            push(); translate(x, y, 0.095f); rotX((PI / 2).toFloat())
+            val r = 0.095f; val hw = w * 0.5f
+            lathe(listOf(floatArrayOf(0.055f, -hw), floatArrayOf(r * 0.94f, -hw), floatArrayOf(r, -hw * 0.7f), floatArrayOf(r, hw * 0.7f), floatArrayOf(r * 0.94f, hw), floatArrayOf(0.055f, hw)), 28, true) { _, v ->
+                val side = kotlin.math.abs(v - 0.5f) > 0.38f
+                if (side && (v < 0.06f || v > 0.94f)) c(250, 214, 40) else tyre }                           // yellow sidewall stripe
+            col = c(40, 40, 46); cylinder(0.055f, 0.004f, 20)                                                            // rim
+            col = c(170, 172, 180); for (k in 0 until 10) { val a = k * 0.628f; at(cos(a) * 0.03f, sin(a) * 0.03f, -s * hw * 0.2f) { rotZ(a); box(0.05f, 0.007f, 0.006f) } }
+            col = c(250, 214, 40); at(z = -s * hw * 0.3f) { cylinder(0.012f, 0.006f, 10) }                              // wheel nut (outer face)
+            pop()
         }
     }.build()
 
@@ -1930,8 +2072,14 @@ object PropLibrary {
             }
             if (pose in 0.28f..0.45f && h(k, 10) < 0.6f) {                               // a flag on a pole
                 col = c(200, 200, 205); tube(listOf(Vec3(0.07f, 0.01f, 0.17f), Vec3(0.07f, 0.01f, 0.32f)), 0.003f, 4)
-                col = team[0]; flat(Vec3(0.072f, 0.01f, 0.32f), Vec3(0.15f, 0.01f, 0.31f), Vec3(0.15f, 0.01f, 0.27f), Vec3(0.072f, 0.01f, 0.26f))
-                col = team[1]; flat(Vec3(0.098f, 0.011f, 0.315f), Vec3(0.124f, 0.011f, 0.312f), Vec3(0.124f, 0.011f, 0.266f), Vec3(0.098f, 0.011f, 0.263f))
+                for (q in 0 until 6) {                                                   // a waving flag: curved and drooping a little towards the fly
+                    val u0 = q / 6f; val u1 = (q + 1) / 6f
+                    fun fy(u: Float) = 0.01f + 0.012f * u * sin(u * 7f + k)
+                    fun fz(u: Float) = -0.012f * u * u
+                    val x0 = 0.072f + 0.08f * u0; val x1 = 0.072f + 0.08f * u1
+                    col = if (q in 2..3) team[1] else team[0]
+                    flat(Vec3(x0, fy(u0), 0.26f + fz(u0)), Vec3(x1, fy(u1), 0.26f + fz(u1)), Vec3(x1, fy(u1), 0.32f + fz(u1)), Vec3(x0, fy(u0), 0.32f + fz(u0)))
+                }
             }
             pop()
         }
@@ -2084,8 +2232,7 @@ object PropLibrary {
             col = stone; at(sx * 0.3f, sy * 0.3f, 0f) { cylinder(0.11f, 0.68f, 16) }
             for (m in 0 until 6) { val a = m * 1.047f; at(sx * 0.3f + cos(a) * 0.1f, sy * 0.3f + sin(a) * 0.1f, 0.71f) { box(0.05f, 0.05f, 0.06f) } }
             col = roof; at(sx * 0.3f, sy * 0.3f, 0.74f) { cone(0.13f, 0.24f, 16) }
-            col = c(220, 40, 40); tube(listOf(Vec3(sx * 0.3f, sy * 0.3f, 0.98f), Vec3(sx * 0.3f, sy * 0.3f, 1.06f)), 0.006f, 3)
-            col = if ((sx + sy) == 0) c(250, 214, 40) else c(220, 40, 40); flat(Vec3(sx * 0.3f, sy * 0.3f, 1.06f), Vec3(sx * 0.3f + 0.08f, sy * 0.3f, 1.04f), Vec3(sx * 0.3f + 0.08f, sy * 0.3f, 1.04f), Vec3(sx * 0.3f, sy * 0.3f, 1.01f))
+            col = c(70, 60, 50); tube(listOf(Vec3(sx * 0.3f, sy * 0.3f, 0.96f), Vec3(sx * 0.3f, sy * 0.3f, 1.08f)), 0.006f, 4)
         }
         col = stone; for (k in 0 until 7) for (s in intArrayOf(-1, 1)) { at(-0.24f + k * 0.08f, s * 0.28f, 0.53f) { box(0.045f, 0.03f, 0.06f) }; at(s * 0.28f, -0.24f + k * 0.08f, 0.53f) { box(0.03f, 0.045f, 0.06f) } }
         col = c(40, 30, 24); push(); translate(0f, -0.285f, 0.12f); box(0.14f, 0.02f, 0.22f); pop()                  // gate
@@ -2147,12 +2294,9 @@ object PropLibrary {
 
     private fun banner() = PM().apply {
         col = c(80, 64, 44); cylinder(0.02f, 0.95f, 8)
-        col = c(214, 168, 70); at(z = 0.95f) { sphere(0.03f, 8, 6) }
-        push(); translate(0f, 0f, 0.86f); rotY((PI / 2).toFloat()); cylinder(0.008f, 0.3f, 4); pop()
-        for (k in 0 until 6) { val z0 = 0.86f - k * 0.08f; val z1 = z0 - 0.08f
-            col = if (k == 2) c(250, 214, 40) else c(150, 26, 30)
-            flat(Vec3(0.01f, 0f, z0), Vec3(0.3f, 0.02f * kotlin.math.sin(k * 1f), z0), Vec3(0.3f, 0.02f * kotlin.math.sin(k + 1f), z1), Vec3(0.01f, 0f, z1)) }
-        col = c(150, 26, 30); flat(Vec3(0.01f, 0f, 0.38f), Vec3(0.3f, 0f, 0.38f), Vec3(0.155f, 0f, 0.3f), Vec3(0.155f, 0f, 0.3f))
+        col = c(214, 168, 70); at(z = 0.95f) { cone(0.03f, 0.08f, 8) }; at(z = 0.95f) { sphere(0.026f, 8, 6) }
+        col = c(70, 54, 36); push(); translate(0f, 0f, 0.87f); rotY((PI / 2).toFloat()); cylinder(0.009f, 0.33f, 6); pop()      // crossbar
+        col = c(214, 168, 70); at(0.33f, 0f, 0.87f) { sphere(0.014f, 6, 4) }
     }.build()
 
     private fun dragon(): Bird {

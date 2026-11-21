@@ -494,12 +494,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val d = mb.vertex(c + ring[k2] + n * h, nrm, pole); val e = mb.vertex(c + ring[k] + n * h, nrm, pole)
             mb.quad(a, b, d, e)
         }
-        val top = c + n * h; val low = c + n * (h * 0.72f)
-        for (side in 0..1) {
-            val nn = if (side == 0) t1 else -t1
-            val v0 = mb.vertex(top, nn, color); val v1 = mb.vertex(top + t2 * (cs * 0.34f) - n * (cs * 0.10f), nn, color * 1.15f); val v2 = mb.vertex(low, nn, color)
-            if (side == 0) mb.tri(v0, v1, v2) else mb.tri(v0, v2, v1)
-        }
+        // the pennant itself is cloth drawn by the renderer so it can wave (see MazeRenderer.drawCheckpointFlags)
     }
 
     fun markers(doorEdges: IntArray = IntArray(0), checkpoints: IntArray = IntArray(0), reached: Int = -1): MeshBuilder {
@@ -616,7 +611,13 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     /** Records the animation of a placed prop; returns true when the whole prop moves (so it is left out of the static mesh). */
     private fun animate(lib: PropLibrary.ThemeProps, mesh: PropMesh, pos: Vec3, n: Vec3, t2: Vec3, size: Float, delay: Float, seed: Int): Boolean {
         val spec = lib.anims[mesh] ?: return false
-        if (anims.size >= (140 * capK).toInt()) return false                              // keep the number of moving props (draw calls) in check
+        if (anims.size >= (140 * capK).toInt()) {                              // keep the number of moving props (draw calls) in check
+            if (!spec.whole) {                                                  // past the cap a moving part is baked in still rather than lost
+                val t2n = (t2 - n * (t2 dot n)).normalized(); val t1 = t2n cross n
+                for (o in spec.at) placed.add(Placed(spec.part, pos + t1 * (o.x * size) + t2n * (o.y * size) + n * (o.z * size), n, t2n, size, delay))
+            }
+            return false
+        }
         anims.add(AnimInst(spec, frameOf(pos, n, t2, size), hash(seed + 7101) * 6.2831853f, delay))
         return spec.whole
     }
@@ -824,6 +825,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 val nd = dirTo(t.cells[i + 1])
                 val gapNext = kotlin.math.atan2(nd dot t2, nd dot t1)
                 placed.add(Placed(PropLibrary.turretCrown(listOf((PI / 2).toFloat(), gapNext)), c0, n, t2, cs, 0.2f))
+                val gaps = listOf((PI / 2).toFloat(), gapNext)
+                val fa = PropLibrary.turretFlagAngle(gaps)
+                anims.add(AnimInst(PropLibrary.flagSpec(PropLibrary.turretPennant, 0.3f, listOf(Vec3(cos(fa) * 0.6f + 0.012f, sin(fa) * 0.6f, 0.8f)), 0.1f, 1.5f, 1.3f),
+                    frameOf(c0, n, t2, cs), hash(t.top + 31) * 6.28f, 0.2f))
                 addLamp(c0 + n * (cs * 0.6f), Vec3(1f, 0.55f, 0.2f), 2.5f)
             }
         }
@@ -881,7 +886,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         for ((k, m) in list.withIndex()) {
             val ox = (k - (n - 1) / 2f) * 1.15f
             put(m, Vec3(ox, 0f, 0f))
-            if (custom == null) lib.anims[m]?.let { sp -> if (!sp.whole) for (o in sp.at) put(sp.part, Vec3(ox + o.x, o.y, o.z)) }
+            if (custom == null) lib.anims[m]?.let { sp -> if (!sp.whole) for (o in sp.at) put(if (sp.type == PropLibrary.Anim.FLAG) PropLibrary.flagPose(sp, 1.3f + o.x * 5f) else sp.part, Vec3(ox + o.x, o.y, o.z)) }
         }
         for ((fi, bd) in flocks.withIndex()) {
             val o = Vec3((list.size + fi - (n - 1) / 2f) * 1.15f, 0f, 0.5f)

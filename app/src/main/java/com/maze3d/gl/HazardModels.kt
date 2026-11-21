@@ -176,23 +176,97 @@ object HazardModels {
         col = c(130, 132, 140); for (sy in floatArrayOf(-0.4f, 0.4f)) at(-len + 0.03f, sy, 0.03f) { torus(0.025f, 0.006f, 10, 4) }   // chain rings
     }.build()
 
-    /** Gatehouse over the far bank: two crenellated towers on the walls, an arch over the way through, a raised portcullis
-     *  and a pair of torches. Its back is at +x; the bridge hinges at its front (x = [DRAW_HINGE]). */
+    /** Gatehouse over the far bank: twin round drum towers on battered plinths with coursed masonry, corbels, battlements and
+     *  slate cones; between them a pointed arch of dressed voussoirs under machicolations and a parapet; a spiked portcullis
+     *  raised in its groove, oak gates folded back inside, a painted shield over the arch and torches in iron brackets.
+     *  Its front faces -x; the bridge hinges at its foot (x = [DRAW_HINGE]). */
     fun gatehouse() = PM().apply {
-        val stone = c(150, 144, 132); val dark = c(118, 112, 102)
-        for (sy in floatArrayOf(-0.62f, 0.62f)) {
-            col = stone; at(DRAW_HINGE + 0.2f, sy, 0.6f) { box(0.36f, 0.3f, 1.2f) }
-            for (k in 0 until 4) { col = if (k % 2 == 0) stone else dark
-                val a = k * 1.5708f; at(DRAW_HINGE + 0.2f + cos(a) * 0.12f, sy + sin(a) * 0.1f, 1.27f) { box(0.1f, 0.09f, 0.14f) } }
-            col = c(30, 26, 24); at(DRAW_HINGE + 0.01f, sy, 0.8f) { box(0.012f, 0.03f, 0.14f) }                         // arrow slit
-            col = c(60, 44, 30); at(DRAW_HINGE + 0.0f, sy * 0.78f, 0.5f) { rotY(1.2f); cylinder(0.012f, 0.1f, 5) }
-            col = c(255, 140, 40) * 2.4f; at(DRAW_HINGE - 0.08f, sy * 0.78f, 0.58f) { scale(1f, 1f, 1.6f); sphere(0.024f, 8, 6) }
+        fun hsh(i: Int) = (((i * 2654435761L) ushr 9) % 1000).toInt() / 1000f
+        // coursed stone: each course a slightly different tint, each block within it too, with darker mortar lines
+        fun stone(u: Float, z: Float, seed: Int): Vec3 {
+            val course = (z / 0.055f).toInt(); val fz = z / 0.055f - course
+            val block = ((u * 22f) + (if (course % 2 == 0) 0f else 0.5f)).toInt()
+            val mortar = fz < 0.1f || ((u * 22f + (if (course % 2 == 0) 0f else 0.5f)) % 1f) < 0.06f
+            val t = 0.86f + 0.2f * hsh(course * 131 + block * 17 + seed)
+            return if (mortar) c(112, 106, 96) else c(166, 158, 142) * t
         }
-        col = stone; at(DRAW_HINGE + 0.2f, 0f, 1.0f) { box(0.36f, 0.95f, 0.26f) }                                      // lintel
-        for (k in 0 until 5) { col = if (k % 2 == 0) stone else dark; at(DRAW_HINGE + 0.2f, -0.36f + k * 0.18f, 1.18f) { box(0.12f, 0.1f, 0.12f) } }
-        col = c(70, 72, 78); for (k in 0 until 7) at(DRAW_HINGE + 0.06f, -0.36f + k * 0.12f, 0.9f) { box(0.02f, 0.02f, 0.18f) }   // portcullis, raised
-        at(DRAW_HINGE + 0.06f, 0f, 0.82f) { box(0.02f, 0.78f, 0.02f) }
-        col = c(50, 50, 56); for (sy in floatArrayOf(-0.4f, 0.4f)) tube(listOf(Vec3(DRAW_HINGE + 0.02f, sy, 0.86f), Vec3(DRAW_HINGE - 0.3f, sy, 0.5f)), 0.006f, 4)   // chains
+        val hx = DRAW_HINGE + 0.2f
+        for (sy in floatArrayOf(-0.6f, 0.6f)) {
+            push(); translate(hx, sy, 0f)
+            // drum: a profile ring at every course with a thin mortar ring, so each course of stone shows as its own band
+            val prof = ArrayList<FloatArray>(); val kind = ArrayList<Int>()            // 0 = stone, 1 = mortar, 2 = cap
+            prof.add(floatArrayOf(0f, 0f)); kind.add(2)
+            var z = 0f; var course = 0
+            while (z < 1.1f) {
+                val r = if (z < 0.3f) 0.25f - 0.05f * (z / 0.3f) else 0.2f
+                prof.add(floatArrayOf(r, z)); kind.add(1)
+                prof.add(floatArrayOf(r, z + 0.006f)); kind.add(course)
+                val z2 = minOf(z + 0.055f, 1.1f); val r2 = if (z2 < 0.3f) 0.25f - 0.05f * (z2 / 0.3f) else 0.2f
+                prof.add(floatArrayOf(r2, z2 - 0.001f)); kind.add(course)
+                z = z2; course++
+            }
+            prof.add(floatArrayOf(0f, 1.1f)); kind.add(2)
+            val n = prof.size
+            lathe(prof, 40, false) { u, v ->
+                val i = Math.round(v * (n - 1)).coerceIn(0, n - 1)
+                when (val k = kind[i]) { 1 -> c(108, 102, 92); 2 -> c(150, 142, 128); else -> {
+                    val block = ((u * 18f) + (if (k % 2 == 0) 0f else 0.5f)).toInt()
+                    c(168, 160, 144) * (0.84f + 0.24f * hsh(k * 131 + block * 17 + (if (sy > 0) 7 else 3))) } }
+            }
+            for (k in 0 until 14) { val a = k * 6.2832f / 14f; col = c(150, 142, 128) * (0.9f + 0.15f * hsh(k + 40))
+                at(cos(a) * 0.205f, sin(a) * 0.205f, 1.09f) { rotZ(a); box(0.05f, 0.04f, 0.05f) } }                       // corbels
+            col = c(160, 152, 138); at(z = 1.12f) { cylinder(0.235f, 0.08f, 28) }                                      // projecting parapet
+            for (k in 0 until 10) { val a = k * 6.2832f / 10f + 0.3f
+                col = c(166, 158, 142) * (0.88f + 0.18f * hsh(k + 90)); at(cos(a) * 0.215f, sin(a) * 0.215f, 1.24f) { rotZ(a); box(0.04f, 0.085f, 0.1f) } }   // merlons
+            col = c(70, 78, 92); at(z = 1.18f) { lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.2f, 0f), floatArrayOf(0.12f, 0.16f), floatArrayOf(0f, 0.38f)), 20, false) { u, v ->
+                c(64, 72, 88) * (0.85f + 0.25f * (((u * 26f).toInt() + (v * 9f).toInt()) % 2)) } }                  // slate cone
+            col = c(214, 168, 70); at(z = 1.56f) { sphere(0.014f, 6, 4) }
+            col = c(26, 22, 20)                                                                                       // cross-shaped arrow slits facing the bridge
+            for (z in floatArrayOf(0.5f, 0.85f)) { at(-0.198f, 0f, z) { box(0.012f, 0.016f, 0.13f) }; at(-0.198f, 0f, z + 0.02f) { box(0.012f, 0.06f, 0.014f) } }
+            pop()
+        }
+        // the arch block between the towers, built as vertical slices whose underside traces a pointed arch
+        val half = 0.4f; val spring = 0.46f; val rise = 0.3f
+        fun archH(y: Float): Float { val q = (kotlin.math.abs(y) / half).coerceIn(0f, 1f); return spring + rise * Math.pow((1f - q).toDouble(), 0.6).toFloat() }   // pointed: upright at the springs, meeting in a point
+        val n = 20
+        for (i in 0 until n) {
+            val y0 = -half + 2f * half * i / n; val y1 = -half + 2f * half * (i + 1) / n
+            val hLow = archH((y0 + y1) * 0.5f); val top = 1.02f
+            val tiles = ((top - hLow) / 0.055f).toInt().coerceAtLeast(1)
+            for (k in 0 until tiles) { val z0 = hLow + (top - hLow) * k / tiles; val z1 = hLow + (top - hLow) * (k + 1) / tiles
+                col = stone((y0 + 0.4f) / 0.8f, (z0 + z1) * 0.5f, 11); at(hx, (y0 + y1) * 0.5f, (z0 + z1) * 0.5f) { box(0.36f, y1 - y0 + 0.002f, z1 - z0) } }
+            col = c(188, 180, 164) * (0.9f + 0.15f * hsh(i + 300))                                                       // dressed voussoirs round the arch
+            at(DRAW_HINGE - 0.005f, (y0 + y1) * 0.5f, hLow + 0.035f) { box(0.03f, y1 - y0 - 0.004f, 0.07f) }
+        }
+        for (sy in floatArrayOf(-1f, 1f)) { col = c(182, 174, 158); at(DRAW_HINGE - 0.005f, sy * (half - 0.02f), spring * 0.5f) { box(0.03f, 0.05f, spring) } }   // jambs
+        for (k in 0 until 7) { col = c(150, 142, 128) * (0.9f + 0.15f * hsh(k + 500)); at(DRAW_HINGE - 0.03f, -0.36f + k * 0.12f, 1.0f) { box(0.07f, 0.06f, 0.06f) } }   // machicolation corbels
+        col = c(160, 152, 138); at(DRAW_HINGE + 0.17f, 0f, 1.075f) { box(0.42f, 0.84f, 0.09f) }
+        for (k in 0 until 6) { col = c(166, 158, 142) * (0.88f + 0.18f * hsh(k + 600)); at(DRAW_HINGE - 0.02f, -0.35f + k * 0.14f, 1.17f) { box(0.05f, 0.08f, 0.1f) } }   // parapet merlons
+        // portcullis raised in its groove, its spiked foot just showing under the arch
+        col = c(62, 60, 64)
+        for (k in 0 until 9) { val y = -0.34f + k * 0.085f; at(DRAW_HINGE + 0.08f, y, 0.86f) { box(0.018f, 0.014f, 0.36f) }
+            at(DRAW_HINGE + 0.08f, y, 0.68f) { rotY(PI.toFloat()); cone(0.011f, 0.04f, 4) } }
+        for (z in floatArrayOf(0.74f, 0.86f, 0.98f)) at(DRAW_HINGE + 0.08f, 0f, z) { box(0.02f, 0.72f, 0.014f) }
+        // oak gates folded back against the passage walls, with iron straps
+        for (sy in floatArrayOf(-1f, 1f)) {
+            col = c(96, 64, 40); at(DRAW_HINGE + 0.24f, sy * 0.37f, 0.24f) { box(0.26f, 0.025f, 0.46f) }
+            col = c(50, 50, 54); for (z in floatArrayOf(0.08f, 0.24f, 0.4f)) at(DRAW_HINGE + 0.24f, sy * 0.355f, z) { box(0.26f, 0.006f, 0.02f) }
+        }
+        // a painted shield over the arch
+        push(); translate(DRAW_HINGE - 0.02f, 0f, 0.86f); rotY(-(PI / 2).toFloat())
+        val sh = listOf(floatArrayOf(-0.07f, 0.07f), floatArrayOf(0.07f, 0.07f), floatArrayOf(0.07f, -0.01f), floatArrayOf(0f, -0.09f), floatArrayOf(-0.07f, -0.01f))
+        col = c(214, 168, 70); prism(sh.map { floatArrayOf(it[0] * 1.12f, it[1] * 1.12f) }, 0.012f)
+        col = c(30, 60, 160); at(z = 0.004f) { prism(sh.map { floatArrayOf(minOf(it[0], 0f), it[1]) }, 0.012f) }
+        col = c(170, 30, 30); at(z = 0.004f) { prism(sh.map { floatArrayOf(maxOf(it[0], 0f), it[1]) }, 0.012f) }
+        pop()
+        // torches in iron brackets on the tower fronts
+        for (sy in floatArrayOf(-0.6f, 0.6f)) {
+            col = c(40, 40, 44); tube(listOf(Vec3(hx - 0.2f, sy * 0.7f, 0.5f), Vec3(hx - 0.27f, sy * 0.7f, 0.52f), Vec3(hx - 0.28f, sy * 0.7f, 0.58f)), 0.006f, 4)
+            col = c(70, 50, 32); at(hx - 0.28f, sy * 0.7f, 0.56f) { cylinder(0.012f, 0.07f, 6, 0.016f) }
+            col = c(255, 150, 50) * 2.4f; at(hx - 0.28f, sy * 0.7f, 0.65f) { scale(1f, 1f, 1.7f); sphere(0.022f, 8, 6) }
+            col = c(255, 230, 140) * 2.8f; at(hx - 0.28f, sy * 0.7f, 0.64f) { scale(1f, 1f, 1.5f); sphere(0.011f, 6, 4) }
+        }
+        col = c(20, 18, 18); for (sy in floatArrayOf(-0.4f, 0.4f)) at(DRAW_HINGE - 0.005f, sy, 0.86f) { box(0.012f, 0.03f, 0.03f) }   // chain holes
     }.build()
 
     /** Dark green moat water filling the pit, with a few lily pads. */

@@ -1583,6 +1583,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(-2f, -2f)
         scene(Mat.FLAT, 0.5f, 0f, 0.9f); markerMesh?.draw()
+        drawCheckpointFlags()
         if (pal.themeId == 11) { scene(Mat.FLAT, 0.5f, 0f, 0.55f); myceliumMesh?.draw() }
         if (hintLeft > 0f) {
             val alpha = min(min((HINT_SECONDS - hintLeft) / 0.35f, hintLeft / 1.3f), 1f).coerceIn(0f, 1f)
@@ -2255,9 +2256,35 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
         meshFor(pm).draw()
     }
 
+    private var uFlagLoc = -1
+    private val cpL = FloatArray(16); private val cpF = FloatArray(16)
+    /** Checkpoint pennants: glowing cloth on top of each checkpoint pole, rippling in the wind (orange until reached, then green). */
+    private fun drawCheckpointFlags() {
+        val m = maze ?: return
+        if (checkpoints.isEmpty()) return
+        val uModel = loc(sceneProg, "uModel"); val uFlag = loc(sceneProg, "uFlag")
+        val cs = m.cellSize
+        for ((i, cell) in checkpoints.withIndex()) {
+            val c = m.centers[cell]; val n = m.mesh.surface.normal(c)
+            var x = m.mesh.vertices[m.mesh.cellVertex(cell, 1)] - m.mesh.vertices[m.mesh.cellVertex(cell, 0)]
+            x = (x - n * (x dot n)).normalized(); val y = n cross x
+            val f = floatArrayOf(x.x * cs, x.y * cs, x.z * cs, 0f, y.x * cs, y.y * cs, y.z * cs, 0f, n.x * cs, n.y * cs, n.z * cs, 0f, c.x, c.y, c.z, 1f)
+            System.arraycopy(f, 0, cpF, 0, 16)
+            val ph = cell * 0.37f
+            Matrix.setIdentityM(cpL, 0)
+            Matrix.translateM(cpL, 0, 0.025f, 0f, 0.84f)
+            Matrix.rotateM(cpL, 0, 20f * kotlin.math.sin(time * 0.13f + ph), 0f, 0f, 1f)
+            val gust = 0.75f + 0.25f * kotlin.math.sin(time * 0.31f + ph)
+            GLES30.glUniform4f(uFlag, 0.36f * 0.1f * gust, 1.5f / 0.36f, time * 5.5f * (0.85f + 0.3f * gust) + ph * 7f, 0.36f)
+            drawPart(uModel, cpF, cpL, if (i <= cpReached) PropLibrary.checkpointClothOn else PropLibrary.checkpointClothOff)
+        }
+        GLES30.glUniform4f(uFlag, 0f, 0f, 0f, 0f)
+        GLES30.glUniformMatrix4fv(uModel, 1, false, model, 0)
+    }
     private fun drawAnimProps() {
         if (animInsts.isEmpty()) return
         val uModel = loc(sceneProg, "uModel")
+        uFlagLoc = loc(sceneProg, "uFlag")
         val t = time
         val deg = 57.29578f
         val dtA = (t - animLast).coerceIn(0f, 0.1f); animLast = t
@@ -2338,6 +2365,10 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                         Matrix.scaleM(aL, 0, 1f + k, 1f + k, 1f - k * 1.8f)
                         Matrix.rotateM(aL, 0, sp.amp * 3f * kotlin.math.sin(t * sp.speed * 2.1f + ph), 1f, 0f, 0f)
                     }
+                    PropLibrary.Anim.FLAG -> {
+                        // the wind veers a little now and then, turning the flag on its pole; the cloth itself ripples in the vertex shader
+                        Matrix.rotateM(aL, 0, 14f * sp.amp * kotlin.math.sin(t * 0.13f + ph) + 5f * kotlin.math.sin(t * 0.41f + ph * 2.3f), 0f, 0f, 1f)
+                    }
                     PropLibrary.Anim.CROWD -> {
                         // fans bob and cheer; every so often a Mexican wave rolls along the stand (rows rise one after another)
                         val cheer = 0.02f * maxOf(0f, kotlin.math.sin(t * 7f + off.z * 31f + ph))
@@ -2357,7 +2388,13 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 }
                 Matrix.translateM(aL, 0, 0f, 0f, -sp.pivotZ)
                 Matrix.scaleM(aL, 0, g, g, g)
-                drawPart(uModel, a.frame, aL, sp.part)
+                if (sp.type == PropLibrary.Anim.FLAG) {
+                    // gusty wind: the waves speed up and grow in the gusts; each flag on its own clock
+                    val gust = 0.75f + 0.25f * kotlin.math.sin(t * 0.31f + ph) + 0.12f * kotlin.math.sin(t * 1.7f + ph * 3f)
+                    GLES30.glUniform4f(uFlagLoc, sp.flagAmp * gust, sp.flagWaves, t * sp.speed * 5.5f * (0.85f + 0.3f * gust) + ph * 7f + off.x * 3f, sp.flagLen)
+                    drawPart(uModel, a.frame, aL, sp.part)
+                    GLES30.glUniform4f(uFlagLoc, 0f, 0f, 0f, 0f)
+                } else drawPart(uModel, a.frame, aL, sp.part)
             }
         }
         GLES30.glUniformMatrix4fv(uModel, 1, false, model, 0)

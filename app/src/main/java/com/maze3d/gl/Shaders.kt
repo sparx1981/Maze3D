@@ -13,6 +13,7 @@ uniform float uTime;
 uniform float uDoorMode;   // 1 = door mesh: aDelay is the phase of its open/close cycle
 uniform float uShell;      // grass shells: how far up the blade this pass is (0 = the ground itself)
 uniform float uShellH;
+uniform vec4 uFlag;        // flag cloth: x = wave height, y = waves per unit, z = phase (advances with time), w = cloth length (> 0 flies from a pole along +x; < 0 hangs down from a bar at z = 0)
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNrm;
 layout(location=2) in vec3 aCol;
@@ -34,10 +35,33 @@ void main() {
         g = smoothstep(0.4, 0.8, s) * smoothstep(0.0, 0.6, uGrowT);
     }
     vec3 p = aPos + aLift * g + aNrm * (uShell * uShellH);
+    vec3 nrm = aNrm;
+    if (uFlag.x > 0.0) {
+        // cloth in the wind: travelling waves that grow from the fixed edge to the free edge; normals follow the folds
+        bool hang = uFlag.w < 0.0;
+        float L = abs(uFlag.w);
+        float d = hang ? max(-aPos.z, 0.0) : max(aPos.x, 0.0);          // distance from the pole / bar
+        float s = clamp(d / L, 0.0, 1.0);
+        float env = s * (0.35 + 0.65 * s);                                 // pinned at the pole, freest at the fly end
+        float k = uFlag.y * 6.2831853;
+        float a1 = k * d - uFlag.z, a2 = 2.3 * k * d - 1.7 * uFlag.z + 1.3, a3 = 0.6 * k * d - 0.55 * uFlag.z + 0.4;
+        float wave = sin(a1) + 0.35 * sin(a2) + 0.25 * sin(a3);
+        float dwave = k * (cos(a1) + 0.35 * 2.3 * cos(a2) + 0.25 * 0.6 * cos(a3));
+        float denv = (0.35 + 1.3 * s) / L;
+        float off = uFlag.x * env * wave;
+        float slope = uFlag.x * (denv * wave + env * dwave);
+        p.y += off;
+        if (hang) { nrm = normalize(nrm + vec3(0.0, 0.0, slope * sign(nrm.y))); }
+        else {
+            p.z -= uFlag.x * 0.25 * s * s * (1.0 - 0.5 * sin(uFlag.z * 0.37));   // the fly end sags a little when the gusts ease
+            p.x -= 0.12 * abs(off) * s;                                            // folds take up a little of the length
+            nrm = normalize(nrm + vec3(-slope * sign(nrm.y), 0.0, 0.0));
+        }
+    }
     vec4 w = uModel * vec4(p, 1.0);
     vWorld = w.xyz;
-    vNrm = mat3(uModel) * aNrm;
-    vNL = aNrm;
+    vNrm = mat3(uModel) * nrm;
+    vNL = nrm;
     vTile = aTile;
     vLocal = p;
     vCol = aCol;
