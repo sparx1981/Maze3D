@@ -804,10 +804,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     }
 
     /** Debug: the four props of this theme side by side, upright, at their natural size. */
-    fun gallery(): MeshBuilder {
+    fun gallery(custom: Pair<List<PropMesh>, List<PropLibrary.Bird>>? = null): MeshBuilder {
         val mb = MeshBuilder()
         val lib = PropLibrary.forTheme(pal.themeId) ?: return mb
-        val list = listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2) + lib.more
+        val list = custom?.first ?: (listOfNotNull(lib.junction, lib.deadA, lib.deadB, lib.landmark, lib.deadC, lib.junction2) + lib.more)
         fun put(m: PropMesh, o: Vec3, sc: Float = 1f) {
             val base = mb.vertexCount
             for (i in 0 until m.vertexCount)
@@ -815,14 +815,15 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             var q = 0
             while (q < m.idx.size) { mb.tri(base + m.idx[q], base + m.idx[q + 1], base + m.idx[q + 2]); q += 3 }
         }
-        val n = list.size + (if (lib.bird != null) 1 else 0)
+        val flocks = custom?.second ?: listOfNotNull(lib.bird, lib.birds2, lib.birds3)
+        val n = list.size + flocks.size
         for ((k, m) in list.withIndex()) {
             val ox = (k - (n - 1) / 2f) * 1.15f
             put(m, Vec3(ox, 0f, 0f))
-            lib.anims[m]?.let { sp -> if (!sp.whole) for (o in sp.at) put(sp.part, Vec3(ox + o.x, o.y, o.z)) }
+            if (custom == null) lib.anims[m]?.let { sp -> if (!sp.whole) for (o in sp.at) put(sp.part, Vec3(ox + o.x, o.y, o.z)) }
         }
-        lib.bird?.let { bd ->
-            val o = Vec3((list.size - (n - 1) / 2f) * 1.15f, 0f, 0.5f)
+        for ((fi, bd) in flocks.withIndex()) {
+            val o = Vec3((list.size + fi - (n - 1) / 2f) * 1.15f, 0f, 0.5f)
             for (m in listOf(bd.body, bd.wingL, bd.wingR)) put(m, o, 2f)
         }
         return mb

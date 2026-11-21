@@ -96,7 +96,8 @@ object PropLibrary {
             ThemeProps(boneProp(), en, fn, volcanoProp(), dn, jt,
                 mapOf(whole(en, Anim.WOBBLE, 0.8f, 0.6f), whole(fn, Anim.SWAY, 1f, 1.3f), whole(jt, Anim.SWAY, 0.6f, 0.8f), whole(dn, Anim.NOD, 0.9f, 1.2f),
                     whole(rp, Anim.NOD, 1.3f, 1.4f), whole(eg, Anim.WOBBLE, 0.7f, 0.5f), whole(bn, Anim.SWAY, 0.9f, 1.3f), whole(ms, Anim.SWAY, 1f, 1.2f)),
-                pterodactyl(), listOf(rp, sk, eg, dn, sk), junctionMore = listOf(bn, ms, bb, fn), floor = listOf(fn, ms, br, bb), junctionShare = 0.55f) }
+                pterodactyl(), listOf(rp, sk, eg, dn, sk), junctionMore = listOf(bn, ms, bb, fn), floor = listOf(fn, ms, br, bb), junctionShare = 0.55f,
+                birds2 = dragonfly(), birds3 = mosquito()) }
         16 -> { val dr = drill(); val gp = gearProp(); val b1 = boltProp(); val b2 = boltProp(); val nut = hexNut()
             ThemeProps(b1, toolbox(), wrench(), hammerProp(), gp, b2, mapOf(whole(gp, Anim.SPIN, 0.9f),
                 part(b1, nut, Anim.SCREW, listOf(Vec3(0f, 0f, 0.16f)), 0.8f, 0.34f), part(b2, nut, Anim.SCREW, listOf(Vec3(0f, 0f, 0.16f)), 0.6f, 0.34f),
@@ -216,46 +217,127 @@ object PropLibrary {
         return Bird(body, arm(1f), arm(-1f), 4, 0.6f, 2.4f, 0f, glide = true)
     }
 
+    /** Preview harness only: the props and flocks being worked on, shown side by side. */
+    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(monkey(), dino(), raptor()) to listOf(dragonfly(), mosquito())
+
+    /** A big dragonfly: long banded abdomen, huge compound eyes, two pairs of long clear wings with dark tip spots. */
+    private fun dragonfly(): Bird {
+        val body = PM().apply {
+            col = c(30, 110, 150); tube((0..10).map { Vec3(-0.03f - 0.44f * it / 10f, 0f, 0f) }, 0.022f, 10,
+                colorFn = { v -> if (((v * 10f).toInt() % 2) == 0) c(40, 150, 190) else c(20, 50, 70) }, taper = { 1f - 0.4f * it })
+            col = c(40, 120, 90); at(0.03f, 0f, 0f) { scale(1.3f, 0.9f, 1f); sphere(0.045f, 12, 8) }                    // thorax
+            col = c(60, 200, 170) * 1.1f; for (sgn in intArrayOf(-1, 1)) at(0.09f, sgn * 0.028f, 0.01f) { sphere(0.032f, 12, 8) }   // compound eyes
+            col = c(30, 30, 30); for (sgn in intArrayOf(-1, 1)) for (k in 0 until 3)
+                tube(listOf(Vec3(0.04f - k * 0.02f, sgn * 0.02f, -0.03f), Vec3(0.05f - k * 0.02f, sgn * 0.05f, -0.07f)), 0.004f, 4)
+        }.build()
+        fun wing(sgn: Float) = PM().apply {
+            for ((x, span, chord) in listOf(Triple(0.05f, 0.34f, 0.055f), Triple(0.0f, 0.3f, 0.065f))) {
+                col = c(178, 204, 222); push(); translate(x, sgn * span * 0.5f, 0.02f); scale(chord, span * 0.5f, 0.004f); sphere(1f, 14, 6); pop()
+                col = c(40, 30, 24); at(x, sgn * span * 0.9f, 0.024f) { scale(0.018f, 0.025f, 0.004f); sphere(1f, 6, 4) }   // tip spot
+            }
+        }.build()
+        return Bird(body, wing(1f), wing(-1f), 3, 0.95f, 1.4f, 22f)
+    }
+
+    /** A giant mosquito: humped striped body, long needle proboscis, feathery antennae, narrow wings and long dangling legs. */
+    private fun mosquito(): Bird {
+        val body = PM().apply {
+            col = c(70, 60, 52); at(0.02f, 0f, 0.01f) { scale(1.2f, 0.85f, 1.1f); sphere(0.04f, 12, 8) }                 // thorax hump
+            tube((0..8).map { Vec3(-0.02f - 0.26f * it / 8f, 0f, -0.01f - 0.05f * it / 8f) }, 0.022f, 10,
+                colorFn = { v -> if (((v * 8f).toInt() % 2) == 0) c(64, 56, 50) else c(220, 216, 206) }, taper = { 1f - 0.5f * it })
+            col = c(50, 44, 40); at(0.075f, 0f, 0f) { sphere(0.025f, 10, 8) }                                            // head
+            col = c(30, 26, 24); tube(listOf(Vec3(0.095f, 0f, -0.005f), Vec3(0.2f, 0f, -0.04f), Vec3(0.27f, 0f, -0.07f)), 0.004f, 4)   // proboscis
+            for (sgn in intArrayOf(-1, 1)) tube(listOf(Vec3(0.09f, sgn * 0.01f, 0.015f), Vec3(0.15f, sgn * 0.04f, 0.05f)), 0.006f, 4)   // antennae
+            col = c(56, 48, 44)
+            for (sgn in intArrayOf(-1, 1)) for (k in 0 until 3) {
+                val x0 = 0.03f - k * 0.025f
+                tube(listOf(Vec3(x0, sgn * 0.02f, -0.02f), Vec3(x0 + 0.03f - k * 0.04f, sgn * 0.1f, 0.02f), Vec3(x0 + 0.05f - k * 0.09f, sgn * 0.15f, -0.16f)), 0.004f, 4,
+                    colorFn = { v -> if (((v * 6f).toInt() % 2) == 0) c(56, 48, 44) else c(200, 196, 186) })
+            }
+        }.build()
+        fun wing(sgn: Float) = PM().apply {
+            col = c(190, 196, 200); push(); translate(-0.02f, sgn * 0.12f, 0.03f); rotZ(sgn * 0.35f); scale(0.035f, 0.12f, 0.004f); sphere(1f, 12, 6); pop()
+        }.build()
+        return Bird(body, wing(1f), wing(-1f), 4, 0.75f, 1.1f, 30f)
+    }
+
     // ---------------------------------------------------------------- ground animals
     private fun monkey() = PM().apply {
-        val fur = c(110, 70, 40); val face = c(220, 170, 130)
-        col = fur; at(z = 0.35f) { scale(0.9f, 0.8f, 1.1f); sphere(0.22f, 16, 12) }
-        at(z = 0.72f) { sphere(0.18f, 16, 12) }
-        col = face; at(0.12f, 0f, 0.7f) { scale(0.6f, 1f, 0.9f); sphere(0.12f, 12, 8) }
-        col = fur; for (s in intArrayOf(-1, 1)) { at(0f, s * 0.19f, 0.76f) { sphere(0.06f, 10, 8) } }
-        col = face; for (s in intArrayOf(-1, 1)) { at(0f, s * 0.2f, 0.76f) { sphere(0.035f, 8, 6) } }
-        col = c(20, 16, 14); for (s in intArrayOf(-1, 1)) { at(0.17f, s * 0.05f, 0.76f) { sphere(0.022f, 8, 6) } }
-        col = fur
-        for (s in intArrayOf(-1, 1)) {
-            tube(listOf(Vec3(0f, s * 0.17f, 0.48f), Vec3(0.12f, s * 0.24f, 0.35f), Vec3(0.18f, s * 0.2f, 0.2f)), 0.045f, 8)
-            tube(listOf(Vec3(0f, s * 0.1f, 0.2f), Vec3(0.12f, s * 0.14f, 0.12f), Vec3(0.14f, s * 0.12f, 0.02f)), 0.05f, 8)
+        // a sitting plush chimp: soft black fur, a tan heart-shaped face with big glossy amber eyes, big tan ears,
+        // long arms resting at its sides on tan hands and tan feet stuck out in front
+        val fur = c(34, 28, 28); val furHi = c(58, 48, 46); val tan = c(232, 170, 112); val tanDk = c(206, 140, 88)
+        col = fur; at(0f, 0f, 0.3f) { scale(0.85f, 1f, 1.05f); sphere(0.25f, 18, 14) }                       // body
+        col = furHi; at(0.13f, 0f, 0.3f) { scale(0.5f, 0.8f, 0.85f); sphere(0.2f, 14, 10) }                   // chest sheen
+        col = fur; at(0.01f, 0f, 0.68f) { scale(0.95f, 1.05f, 1f); sphere(0.2f, 18, 14) }                     // head
+        col = tan
+        at(0.12f, 0f, 0.71f) { scale(0.5f, 1.05f, 0.62f); sphere(0.14f, 16, 12) }                            // upper face around the eyes
+        at(0.16f, 0f, 0.6f) { scale(0.72f, 0.92f, 0.74f); sphere(0.12f, 16, 12) }                            // muzzle
+        col = tanDk; for (s in intArrayOf(-1, 1)) at(0.245f, s * 0.018f, 0.635f) { sphere(0.011f, 6, 4) }    // nostrils
+        col = c(150, 90, 60); tube((0..6).map { k -> val v = k / 6f - 0.5f; Vec3(0.235f - 0.02f * v * v * 4f, v * 0.12f, 0.565f + 0.03f * v * v * 4f) }, 0.006f, 5)   // smile
+        for (s in intArrayOf(-1, 1)) {                                                                       // big glossy eyes
+            col = c(170, 70, 20); at(0.188f, s * 0.058f, 0.715f) { sphere(0.036f, 12, 10) }
+            col = c(26, 16, 12); at(0.2f, s * 0.058f, 0.715f) { sphere(0.028f, 12, 10) }
+            col = c(255, 255, 255) * 1.3f; at(0.224f, s * 0.05f, 0.728f) { sphere(0.008f, 6, 4) }
         }
-        tube(listOf(Vec3(-0.18f, 0f, 0.2f), Vec3(-0.34f, 0f, 0.22f), Vec3(-0.4f, 0f, 0.42f), Vec3(-0.32f, 0f, 0.55f)), 0.025f, 6)
-        col = c(250, 220, 60); push(); translate(0.22f, 0.18f, 0.2f); rotX(0.5f); scale(0.35f, 0.35f, 1f); cylinder(0.08f, 0.24f, 10, 0.05f); pop()   // banana
+        for (s in intArrayOf(-1, 1)) {                                                                       // ears
+            col = tan; at(-0.01f, s * 0.205f, 0.7f) { scale(0.38f, 0.55f, 0.85f); sphere(0.1f, 14, 10) }
+            col = tanDk; at(0.015f, s * 0.21f, 0.7f) { scale(0.2f, 0.4f, 0.6f); sphere(0.1f, 10, 8) }
+        }
+        for (s in intArrayOf(-1, 1)) {
+            col = fur                                                                                         // long arms hanging down to the floor
+            tube(listOf(Vec3(0.0f, s * 0.2f, 0.5f), Vec3(0.04f, s * 0.29f, 0.36f), Vec3(0.09f, s * 0.33f, 0.2f), Vec3(0.12f, s * 0.34f, 0.1f)), 0.07f, 12, taper = { 1f - 0.12f * it })
+            col = tan; at(0.16f, s * 0.35f, 0.05f) { scale(1.45f, 1f, 0.55f); sphere(0.075f, 12, 8) }        // hands
+            col = tanDk; for (f in 0 until 3) at(0.24f, s * (0.32f + f * 0.028f), 0.045f) { sphere(0.016f, 6, 4) }
+            col = fur                                                                                         // legs out in front
+            tube(listOf(Vec3(0.02f, s * 0.12f, 0.16f), Vec3(0.18f, s * 0.15f, 0.11f), Vec3(0.3f, s * 0.16f, 0.1f)), 0.085f, 12)
+            col = tan; at(0.36f, s * 0.16f, 0.11f) { scale(0.55f, 0.85f, 1.25f); sphere(0.095f, 14, 10) }    // soles facing forward
+            col = tanDk; for (f in 0 until 4) at(0.395f, s * 0.16f + (f - 1.5f) * 0.032f, 0.2f) { sphere(0.017f, 6, 4) }   // toes
+        }
     }.build()
 
     private fun dino() = PM().apply {
-        // a friendly long-necked sauropod: smooth barrel body, tapering neck and tail as one curve, pillar legs with toenails,
-        // a small head with eyes and nostrils, a lighter belly and darker blotches down the back
-        val skin = c(96, 156, 84); val dark = c(60, 112, 58); val belly = c(206, 214, 150)
-        val spineCurve = (0..20).map { k -> val v = k / 20f
-            val x = -0.62f + 1.16f * v
-            val z = 0.42f + (if (v > 0.62f) (v - 0.62f) * 1.25f else 0f) * (if (v > 0.62f) 1f else 0f) + 0.06f * kotlin.math.sin(v * 3.1f) - (if (v < 0.25f) (0.25f - v) * 0.9f else 0f)
-            Vec3(x, 0f, z) }
-        col = skin
-        tube(spineCurve, 0.2f, 18, colorFn = { v -> if (((v * 23f).toInt() % 5) == 0 && v in 0.25f..0.7f) dark else skin }, taper = { v ->
-            when { v < 0.25f -> 0.18f + 0.82f * (v / 0.25f); v < 0.62f -> 1f; else -> 1f - 0.72f * ((v - 0.62f) / 0.38f) } })
-        col = belly; at(0.0f, 0f, 0.36f) { scale(1.5f, 0.75f, 0.55f); sphere(0.18f, 16, 10) }
-        val head = spineCurve.last()
-        col = skin; at(head.x + 0.05f, 0f, head.z + 0.03f) { scale(1.5f, 0.85f, 0.8f); sphere(0.075f, 14, 10) }
-        col = c(30, 26, 22); for (s in intArrayOf(-1, 1)) { at(head.x + 0.07f, s * 0.05f, head.z + 0.07f) { sphere(0.014f, 8, 6) }; at(head.x + 0.15f, s * 0.02f, head.z + 0.05f) { sphere(0.007f, 5, 4) } }
-        col = c(255, 255, 255); for (s in intArrayOf(-1, 1)) at(head.x + 0.078f, s * 0.054f, head.z + 0.075f) { sphere(0.005f, 4, 3) }
-        col = dark; tube(listOf(Vec3(head.x + 0.02f, -0.03f, head.z - 0.01f), Vec3(head.x + 0.12f, 0f, head.z), Vec3(head.x + 0.02f, 0.03f, head.z - 0.01f)), 0.004f, 3)   // smile
-        for (lx in floatArrayOf(-0.2f, 0.18f)) for (s in intArrayOf(-1, 1)) {
-            col = skin; tube(listOf(Vec3(lx, s * 0.12f, 0.38f), Vec3(lx + 0.02f, s * 0.13f, 0.18f), Vec3(lx, s * 0.13f, 0.03f)), 0.07f, 12, taper = { 1f - 0.15f * it })
-            col = belly; for (t in -1..1) at(lx + 0.06f, s * 0.13f + t * 0.03f, 0.02f) { scale(1f, 0.8f, 0.6f); sphere(0.022f, 6, 4) }
+        // Brachiosaurus: tall shoulders, a long neck rising steeply to a small head with a domed crest, back sloping down
+        // to a long tail, longer front legs than hind legs; olive skin with darker scaly speckles and a paler belly
+        val skin = c(128, 140, 80); val dark = c(92, 106, 58); val pale = c(200, 196, 150)
+        val ctrl = listOf(Vec3(-0.8f, 0f, 0.1f), Vec3(-0.56f, 0f, 0.27f), Vec3(-0.3f, 0f, 0.47f), Vec3(-0.08f, 0f, 0.56f), Vec3(0.12f, 0f, 0.63f),
+            Vec3(0.23f, 0f, 0.8f), Vec3(0.31f, 0f, 1.0f), Vec3(0.38f, 0f, 1.14f))
+        val rad = floatArrayOf(0.012f, 0.07f, 0.17f, 0.21f, 0.19f, 0.1f, 0.075f, 0.06f)
+        fun cr(a: Vec3, b: Vec3, c2: Vec3, d: Vec3, t: Float): Vec3 { val t2 = t * t; val t3 = t2 * t
+            return (b * 2f + (c2 - a) * t + (a * 2f - b * 5f + c2 * 4f - d) * t2 + (b * 3f - a - c2 * 3f + d) * t3) * 0.5f }
+        val path = ArrayList<Vec3>(); val rr = ArrayList<Float>()
+        for (i in 0 until ctrl.size - 1) for (k in 0 until 5) {
+            val t = k / 5f
+            path.add(cr(ctrl[maxOf(i - 1, 0)], ctrl[i], ctrl[i + 1], ctrl[minOf(i + 2, ctrl.size - 1)], t)); rr.add(rad[i] + (rad[i + 1] - rad[i]) * t)
         }
-        col = dark; for (k in 0 until 7) { val p = spineCurve[6 + k * 2]; at(p.x, 0f, p.z + 0.16f) { scale(1.3f, 0.5f, 0.6f); sphere(0.04f, 8, 6) } }   // back ridge
+        path.add(ctrl.last()); rr.add(rad.last())
+        val nP = path.size
+        col = skin
+        tube(path, 1f, 18, colorFn = { v -> skin * (0.96f + 0.08f * (((v * 97f).toInt() * 37) % 5) / 4f) },
+            taper = { v -> rr[minOf((v * (nP - 1)).toInt(), nP - 1)] })
+        col = pale; at(-0.1f, 0f, 0.44f) { scale(1.75f, 0.82f, 0.55f); sphere(0.17f, 18, 10) }                 // belly
+        at(0.17f, 0f, 0.6f) { rotY(-0.9f); scale(0.9f, 0.55f, 0.45f); sphere(0.13f, 14, 8) }                     // throat
+        col = dark; for (k in 0 until 16) { val q = path[10 + k * 1]; at(q.x, 0f, q.z + rr[10 + k] * 0.92f) { sphere(0.026f, 8, 6) } }   // scaly ridge
+        for (k in 0 until 180) {                                                                                 // darker scales over the back and neck
+            val i = 6 + (k * 7) % (nP - 8); val q = path[i]; val a = -1.2f + 2.4f * ((k * 13) % 17) / 16f
+            col = if (k % 3 == 0) dark * 0.92f else dark * 1.05f
+            push(); translate(q.x, sin(a) * rr[i] * 0.985f, q.z + cos(a) * rr[i] * 0.985f); rotX(-a); scale(1f, 1f, 0.3f); sphere(0.011f + 0.004f * (k % 3), 6, 4); pop()
+        }
+        val h = ctrl.last()
+        col = skin; at(h.x + 0.06f, 0f, h.z + 0.01f) { scale(1.75f, 0.8f, 0.72f); sphere(0.068f, 16, 12) }      // head
+        at(h.x + 0.03f, 0f, h.z + 0.06f) { scale(1.1f, 0.85f, 0.9f); sphere(0.045f, 12, 8) }                    // domed crest
+        col = c(60, 40, 34); at(h.x + 0.12f, 0f, h.z - 0.02f) { scale(1.6f, 0.75f, 0.25f); sphere(0.04f, 10, 6) } // open mouth
+        col = c(245, 240, 225); for (k in 0 until 5) at(h.x + 0.08f + k * 0.017f, 0f, h.z - 0.01f) { rotX(PI.toFloat()); cone(0.006f, 0.015f, 4) }
+        for (sgn in intArrayOf(-1, 1)) {
+            col = c(240, 230, 200); at(h.x + 0.07f, sgn * 0.045f, h.z + 0.035f) { sphere(0.014f, 8, 6) }
+            col = c(24, 20, 16); at(h.x + 0.078f, sgn * 0.052f, h.z + 0.036f) { sphere(0.009f, 6, 4) }
+        }
+        for ((lx, top, len) in listOf(Triple(0.1f, 0.56f, 1f), Triple(-0.3f, 0.44f, 0.82f))) for (sgn in intArrayOf(-1, 1)) {
+            col = skin
+            tube(listOf(Vec3(lx, sgn * 0.13f, top), Vec3(lx + 0.02f, sgn * 0.15f, top * 0.55f), Vec3(lx - 0.01f, sgn * 0.15f, 0.12f), Vec3(lx, sgn * 0.15f, 0.03f)),
+                0.07f * (0.85f + 0.15f * len), 14, taper = { 1f - 0.2f * it })
+            at(lx, sgn * 0.15f, 0f) { cylinder(0.068f, 0.05f, 14, 0.058f) }                                     // flared foot
+            col = c(220, 214, 190); for (t in -1..1) at(lx + 0.06f, sgn * 0.15f + t * 0.028f, 0.012f) { scale(1f, 0.8f, 0.6f); sphere(0.018f, 6, 4) }
+        }
     }.build()
 
     // ---------------------------------------------------------------- candy
@@ -1614,20 +1696,42 @@ object PropLibrary {
     }.build()
 
     private fun raptor() = PM().apply {
-        // a small two-legged raptor with a long tail, sickle claws and a crest of feathers
-        val skin = c(170, 120, 70); val stripe = c(110, 70, 40)
-        col = skin; at(0f, 0f, 0.42f) { scale(1.2f, 0.55f, 0.6f); sphere(0.18f, 14, 10) }
-        tube(listOf(Vec3(0.16f, 0f, 0.48f), Vec3(0.26f, 0f, 0.62f), Vec3(0.3f, 0f, 0.7f)), 0.05f, 8, taper = { 1f - 0.3f * it })
-        at(0.38f, 0f, 0.72f) { scale(1.6f, 0.7f, 0.7f); sphere(0.07f, 12, 8) }
-        col = c(240, 236, 220); for (k in 0 until 4) at(0.44f + 0.015f * k, 0f, 0.68f) { cone(0.008f, 0.02f, 4) }
-        col = skin; tube(listOf(Vec3(-0.18f, 0f, 0.42f), Vec3(-0.4f, 0f, 0.48f), Vec3(-0.6f, 0f, 0.5f)), 0.06f, 8, taper = { 1f - 0.9f * it })
-        for (s in intArrayOf(-1, 1)) {
-            tube(listOf(Vec3(0f, s * 0.07f, 0.36f), Vec3(0.06f, s * 0.08f, 0.2f), Vec3(-0.02f, s * 0.08f, 0.08f), Vec3(0.06f, s * 0.08f, 0.0f)), 0.03f, 6, taper = { 1f - 0.4f * it })
-            tube(listOf(Vec3(0.18f, s * 0.06f, 0.46f), Vec3(0.24f, s * 0.08f, 0.38f)), 0.015f, 5)
-            col = c(30, 26, 22); at(0.42f, s * 0.04f, 0.75f) { sphere(0.012f, 6, 4) }; col = skin
+        // Velociraptor: green back, teal flanks, yellow belly and legs; big head with open toothy jaws, S-shaped neck,
+        // long stiff tail held out level, clawed arms with a fringe of teal feathers, strong legs with raised sickle claws
+        val green = c(80, 158, 52); val teal = c(40, 112, 108); val yel = c(214, 204, 72); val claw = c(110, 116, 120)
+        col = green; at(0f, 0f, 0.46f) { rotY(-0.2f); scale(1.3f, 0.62f, 0.72f); sphere(0.17f, 16, 12) }        // body
+        col = yel; at(0.03f, 0f, 0.4f) { rotY(-0.2f); scale(1.1f, 0.5f, 0.45f); sphere(0.16f, 14, 10) }          // belly
+        col = teal; for (sgn in intArrayOf(-1, 1)) at(-0.02f, sgn * 0.045f, 0.45f) { rotY(-0.2f); scale(1.3f, 0.5f, 0.7f); sphere(0.11f, 12, 8) }   // flanks
+        col = green; tube(listOf(Vec3(0.17f, 0f, 0.5f), Vec3(0.25f, 0f, 0.6f), Vec3(0.26f, 0f, 0.7f), Vec3(0.3f, 0f, 0.77f)), 0.058f, 12,
+            colorFn = { v -> if (v > 0.5f) teal else green }, taper = { 1f - 0.2f * it })                          // neck
+        col = teal; at(0.39f, 0f, 0.8f) { rotY(0.08f); scale(2.1f, 0.78f, 0.82f); sphere(0.07f, 16, 12) }      // skull
+        col = green; at(0.34f, 0f, 0.84f) { scale(1.5f, 0.75f, 0.6f); sphere(0.06f, 12, 8) }                   // brow
+        col = yel; push(); translate(0.37f, 0f, 0.75f); rotY(0.35f); scale(2.0f, 0.65f, 0.4f); sphere(0.06f, 14, 8); pop()   // lower jaw, open
+        col = c(150, 40, 46); at(0.42f, 0f, 0.76f) { scale(2f, 0.5f, 0.35f); sphere(0.045f, 10, 6) }           // mouth
+        col = c(250, 246, 232)
+        for (k in 0 until 8) for (sgn in intArrayOf(-1, 1)) {
+            at(0.36f + k * 0.022f, sgn * 0.035f, 0.775f) { rotX(PI.toFloat()); cone(0.006f, 0.022f, 4) }       // upper teeth
+            if (k < 6) at(0.36f + k * 0.022f, sgn * 0.03f, 0.745f - k * 0.008f) { cone(0.005f, 0.016f, 4) }  // lower teeth
         }
-        col = stripe; for (k in 0 until 5) at(-0.1f + k * 0.06f, 0f, 0.5f) { box(0.02f, 0.2f, 0.01f) }
-        col = c(200, 70, 40); for (k in 0 until 5) at(0.1f - k * 0.08f, 0f, 0.54f) { rotY(-0.5f); cone(0.02f, 0.08f, 4) }
+        for (sgn in intArrayOf(-1, 1)) {
+            col = c(220, 120, 40); at(0.36f, sgn * 0.05f, 0.83f) { sphere(0.012f, 8, 6) }
+            col = c(20, 16, 14); at(0.368f, sgn * 0.056f, 0.832f) { sphere(0.006f, 6, 4) }
+        }
+        col = green; tube((0..10).map { k -> val v = k / 10f; Vec3(-0.18f - 0.62f * v, 0f, 0.48f + 0.08f * v + 0.04f * kotlin.math.sin(v * 3f)) }, 0.07f, 12,
+            colorFn = { v -> if (v > 0.6f) yel * 0.95f else green }, taper = { 1f - 0.92f * it })                 // tail
+        for (sgn in intArrayOf(-1, 1)) {
+            col = yel; tube(listOf(Vec3(0.15f, sgn * 0.08f, 0.47f), Vec3(0.24f, sgn * 0.11f, 0.42f), Vec3(0.3f, sgn * 0.11f, 0.36f)), 0.022f, 8)   // arm
+            col = teal; for (f in 0 until 4) { val t = f / 3f
+                flat(Vec3(0.16f + 0.13f * t, sgn * (0.085f + 0.025f * t), 0.46f - 0.08f * t), Vec3(0.18f + 0.13f * t, sgn * (0.09f + 0.025f * t), 0.45f - 0.08f * t),
+                     Vec3(0.15f + 0.13f * t, sgn * (0.1f + 0.025f * t), 0.38f - 0.08f * t), Vec3(0.13f + 0.13f * t, sgn * (0.095f + 0.025f * t), 0.39f - 0.08f * t)) }   // feathers
+            col = claw; for (f in 0 until 3) at(0.31f, sgn * (0.095f + f * 0.016f), 0.35f) { rotY(2.4f); cone(0.007f, 0.05f, 4) }
+            col = green; at(-0.01f, sgn * 0.08f, 0.36f) { rotY(0.3f); scale(1f, 0.55f, 1.2f); sphere(0.075f, 12, 10) }   // thigh
+            col = yel
+            tube(listOf(Vec3(0.0f, sgn * 0.09f, 0.3f), Vec3(-0.07f, sgn * 0.095f, 0.15f), Vec3(-0.02f, sgn * 0.095f, 0.04f), Vec3(0.04f, sgn * 0.095f, 0.015f)), 0.032f, 10, taper = { 1f - 0.4f * it })
+            for (t in -1..1) tube(listOf(Vec3(0.04f, sgn * 0.095f, 0.015f), Vec3(0.1f, sgn * (0.095f + t * 0.025f), 0.01f)), 0.013f, 6)   // toes
+            col = claw; for (t in -1..1) at(0.11f, sgn * (0.095f + t * 0.025f), 0.01f) { rotY(1.9f); cone(0.008f, 0.03f, 4) }
+            at(0.05f, sgn * 0.1f, 0.05f) { rotY(-0.6f); cone(0.011f, 0.06f, 5) }                                // raised sickle claw
+        }
     }.build()
 
     private fun dinoSkeleton() = PM().apply {

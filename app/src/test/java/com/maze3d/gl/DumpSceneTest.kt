@@ -123,7 +123,7 @@ class DumpSceneTest {
             add(moved, 0f, 0.0f)
             add(HazardModels.gantry(0.5f), 1.6f, 0f)
             add(PropMesh(FloatArray(hm.pos.size) { if (it % 3 == 2) hm.pos[it] + HazardModels.HAMMER_PIVOT else hm.pos[it] }, hm.nrm, hm.col, hm.idx), 1.6f, 0.9f)
-        } else if (gal) b.gallery() else b.props()
+        } else if (gal) b.gallery(if (System.getenv("MAZE_PREVIEWSET") != null) PropLibrary.previewSet().let { ps -> System.getenv("MAZE_PREVIEWONE")?.toInt()?.let { i -> if (i < ps.first.size) listOf(ps.first[i]) to emptyList<PropLibrary.Bird>() else emptyList<PropMesh>() to listOf(ps.second[i - ps.first.size]) } ?: ps } else null) else b.props()
         sb.append("\"props\":${mesh(propsMesh)},")
         val med = System.getenv("MAZE_MEDIUM")
         if (med != null) {
