@@ -244,7 +244,9 @@ object PropLibrary {
     }
 
     /** Preview harness only: the props and flocks being worked on, shown side by side. */
-    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> {
+    /** Preview harness only: the props being worked on, shown side by side. */
+    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(monkey(), dino(), idol(), trafficCone(), raptor()) to emptyList()
+    internal fun previewSetFlags(): Pair<List<PropMesh>, List<Bird>> {
         fun withFlag(host: PropMesh, sp: AnimSpec, ph: Float): PropMesh {
             val parts = listOf(host) + sp.at.map { o -> flagPose(sp, ph + o.x * 5f).let { m -> PropMesh(FloatArray(m.pos.size) { i -> m.pos[i] + when (i % 3) { 0 -> o.x; 1 -> o.y; else -> o.z } }, m.nrm, m.col, m.idx) } }
             val pos = parts.flatMap { it.pos.toList() }.toFloatArray(); val nrm = parts.flatMap { it.nrm.toList() }.toFloatArray(); val col = parts.flatMap { it.col.toList() }.toFloatArray()
@@ -604,41 +606,61 @@ object PropLibrary {
 
     // ---------------------------------------------------------------- ground animals
     private fun monkey() = PM().apply {
-        // a sitting plush chimp: soft black fur, a tan heart-shaped face with big glossy amber eyes, big tan ears,
-        // long arms resting at its sides on tan hands and tan feet stuck out in front
-        val fur = c(34, 28, 28); val furHi = c(58, 48, 46); val tan = c(232, 170, 112); val tanDk = c(206, 140, 88)
-        col = fur; at(0f, 0f, 0.3f) { scale(0.85f, 1f, 1.05f); sphere(0.25f, 18, 14) }                       // body
-        col = furHi; at(0.13f, 0f, 0.3f) { scale(0.5f, 0.8f, 0.85f); sphere(0.2f, 14, 10) }                   // chest sheen
-        col = fur; at(0.01f, 0f, 0.68f) { scale(0.95f, 1.05f, 1f); sphere(0.2f, 18, 14) }                     // head
+        // a sitting plush chimp: soft black pile with a slight sheen variation, a fluffy fringe round a heart-shaped tan face,
+        // brow ridge, big glossy eyes under tan lids, a full muzzle with nostrils, philtrum and a smile, cupped ears, long arms
+        // bent at the elbow ending in fingered hands, and big padded feet with toes stuck out in front
+        fun pile(seed: Int, base: Vec3): (Float, Float) -> Vec3 = { u, v ->
+            val k = (((u * 37f).toInt() * 73 + (v * 23f).toInt() * 151 + seed) * 2654435761L ushr 9) % 1000 / 1000f
+            base * (0.86f + 0.26f * k) }
+        val fur = c(34, 28, 28); val tan = c(232, 172, 116); val tanDk = c(204, 140, 90); val tanLt = c(244, 196, 146)
+        at(0f, 0f, 0.3f) { scale(0.85f, 1f, 1.05f); sphere(0.25f, 24, 18, pile(1, fur)) }                                  // body
+        at(0.12f, 0f, 0.3f) { scale(0.5f, 0.8f, 0.85f); sphere(0.2f, 18, 12, pile(2, c(52, 44, 42))) }                    // chest
+        at(0.01f, 0f, 0.69f) { scale(0.96f, 1.06f, 1f); sphere(0.205f, 24, 18, pile(3, fur)) }                             // head
+        for (k in 0 until 7) { val a = 0.35f + k * 0.4f                                                                    // soft fur cheeks framing the face
+            at(0.08f + 0.05f * sin(a), 0.17f * cos(a), 0.66f + 0.12f * sin(a)) { scale(0.8f, 1f, 1f); sphere(0.07f, 12, 8, pile(10 + k, fur)) } }
+        for (k in 0 until 5) at(-0.04f + 0.03f * k, (k - 2) * 0.03f, 0.88f) { sphere(0.03f, 8, 6, pile(30 + k, fur)) }    // a tuft on top
         col = tan
-        at(0.12f, 0f, 0.71f) { scale(0.5f, 1.05f, 0.62f); sphere(0.14f, 16, 12) }                            // upper face around the eyes
-        at(0.16f, 0f, 0.6f) { scale(0.72f, 0.92f, 0.74f); sphere(0.12f, 16, 12) }                            // muzzle
-        col = tanDk; for (s in intArrayOf(-1, 1)) at(0.245f, s * 0.018f, 0.635f) { sphere(0.011f, 6, 4) }    // nostrils
-        col = c(150, 90, 60); tube((0..6).map { k -> val v = k / 6f - 0.5f; Vec3(0.235f - 0.02f * v * v * 4f, v * 0.12f, 0.565f + 0.03f * v * v * 4f) }, 0.006f, 5)   // smile
-        for (s in intArrayOf(-1, 1)) {                                                                       // big glossy eyes
-            col = c(170, 70, 20); at(0.188f, s * 0.058f, 0.715f) { sphere(0.036f, 12, 10) }
-            col = c(26, 16, 12); at(0.2f, s * 0.058f, 0.715f) { sphere(0.028f, 12, 10) }
-            col = c(255, 255, 255) * 1.3f; at(0.224f, s * 0.05f, 0.728f) { sphere(0.008f, 6, 4) }
+        at(0.13f, 0f, 0.72f) { scale(0.5f, 1.06f, 0.62f); sphere(0.14f, 20, 14, pile(4, tan)) }                            // upper face
+        at(0.17f, 0f, 0.6f) { scale(0.74f, 0.94f, 0.74f); sphere(0.12f, 20, 14, pile(5, tan)) }                            // muzzle
+        at(0.205f, 0f, 0.53f) { scale(0.6f, 0.7f, 0.4f); sphere(0.07f, 12, 8, pile(6, tanLt)) }                            // chin
+        col = tanDk; at(0.17f, 0f, 0.78f) { scale(0.5f, 1.15f, 0.22f); sphere(0.12f, 16, 8) }                             // brow ridge
+        col = c(150, 90, 60); at(0.25f, 0f, 0.6f) { box(0.006f, 0.006f, 0.04f) }                                          // philtrum
+        col = tanDk; for (s in intArrayOf(-1, 1)) at(0.245f, s * 0.017f, 0.635f) { scale(1f, 1.2f, 0.8f); sphere(0.012f, 8, 6) }   // nostrils
+        col = c(110, 60, 40); tube((0..8).map { k -> val v = k / 8f - 0.5f; Vec3(0.236f - 0.025f * v * v * 4f, v * 0.13f, 0.57f + 0.035f * v * v * 4f) }, 0.006f, 6)   // smile
+        for (s in intArrayOf(-1, 1)) {                                                                                     // big glossy eyes under tan lids
+            col = c(160, 70, 24); at(0.19f, s * 0.058f, 0.715f) { sphere(0.037f, 16, 12) }
+            col = c(60, 30, 14); at(0.2f, s * 0.058f, 0.715f) { sphere(0.031f, 16, 12) }
+            col = c(14, 10, 8); at(0.212f, s * 0.058f, 0.715f) { sphere(0.022f, 14, 10) }
+            col = c(255, 255, 255) * 1.4f; at(0.227f, s * 0.048f, 0.73f) { sphere(0.008f, 8, 6) }; at(0.226f, s * 0.066f, 0.703f) { sphere(0.004f, 6, 4) }
+            col = tan; at(0.188f, s * 0.058f, 0.742f) { scale(1f, 1.15f, 0.42f); sphere(0.04f, 12, 8) }                    // lids
         }
-        for (s in intArrayOf(-1, 1)) {                                                                       // ears
-            col = tan; at(-0.01f, s * 0.205f, 0.7f) { scale(0.38f, 0.55f, 0.85f); sphere(0.1f, 14, 10) }
-            col = tanDk; at(0.015f, s * 0.21f, 0.7f) { scale(0.2f, 0.4f, 0.6f); sphere(0.1f, 10, 8) }
+        for (s in intArrayOf(-1, 1)) {                                                                                     // cupped ears
+            col = tan; at(-0.01f, s * 0.208f, 0.7f) { scale(0.38f, 0.55f, 0.85f); sphere(0.1f, 16, 12) }
+            col = tanDk; at(0.015f, s * 0.214f, 0.7f) { scale(0.2f, 0.4f, 0.62f); sphere(0.1f, 12, 8) }
+            col = tanLt; at(0.0f, s * 0.24f, 0.7f) { rotX((PI / 2).toFloat()); scale(1f, 1.5f, 1f); torus(0.04f, 0.012f, 14, 6) }
         }
         for (s in intArrayOf(-1, 1)) {
-            col = fur                                                                                         // long arms hanging down to the floor
-            tube(listOf(Vec3(0.0f, s * 0.2f, 0.5f), Vec3(0.04f, s * 0.29f, 0.36f), Vec3(0.09f, s * 0.33f, 0.2f), Vec3(0.12f, s * 0.34f, 0.1f)), 0.07f, 12, taper = { 1f - 0.12f * it })
-            col = tan; at(0.16f, s * 0.35f, 0.05f) { scale(1.45f, 1f, 0.55f); sphere(0.075f, 12, 8) }        // hands
-            col = tanDk; for (f in 0 until 3) at(0.24f, s * (0.32f + f * 0.028f), 0.045f) { sphere(0.016f, 6, 4) }
-            col = fur                                                                                         // legs out in front
-            tube(listOf(Vec3(0.02f, s * 0.12f, 0.16f), Vec3(0.18f, s * 0.15f, 0.11f), Vec3(0.3f, s * 0.16f, 0.1f)), 0.085f, 12)
-            col = tan; at(0.36f, s * 0.16f, 0.11f) { scale(0.55f, 0.85f, 1.25f); sphere(0.095f, 14, 10) }    // soles facing forward
-            col = tanDk; for (f in 0 until 4) at(0.395f, s * 0.16f + (f - 1.5f) * 0.032f, 0.2f) { sphere(0.017f, 6, 4) }   // toes
+            val sh = Vec3(0.0f, s * 0.2f, 0.5f); val el = Vec3(0.06f, s * 0.31f, 0.3f); val wr = Vec3(0.13f, s * 0.34f, 0.1f)
+            // the whole arm as one soft curve from shoulder through a gently bent elbow to the wrist
+            val arm = (0..12).map { k -> val t = k / 12f; val a = sh * ((1 - t) * (1 - t)) + el * (2 * (1 - t) * t * 1.0f) + wr * (t * t)
+                a + (el - (sh + wr) * 0.5f) * (2 * (1 - t) * t) }
+            col = fur; tube(arm, 0.074f, 16, taper = { 1f - 0.18f * it })
+            col = tan; at(0.16f, s * 0.35f, 0.05f) { scale(1.4f, 1f, 0.55f); sphere(0.075f, 14, 10, pile(50 + s, tan)) }      // palm
+            for (f in 0 until 4) { col = tan; tube(listOf(Vec3(0.2f, s * (0.32f + f * 0.02f), 0.05f), Vec3(0.245f, s * (0.32f + f * 0.022f), 0.03f)), 0.013f, 6) }   // fingers
+            tube(listOf(Vec3(0.15f, s * 0.305f, 0.06f), Vec3(0.18f, s * 0.29f, 0.07f)), 0.013f, 6)                           // thumb
+            col = fur                                                                                                          // legs out in front
+            tube(listOf(Vec3(0.02f, s * 0.12f, 0.16f), Vec3(0.18f, s * 0.15f, 0.11f), Vec3(0.3f, s * 0.16f, 0.1f)), 0.09f, 16, taper = { 1f - 0.12f * it })
+            col = tan; at(0.36f, s * 0.16f, 0.11f) { scale(0.55f, 0.85f, 1.25f); sphere(0.095f, 18, 12, pile(60 + s, tan)) }   // sole
+            col = tanDk; at(0.375f, s * 0.16f, 0.09f) { scale(0.3f, 0.6f, 0.6f); sphere(0.07f, 10, 8) }                        // heel pad
+            col = tan; for (f in 0 until 4) at(0.392f, s * 0.16f + (f - 1.5f) * 0.032f, 0.205f) { scale(0.8f, 1f, 1.1f); sphere(0.019f, 8, 6) }   // toes
+            at(0.39f, s * 0.215f, 0.13f) { sphere(0.022f, 8, 6) }                                                              // big toe
         }
     }.build()
 
     private fun dino() = PM().apply {
-        // Brachiosaurus: tall shoulders, a long neck rising steeply to a small head with a domed crest, back sloping down
-        // to a long tail, longer front legs than hind legs; olive skin with darker scaly speckles and a paler belly
+        // Brachiosaurus: tall shoulders and a long neck rising steeply to a small head with the raised nasal arch, a back
+        // sloping to a long tail; muscular thighs and upper arms on columnar legs with elephantine feet and toenails; olive
+        // skin mottled darker on top, a paler belly and throat, wrinkle bands on the neck and rows of small scales
         val skin = c(128, 140, 80); val dark = c(92, 106, 58); val pale = c(200, 196, 150)
         val ctrl = listOf(Vec3(-0.8f, 0f, 0.1f), Vec3(-0.56f, 0f, 0.27f), Vec3(-0.3f, 0f, 0.47f), Vec3(-0.08f, 0f, 0.56f), Vec3(0.12f, 0f, 0.63f),
             Vec3(0.23f, 0f, 0.8f), Vec3(0.31f, 0f, 1.0f), Vec3(0.38f, 0f, 1.14f))
@@ -646,38 +668,53 @@ object PropLibrary {
         fun cr(a: Vec3, b: Vec3, c2: Vec3, d: Vec3, t: Float): Vec3 { val t2 = t * t; val t3 = t2 * t
             return (b * 2f + (c2 - a) * t + (a * 2f - b * 5f + c2 * 4f - d) * t2 + (b * 3f - a - c2 * 3f + d) * t3) * 0.5f }
         val path = ArrayList<Vec3>(); val rr = ArrayList<Float>()
-        for (i in 0 until ctrl.size - 1) for (k in 0 until 5) {
-            val t = k / 5f
-            path.add(cr(ctrl[maxOf(i - 1, 0)], ctrl[i], ctrl[i + 1], ctrl[minOf(i + 2, ctrl.size - 1)], t)); rr.add(rad[i] + (rad[i + 1] - rad[i]) * t)
+        for (i in 0 until ctrl.size - 1) for (k in 0 until 10) {
+            val t = k / 10f
+            path.add(cr(ctrl[maxOf(i - 1, 0)], ctrl[i], ctrl[i + 1], ctrl[minOf(i + 2, ctrl.size - 1)], t)); rr.add(rad[i] + (rad[i + 1] - rad[i]) * (t * t * (3f - 2f * t)))
         }
         path.add(ctrl.last()); rr.add(rad.last())
         val nP = path.size
         col = skin
-        tube(path, 1f, 18, colorFn = { v -> skin * (0.96f + 0.08f * (((v * 97f).toInt() * 37) % 5) / 4f) },
-            taper = { v -> rr[minOf((v * (nP - 1)).toInt(), nP - 1)] })
-        col = pale; at(-0.1f, 0f, 0.44f) { scale(1.75f, 0.82f, 0.55f); sphere(0.17f, 18, 10) }                 // belly
-        at(0.17f, 0f, 0.6f) { rotY(-0.9f); scale(0.9f, 0.55f, 0.45f); sphere(0.13f, 14, 8) }                     // throat
-        col = dark; for (k in 0 until 16) { val q = path[10 + k * 1]; at(q.x, 0f, q.z + rr[10 + k] * 0.92f) { sphere(0.026f, 8, 6) } }   // scaly ridge
-        for (k in 0 until 180) {                                                                                 // darker scales over the back and neck
-            val i = 6 + (k * 7) % (nP - 8); val q = path[i]; val a = -1.2f + 2.4f * ((k * 13) % 17) / 16f
-            col = if (k % 3 == 0) dark * 0.92f else dark * 1.05f
-            push(); translate(q.x, sin(a) * rr[i] * 0.985f, q.z + cos(a) * rr[i] * 0.985f); rotX(-a); scale(1f, 1f, 0.3f); sphere(0.011f + 0.004f * (k % 3), 6, 4); pop()
+        tube(path, 1f, 24, colorFn = { v ->
+            val ring = (v * (nP - 1)).toInt()
+            val wrinkle = v > 0.6f && ring % 3 == 0                                                       // neck folds
+            val mott = ((ring * 37) % 7) / 7f
+            if (wrinkle) skin * 0.88f else skin * (0.98f + 0.04f * mott) }, taper = { v -> rr[minOf((v * (nP - 1)).toInt(), nP - 1)] })
+        col = pale; at(-0.1f, 0f, 0.43f) { scale(1.75f, 0.84f, 0.55f); sphere(0.17f, 22, 12) }                                 // belly
+        at(0.17f, 0f, 0.6f) { rotY(-0.9f); scale(0.9f, 0.55f, 0.45f); sphere(0.13f, 16, 10) }                                  // throat
+        for (k in 0 until 24) { val i = 30 + k * 2; if (i >= nP) break; val q = path[i]
+            col = pale * 0.95f; at(q.x + 0.01f, 0f, q.z - rr[i] * 0.86f) { scale(1f, 1.4f, 0.4f); sphere(0.03f, 8, 4) } }          // throat-to-chest pale stripe
+        col = dark; for (k in 0 until 22) { val q = path[8 + k * 2]; if (8 + k * 2 >= nP) break; at(q.x, 0f, q.z + rr[8 + k * 2] * 0.93f) { scale(1.2f, 1f, 0.6f); sphere(0.022f, 8, 6) } }   // ridge
+        for (k in 0 until 220) {                                                                                                  // scales and darker mottles over the back
+            val i = 6 + (k * 7) % (nP - 8); val q = path[i]; val a = -1.25f + 2.5f * ((k * 13) % 17) / 16f
+            col = if (k % 5 == 0) dark * 0.85f else if (k % 3 == 0) skin * 1.08f else dark * 1.05f
+            push(); translate(q.x, sin(a) * rr[i] * 0.985f, q.z + cos(a) * rr[i] * 0.985f); rotX(-a); scale(1f, 1f, 0.3f); sphere(0.01f + 0.005f * (k % 3), 6, 4); pop()
         }
         val h = ctrl.last()
-        col = skin; at(h.x + 0.06f, 0f, h.z + 0.01f) { scale(1.75f, 0.8f, 0.72f); sphere(0.068f, 16, 12) }      // head
-        at(h.x + 0.03f, 0f, h.z + 0.06f) { scale(1.1f, 0.85f, 0.9f); sphere(0.045f, 12, 8) }                    // domed crest
-        col = c(60, 40, 34); at(h.x + 0.12f, 0f, h.z - 0.02f) { scale(1.6f, 0.75f, 0.25f); sphere(0.04f, 10, 6) } // open mouth
-        col = c(245, 240, 225); for (k in 0 until 5) at(h.x + 0.08f + k * 0.017f, 0f, h.z - 0.01f) { rotX(PI.toFloat()); cone(0.006f, 0.015f, 4) }
-        for (sgn in intArrayOf(-1, 1)) {
-            col = c(240, 230, 200); at(h.x + 0.07f, sgn * 0.045f, h.z + 0.035f) { sphere(0.014f, 8, 6) }
-            col = c(24, 20, 16); at(h.x + 0.078f, sgn * 0.052f, h.z + 0.036f) { sphere(0.009f, 6, 4) }
+        col = skin; at(h.x + 0.07f, 0f, h.z - 0.005f) { scale(1.9f, 0.78f, 0.62f); sphere(0.066f, 18, 12) }                     // snout
+        at(h.x + 0.02f, 0f, h.z + 0.02f) { scale(1.15f, 0.9f, 0.85f); sphere(0.058f, 16, 12) }                                  // skull
+        at(h.x + 0.06f, 0f, h.z + 0.065f) { scale(1.3f, 0.75f, 0.85f); sphere(0.04f, 14, 10) }                                  // nasal arch
+        col = c(40, 34, 28); for (sg in intArrayOf(-1, 1)) at(h.x + 0.08f, sg * 0.018f, h.z + 0.09f) { scale(1.4f, 1f, 0.6f); sphere(0.01f, 6, 4) }   // nostrils on top
+        col = c(60, 44, 36); tube((0..6).map { k -> val v = k / 6f; Vec3(h.x - 0.01f + 0.21f * v, 0f, h.z - 0.03f + 0.005f * kotlin.math.sin(v * 3f)) }, 0.004f, 4)   // mouth line
+        col = c(70, 56, 44); for (sg in intArrayOf(-1, 1)) tube((0..6).map { k -> val v = k / 6f; Vec3(h.x - 0.01f + 0.2f * v, sg * 0.05f * (1f - 0.4f * v), h.z - 0.03f) }, 0.003f, 4)
+        for (sg in intArrayOf(-1, 1)) {
+            col = skin * 0.9f; at(h.x + 0.045f, sg * 0.044f, h.z + 0.045f) { scale(1.4f, 0.6f, 0.5f); sphere(0.02f, 8, 6) }        // brow ridge
+            col = c(220, 200, 150); at(h.x + 0.05f, sg * 0.045f, h.z + 0.03f) { sphere(0.013f, 10, 8) }
+            col = c(20, 16, 12); at(h.x + 0.057f, sg * 0.051f, h.z + 0.031f) { sphere(0.008f, 8, 6) }
+            col = c(255, 255, 255) * 1.3f; at(h.x + 0.06f, sg * 0.054f, h.z + 0.035f) { sphere(0.003f, 4, 3) }
         }
-        for ((lx, top, len) in listOf(Triple(0.1f, 0.56f, 1f), Triple(-0.3f, 0.44f, 0.82f))) for (sgn in intArrayOf(-1, 1)) {
+        for ((lx, top, len) in listOf(Triple(0.1f, 0.56f, 1f), Triple(-0.3f, 0.44f, 0.82f))) for (sg in intArrayOf(-1, 1)) {
+            val front = len > 0.9f
             col = skin
-            tube(listOf(Vec3(lx, sgn * 0.13f, top), Vec3(lx + 0.02f, sgn * 0.15f, top * 0.55f), Vec3(lx - 0.01f, sgn * 0.15f, 0.12f), Vec3(lx, sgn * 0.15f, 0.03f)),
-                0.07f * (0.85f + 0.15f * len), 14, taper = { 1f - 0.2f * it })
-            at(lx, sgn * 0.15f, 0f) { cylinder(0.068f, 0.05f, 14, 0.058f) }                                     // flared foot
-            col = c(220, 214, 190); for (t in -1..1) at(lx + 0.06f, sgn * 0.15f + t * 0.028f, 0.012f) { scale(1f, 0.8f, 0.6f); sphere(0.018f, 6, 4) }
+            at(lx + (if (front) 0.02f else -0.02f), sg * 0.135f, top - 0.06f) { scale(if (front) 0.85f else 1.05f, 0.6f, 1.2f); sphere(if (front) 0.1f else 0.12f, 16, 12) }   // shoulder / thigh
+            // one continuous leg: hip/shoulder, a slight knee (forward on the hind leg, back on the front), down to the foot
+            val bend = if (front) -0.02f else 0.035f
+            val leg = (0..12).map { k -> val t = k / 12f; Vec3(lx + bend * kotlin.math.sin(t * PI.toFloat()), sg * (0.14f + 0.01f * t), (top - 0.08f) * (1f - t) + 0.05f * t) }
+            tube(leg, 0.078f * (0.85f + 0.15f * len), 18, taper = { t -> 1f - 0.22f * t + 0.18f * (t * t * t) })
+            at(lx, sg * 0.15f, 0f) { cylinder(0.074f, 0.07f, 18, 0.062f) }                                                       // columnar foot
+            col = c(226, 218, 190); for (t in -1..2) { val a = t * 0.45f - 0.2f
+                at(lx + cos(a) * 0.07f, sg * 0.15f + sin(a) * 0.07f, 0.014f) { scale(1f, 0.85f, 0.7f); sphere(0.02f, 8, 6) } }       // toenails
+            if (!front) { col = c(200, 190, 160); at(lx + 0.075f, sg * 0.13f, 0.03f) { rotY(1.2f); cone(0.012f, 0.045f, 6) } }      // the big thumb-claw of the hind foot
         }
     }.build()
 
@@ -823,10 +860,32 @@ object PropLibrary {
 
     // ---------------------------------------------------------------- motorsport
     private fun trafficCone() = PM().apply {
-        col = c(30, 30, 34); at { box(0.9f, 0.9f, 0.08f); translate(0f, 0f, 0.04f) }
-        push(); translate(0f, 0f, 0.08f)
-        lathe(listOf(floatArrayOf(0.36f, 0f), floatArrayOf(0.08f, 0.9f), floatArrayOf(0.06f, 0.92f), floatArrayOf(0f, 0.92f)), 24, false) { _, v ->
-            if (v in 0.25f..0.45f || v in 0.6f..0.75f) c(250, 250, 250) else c(255, 100, 14) }
+        // a real traffic cone: square black rubber base with chamfered corners and a moulded collar, a slim tapering body in
+        // fluorescent orange with two crisp retroreflective white bands, a rolled lip round the open top, and road grime low down
+        col = c(28, 28, 30); at(z = 0.02f) { box(0.56f, 0.56f, 0.04f) }
+        col = c(36, 36, 38); at(z = 0.045f) { box(0.5f, 0.5f, 0.012f) }
+        for (sx in intArrayOf(-1, 1)) for (sy in intArrayOf(-1, 1)) { col = c(20, 20, 22); at(sx * 0.26f, sy * 0.26f, 0.02f) { rotZ(0.785f); box(0.06f, 0.02f, 0.041f) } }
+        val orange = c(255, 92, 12); val white = c(250, 250, 246) * 1.05f
+        // profile: radius vs height, with doubled rings at the band edges so the bands stay crisp
+        val zs = listOf(0f, 0.03f, 0.06f, 0.2f, 0.34f, 0.3401f, 0.47f, 0.4701f, 0.56f, 0.5601f, 0.66f, 0.6601f, 0.8f, 0.9f, 0.93f)
+        fun r(z: Float) = 0.2f - 0.165f * (z / 0.93f) - 0.012f * kotlin.math.sin(z / 0.93f * PI.toFloat())   // a slight inward curve
+        val prof = ArrayList<FloatArray>()
+        prof.add(floatArrayOf(0f, 0f)); prof.add(floatArrayOf(0.215f, 0f)); prof.add(floatArrayOf(0.215f, 0.03f))      // moulded collar
+        for (z in zs.drop(2)) prof.add(floatArrayOf(r(z), z))
+        prof.add(floatArrayOf(0.045f, 0.945f)); prof.add(floatArrayOf(0.03f, 0.945f)); prof.add(floatArrayOf(0.028f, 0.9f))   // rolled lip, open top
+        val zAt = prof.map { it[1] }
+        push(); translate(0f, 0f, 0.05f)
+        lathe(prof, 32, false) { _, v ->
+            val i = Math.round(v * (prof.size - 1)).coerceIn(0, prof.size - 1); val z = zAt[i]
+            when {
+                i <= 2 -> c(40, 40, 42)
+                (z > 0.3401f && z < 0.4701f) || (z > 0.5601f && z < 0.6601f) -> white
+                z == 0.3401f || z == 0.5601f -> white
+                z < 0.2f -> orange * (0.8f + z)                                                   // grime near the ground
+                else -> orange
+            }
+        }
+        col = c(18, 18, 20); at(z = 0.98f) { cylinder(0.028f, 0.004f, 14) }                                                  // the dark hollow inside
         pop()
     }.build()
 
@@ -1245,35 +1304,61 @@ object PropLibrary {
     }.build()
 
     private fun idol() = PM().apply {
-        // an Olmec-style colossal head on a stepped plinth: a banded helmet with carved glyph studs, heavy lidded eyes
-        // that glow from deep sockets, a broad flat nose with flared nostrils, full lips, ear spools, cracks and draped moss
+        // an Olmec-style colossal head on a stepped, carved plinth: weathered stone with patchy tones; a helmet with a band of
+        // carved glyphs, side flaps and a ridged crest; a heavy brow over deep-set glowing eyes, high cheekbones, a broad nose
+        // with flared nostrils and a philtrum, full downturned lips and a strong chin; ear spools; cracks, moss and leafy vines
+        fun weather(seed: Int, base: Vec3): (Float, Float) -> Vec3 = { u, v ->
+            val k1 = (((u * 14f).toInt() * 73 + (v * 9f).toInt() * 151 + seed) * 2654435761L ushr 9) % 1000 / 1000f
+            val k2 = (((u * 41f).toInt() * 31 + (v * 27f).toInt() * 97 + seed) * 2654435761L ushr 9) % 1000 / 1000f
+            base * (0.82f + 0.18f * k1 + 0.1f * k2) * (if (v < 0.25f) 0.86f else 1f) }
         val stone = c(132, 128, 112); val shade = c(96, 94, 82); val moss = c(74, 128, 52); val mossD = c(46, 96, 40)
-        col = shade; push(); translate(0f, 0f, 0.04f); box(0.78f, 0.7f, 0.08f); pop(); col = stone; push(); translate(0f, 0f, 0.1f); box(0.66f, 0.6f, 0.06f); pop()
-        col = stone
-        at(0f, 0f, 0.5f) { scale(0.86f, 0.72f, 1.0f); sphere(0.36f, 26, 18) }                                     // head
-        at(0f, -0.06f, 0.24f) { scale(0.95f, 0.75f, 0.6f); sphere(0.3f, 20, 12) }                                // jaw and cheeks
-        // helmet: a band round the head with a raised rim and glyph studs, and a crest at the back
-        col = shade; at(0f, 0f, 0.66f) { scale(0.9f, 0.76f, 0.5f); torus(0.32f, 0.05f, 28, 8) }
-        col = stone; for (k in 0 until 9) { val a = -1.25f + k * 0.31f; at(sin(a) * 0.3f, -cos(a) * 0.27f, 0.68f) { scale(1f, 0.6f, 1f); sphere(0.03f, 8, 6) } }
-        col = shade; at(0f, 0.14f, 0.82f) { scale(0.5f, 0.9f, 0.4f); sphere(0.2f, 14, 8) }
-        // eyes: deep sockets, heavy lids, glowing irises
+        // stepped plinth with carved glyph panels
+        for ((k, w) in listOf(0.82f, 0.72f, 0.64f).withIndex()) { col = if (k % 2 == 0) shade else stone; at(z = 0.03f + k * 0.045f) { box(w, w * 0.88f, 0.045f) } }
+        col = shade * 0.8f; for (g in 0 until 5) { val y = -0.2f + g * 0.1f
+            at(y, -0.283f, 0.075f) { box(0.06f, 0.008f, 0.03f) }; at(y + 0.02f, -0.284f, 0.075f) { box(0.012f, 0.009f, 0.03f) } }
+        // head and jaw
+        at(0f, 0f, 0.52f) { scale(0.86f, 0.72f, 1.0f); sphere(0.36f, 32, 24, weather(1, stone)) }
+        at(0f, -0.06f, 0.27f) { scale(0.95f, 0.75f, 0.6f); sphere(0.3f, 26, 16, weather(2, stone)) }
+        at(0f, -0.2f, 0.17f) { scale(1.3f, 0.7f, 0.7f); sphere(0.08f, 14, 10, weather(3, stone)) }                                   // chin
+        // helmet: band with carved glyph blocks, side flaps over the ears, ridged crest
+        col = shade; at(0f, 0f, 0.68f) { scale(0.9f, 0.76f, 0.5f); torus(0.32f, 0.05f, 36, 10) }
+        for (k in 0 until 11) { val a = -1.35f + k * 0.27f
+            col = if (k % 2 == 0) stone * 1.05f else shade * 1.1f
+            at(sin(a) * 0.3f, -cos(a) * 0.268f, 0.7f) { rotZ(-a); box(0.05f, 0.03f, 0.05f) }
+            col = shade * 0.7f; at(sin(a) * 0.302f, -cos(a) * 0.272f, 0.7f) { rotZ(-a); box(0.018f, 0.031f, 0.025f) } }               // carved glyph
+        for (s in intArrayOf(-1, 1)) { col = shade; at(s * 0.31f, 0.0f, 0.52f) { scale(0.35f, 0.9f, 1.3f); sphere(0.12f, 14, 10, weather(20 + s, shade)) } }   // side flaps
+        for (k in 0 until 4) { col = if (k % 2 == 0) shade else stone; at(0f, 0.1f + k * 0.04f, 0.83f - k * 0.03f) { scale(0.45f - k * 0.05f, 0.5f, 0.32f); sphere(0.2f, 16, 8) } }   // crest
+        // face
+        col = stone; at(0f, -0.235f, 0.585f) { scale(2.4f, 0.6f, 0.5f); sphere(0.07f, 18, 10, weather(4, stone)) }                     // heavy brow
         for (s in intArrayOf(-1, 1)) {
-            col = c(40, 38, 32); at(s * 0.12f, -0.24f, 0.5f) { scale(1.3f, 0.5f, 0.7f); sphere(0.065f, 12, 8) }
-            col = stone; at(s * 0.12f, -0.255f, 0.545f) { scale(1.5f, 0.6f, 0.45f); sphere(0.06f, 12, 8) }                           // upper lid
-            col = c(255, 190, 70) * 1.8f; at(s * 0.12f, -0.27f, 0.5f) { scale(1f, 0.5f, 0.8f); sphere(0.025f, 8, 6) }
-            col = stone; at(s * 0.31f, -0.02f, 0.45f) { scale(0.4f, 1f, 1.3f); sphere(0.07f, 10, 8) }                               // ears
-            col = shade; at(s * 0.34f, -0.02f, 0.42f) { rotY((PI / 2).toFloat()); torus(0.035f, 0.014f, 12, 5) }                  // ear spools
+            col = c(40, 38, 32); at(s * 0.12f, -0.24f, 0.505f) { scale(1.3f, 0.5f, 0.7f); sphere(0.065f, 14, 10) }                     // socket
+            col = stone; at(s * 0.12f, -0.258f, 0.548f) { scale(1.5f, 0.6f, 0.45f); sphere(0.06f, 14, 10, weather(5 + s, stone)) }     // upper lid
+            at(s * 0.12f, -0.255f, 0.462f) { scale(1.4f, 0.55f, 0.35f); sphere(0.055f, 12, 8, weather(7 + s, stone)) }                // lower lid
+            col = c(255, 190, 70) * 1.8f; at(s * 0.12f, -0.272f, 0.505f) { scale(1f, 0.5f, 0.8f); sphere(0.025f, 10, 8) }
+            col = c(255, 240, 180) * 2.2f; at(s * 0.12f, -0.283f, 0.505f) { sphere(0.008f, 6, 4) }
+            col = stone; at(s * 0.2f, -0.2f, 0.4f) { scale(0.8f, 0.6f, 0.6f); sphere(0.09f, 14, 10, weather(9 + s, stone)) }           // cheekbones
+            at(s * 0.31f, -0.02f, 0.45f) { scale(0.4f, 1f, 1.3f); sphere(0.07f, 12, 8) }                                                 // ears
+            col = shade; at(s * 0.345f, -0.02f, 0.42f) { rotY((PI / 2).toFloat()); torus(0.035f, 0.014f, 14, 6) }                      // ear spools
+            col = c(40, 38, 32); at(s * 0.36f, -0.02f, 0.42f) { sphere(0.016f, 6, 4) }
         }
-        col = stone; at(0f, -0.29f, 0.4f) { scale(1.4f, 0.8f, 1f); sphere(0.07f, 12, 8) }; at(0f, -0.27f, 0.46f) { scale(0.6f, 0.6f, 1.4f); sphere(0.045f, 10, 8) }   // nose
-        col = c(40, 38, 32); for (s in intArrayOf(-1, 1)) at(s * 0.045f, -0.33f, 0.38f) { sphere(0.016f, 6, 4) }                // nostrils
-        col = stone; at(0f, -0.29f, 0.29f) { scale(1.7f, 0.7f, 0.45f); sphere(0.07f, 14, 8) }; at(0f, -0.28f, 0.24f) { scale(1.5f, 0.7f, 0.45f); sphere(0.065f, 14, 8) }   // lips
-        col = c(40, 38, 32); at(0f, -0.32f, 0.265f) { box(0.18f, 0.01f, 0.012f) }
-        // weathering: cracks and moss draped over the crown and down one side, with a few hanging tendrils
-        col = c(60, 58, 50); tube(listOf(Vec3(0.14f, -0.2f, 0.78f), Vec3(0.2f, -0.24f, 0.62f), Vec3(0.24f, -0.22f, 0.5f)), 0.006f, 3)
-        for (k in 0 until 14) { val a = k * 0.45f; col = if (k % 3 == 0) mossD else moss
-            at(cos(a) * 0.17f * (0.4f + 0.6f * (k % 4) / 3f), sin(a) * 0.14f, 0.8f + 0.02f * (k % 3)) { scale(1f, 1f, 0.35f); sphere(0.07f, 8, 6) } }
-        col = moss; for (k in 0 until 5) { val x = -0.25f + k * 0.03f; tube(listOf(Vec3(x, -0.05f, 0.78f), Vec3(x - 0.04f, -0.14f, 0.6f), Vec3(x - 0.05f, -0.12f, 0.4f)), 0.008f, 4) }
-        col = c(80, 160, 60); for (k in 0 until 6) at(-0.3f, -0.12f + k * 0.01f, 0.62f - k * 0.05f) { scale(1f, 0.4f, 0.2f); sphere(0.03f, 6, 4) }
+        col = stone; at(0f, -0.26f, 0.5f) { scale(0.55f, 0.6f, 1.6f); sphere(0.045f, 12, 8, weather(11, stone)) }                      // nose bridge
+        at(0f, -0.29f, 0.41f) { scale(1.45f, 0.8f, 1f); sphere(0.07f, 16, 10, weather(12, stone)) }                                     // nose
+        for (s in intArrayOf(-1, 1)) at(s * 0.06f, -0.28f, 0.4f) { sphere(0.035f, 10, 8, weather(13 + s, stone)) }                       // nostril wings
+        col = c(40, 38, 32); for (s in intArrayOf(-1, 1)) at(s * 0.045f, -0.33f, 0.385f) { scale(1.2f, 1f, 0.8f); sphere(0.016f, 8, 6) }   // nostrils
+        col = shade; at(0f, -0.315f, 0.345f) { box(0.03f, 0.01f, 0.03f) }                                                                // philtrum
+        col = stone; at(0f, -0.295f, 0.3f) { scale(1.75f, 0.7f, 0.48f); sphere(0.07f, 16, 10, weather(15, stone)) }                     // upper lip
+        at(0f, -0.285f, 0.248f) { scale(1.55f, 0.7f, 0.48f); sphere(0.065f, 16, 10, weather(16, stone)) }                                 // lower lip
+        col = c(40, 38, 32); tube((0..6).map { k -> val v = k / 6f - 0.5f; Vec3(v * 0.2f, -0.33f, 0.272f - 0.02f * v * v * 4f) }, 0.006f, 5)   // mouth, corners turned down
+        // weathering: cracks, moss on the crown and down one side, vines with leaves
+        col = c(60, 58, 50); tube(listOf(Vec3(0.14f, -0.2f, 0.8f), Vec3(0.2f, -0.24f, 0.64f), Vec3(0.24f, -0.22f, 0.5f), Vec3(0.27f, -0.16f, 0.36f)), 0.006f, 3)
+        tube(listOf(Vec3(-0.18f, -0.24f, 0.34f), Vec3(-0.15f, -0.27f, 0.24f)), 0.005f, 3)
+        for (k in 0 until 20) { val a = k * 0.45f; col = if (k % 3 == 0) mossD else moss
+            at(cos(a) * 0.18f * (0.4f + 0.6f * (k % 4) / 3f), sin(a) * 0.15f + 0.04f, 0.83f + 0.02f * (k % 3)) { scale(1f, 1f, 0.35f); sphere(0.07f, 10, 6) } }
+        for (k in 0 until 6) { val x = -0.27f + k * 0.03f
+            col = moss; val vine = listOf(Vec3(x, -0.05f, 0.8f), Vec3(x - 0.04f, -0.15f, 0.62f), Vec3(x - 0.05f, -0.13f, 0.42f), Vec3(x - 0.03f, -0.12f, 0.25f - 0.03f * k))
+            tube(vine, 0.007f, 4)
+            col = c(80, 160, 60); for (j in 1 until 4) { val p = vine[j]; push(); translate(p.x - 0.01f, p.y - 0.01f, p.z); rotZ(k * 1.3f + j); rotY(0.6f); scale(1f, 0.5f, 0.12f); sphere(0.03f, 8, 4); pop() } }
+        col = moss; for (k in 0 until 8) { val a = k * 0.8f; at(cos(a) * 0.32f, sin(a) * 0.28f, 0.13f) { scale(1f, 1f, 0.4f); sphere(0.05f, 8, 6) } }   // moss round the plinth
     }.build()
 
     private fun jungleStump() = PM().apply {

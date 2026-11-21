@@ -569,7 +569,7 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
             19 -> { val (el, cas) = com.maze3d.core.Landscape.castle(m, seed); m.mesh.surface.lift = el; castle = cas }
         }
         if (m.mesh.surface.lift != null) { m.applyLift(); marble = Marble(m) }
-        marble!!.slopeG = if (m.mesh.surface.lift != null) GRAVITY * 0.9f else 0f
+        marble!!.slopeG = 0f                                     // hills and ramps keep their shape but add no pull of their own: steering feels the same everywhere
         val b = SceneBuilder(m, pal)
         b.castle = castle
         b.wallDetail = when { profile.shadows >= 2 -> 1f; profile.shadows >= 1 -> 0.7f; else -> 0.45f }

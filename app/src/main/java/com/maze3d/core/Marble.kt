@@ -118,6 +118,7 @@ class Marble(private val maze: Maze) {
 
     fun reset(at: Int = maze.start) {
         cell = at
+        contact = null
         position = maze.centers[cell] + surface.normal(maze.centers[cell]) * radius
         velocity = Vec3.ZERO
     }
@@ -132,7 +133,15 @@ class Marble(private val maze: Maze) {
 
     private fun sub(g: Vec3, h: Float) {
         val nrm = surface.normal(position)
-        val gt = g - nrm * (g dot nrm)
+        // on hills and ramps the steering force is taken along the level's base shape and laid onto the slope at full
+        // strength, so the same tilt always pushes the ball just as hard, whatever the slope under it
+        val gt = if (surface.lift == null) g - nrm * (g dot nrm) else {
+            val n0 = surface.baseNormal(position)
+            val gb = g - n0 * (g dot n0)
+            val gs = gb - nrm * (gb dot nrm)
+            val l = gs.length()
+            if (l > 1e-6f) gs * (gb.length() / l) else gs
+        }
         // 5/7 for a solid ball rolling without slipping.
         velocity += gt * (0.714f * h * terrain.accel)
         if (slopeG > 0f && surface.lift != null) {
@@ -184,9 +193,13 @@ class Marble(private val maze: Maze) {
 
     /** Puts the marble back on the floor: find the contact point under its centre (along the floor normal, so it doesn't
      *  creep downhill on slopes) and sit the centre one radius above it. */
+    private var contact: Vec3? = null
     private fun settle() {
-        var c = surface.project(position - surface.normal(position) * radius)
-        if (surface.lift != null) repeat(3) { c = surface.project(position - surface.normal(c) * radius) }   // refine the contact on slopes
+        if (surface.lift == null) { val c = surface.project(position - surface.normal(position) * radius); position = c + surface.normal(c) * radius; return }
+        // on slopes, start from the last contact point: exact for a ball at rest (no creeping), and refined while it rolls
+        var c = surface.project(position - surface.normal(contact ?: position) * radius)
+        repeat(3) { c = surface.project(position - surface.normal(c) * radius) }
+        contact = c
         position = c + surface.normal(c) * radius
     }
 

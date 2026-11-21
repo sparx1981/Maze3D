@@ -30,7 +30,7 @@ class LandscapeTest {
         assertTrue("turrets were made", castle.turrets.isNotEmpty())
         for (t in castle.turrets) {
             println("  run heights: " + t.cells.joinToString { "%.2f".format(el.at(m.mesh.surface.baseProject(m.centers[it])) / m.cellSize) } + "  links: " + t.cells.joinToString { m.links[it].size.toString() })
-            val mb = Marble(m); mb.slopeG = 3.2f * 0.9f
+            val mb = Marble(m)
             mb.reset(t.cells[0])
             var k = 1; var time = 0f; var topSpeed = 0f; var maxH = 0f
             while (k < t.cells.size && time < 30f) {
@@ -65,5 +65,31 @@ class LandscapeTest {
         for (k in 0 until 700) { val d = hz.drawDown(0, k * 0.01f); if (d > 0.99f) down++; if (d < 0.01f) up++ }
         assertTrue("mostly lowered ($down/700)", down > 350)
         assertTrue("but it does raise ($up/700)", up > 80)
+    }
+
+    /** Hills and ramps add no pull of their own, and a full push accelerates the ball the same on a ramp as on the flat. */
+    @Test fun steeringFeelsTheSameOnSlopes() {
+        val m = Maze(ShapeKind.SPHERE.createMesh(1.4f), 21)
+        val (el, castle) = Landscape.castle(m, 21)
+        m.mesh.surface.lift = el; m.applyLift()
+        val t = castle.turrets.first()
+        fun speedAfterPush(cell: Int, next: Int): Float {
+            val mb = Marble(m); mb.reset(cell)
+            val n = mb.surface.baseNormal(mb.position)
+            var d = m.centers[next] - mb.position; d -= n * (d dot n)
+            repeat(6) { mb.step(d.normalized() * 3.2f, 1f / 120f) }
+            return mb.velocity.length()
+        }
+        val rest = Marble(m).also { it.reset(t.cells[2]) }
+        val p0 = rest.position
+        repeat(60) { rest.step(Vec3.ZERO, 1f / 60f) }
+        println("ball left on the ramp drifted ${(rest.position - p0).length() / m.cellSize} cells")
+        assertTrue("no pull downhill on its own", (rest.position - p0).length() < m.cellSize * 0.05f)
+        val flat = speedAfterPush(m.solution[1], m.solution[2])
+        val up = speedAfterPush(t.cells[2], t.cells[3])
+        val down = speedAfterPush(t.cells[6], t.cells[7])
+        println("speed after the same push: flat $flat, up the ramp $up, down the slide $down")
+        assertTrue("uphill push as strong as on the flat", kotlin.math.abs(up - flat) / flat < 0.08f)
+        assertTrue("downhill push as strong as on the flat", kotlin.math.abs(down - flat) / flat < 0.08f)
     }
 }
