@@ -34,7 +34,7 @@ Roll a marble through mazes wrapped around 3D shapes: spheres, cubes, tori, caps
 Neon city, candy land, motorsport, jungle ruins, Egyptian temple, medieval castles, lava, prehistoric, toy world, winter night, space and more, each with its own walls, props, lighting and animated scenery.
 
 HAZARDS AND SURFACES
-Dodge crushers, swinging hammers, sliding doors, sweepers, seesaws, oil slicks, conveyor belts and spring pads. Plough through sand, slide through mud, push through fog and water.
+Dodge crushers, swinging hammers, sliding doors, sweepers, seesaws, conveyor belts, spring pads, rope bridges and castle drawbridges. Plough through sand, slide through mud, push through fog and water.
 
 WAYS TO PLAY
 • Quick play with Easy, Medium, Hard and Ultra maze sizes

@@ -1,5 +1,6 @@
 package com.maze3d.core
 
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.sqrt
@@ -26,10 +27,47 @@ class Elevation(private val cs: Float) {
         }
     }
 
+    /**
+     * A raised run of whole maze cells (castle turrets): level with its own floor right out to the walls round it, then a
+     * sheer drop hidden under those walls, so the corridors next door are not lifted at all. Cells are given by their
+     * centres and local axes (dot products give cell units, ±0.5 at the cell edges); [fence] lists the cells round the run
+     * the same way. [prof] maps distance along the run to height.
+     */
+    class Plateau(val pts: List<Vec3>, val us: List<Vec3>, val vs: List<Vec3>,
+                  val fence: List<Triple<Vec3, Vec3, Vec3>>, val prof: (Float) -> Float) {
+        val acc = FloatArray(pts.size).also { for (i in 1 until pts.size) it[i] = it[i - 1] + (pts[i] - pts[i - 1]).length() }
+        private val ns = List(pts.size) { (us[it] cross vs[it]).normalized() }
+        private val fns = fence.map { (it.second cross it.third).normalized() }
+        private fun metric(p: Vec3, c: Vec3, u: Vec3, v: Vec3, n: Vec3, cs: Float): Float {
+            val d = p - c
+            if (abs(d dot n) > cs * 0.6f) return Float.MAX_VALUE         // another strand of the shape passing close by
+            return maxOf(abs(d dot u), abs(d dot v)) - 0.5f
+        }
+        /** Signed distance from the run's edge in cell units: negative inside the run, positive in the cells round it.
+         *  Comparing against the neighbours (not just the run's own squares) keeps skewed cells honest and counts the
+         *  open edges between the run's own cells as inside. */
+        fun outside(p: Vec3, cs: Float): Float {
+            var inRun = Float.MAX_VALUE
+            for (i in pts.indices) inRun = minOf(inRun, metric(p, pts[i], us[i], vs[i], ns[i], cs))
+            var inFence = Float.MAX_VALUE
+            for (i in fence.indices) inFence = minOf(inFence, metric(p, fence[i].first, fence[i].second, fence[i].third, fns[i], cs))
+            if (inRun == Float.MAX_VALUE) return Float.MAX_VALUE
+            return if (inFence == Float.MAX_VALUE) inRun else (inRun - inFence) * 0.5f
+        }
+        val lo: Vec3; val hi: Vec3
+        init {
+            var a = pts[0]; var b = pts[0]
+            for (p in pts) { a = Vec3(minOf(a.x, p.x), minOf(a.y, p.y), minOf(a.z, p.z)); b = Vec3(maxOf(b.x, p.x), maxOf(b.y, p.y), maxOf(b.z, p.z)) }
+            val m = (us[0].length() + vs[0].length()).let { if (it > 0f) 2f / it else 1f }       // about one cell
+            lo = a - Vec3(m, m, m); hi = b + Vec3(m, m, m)
+        }
+    }
+
     var hillAmp = 0f
     var hillFreq = 1f
     val bumps = ArrayList<Bump>()
     val ridges = ArrayList<Ridge>()
+    val plateaus = ArrayList<Plateau>()
 
     private fun lattice(x: Int, y: Int, z: Int): Float {
         var h = x * 374761393 + y * 668265263 + z * 1274126177
@@ -46,7 +84,30 @@ class Elevation(private val cs: Float) {
             l(l(lattice(ix, iy, iz + 1), lattice(ix + 1, iy, iz + 1), ux), l(lattice(ix, iy + 1, iz + 1), lattice(ix + 1, iy + 1, iz + 1), ux), uy), uz)
     }
 
-    fun at(p: Vec3): Float {
+    /** Distance from [p] to the polyline [pts] and how far along it [p] sits, blended between nearby segments so there
+     *  is no step on the inside of a bend. */
+    private fun along(pts: List<Vec3>, acc: FloatArray, p: Vec3): Pair<Float, Float> {
+        val nseg = pts.size - 1
+        val ds = FloatArray(nseg); val ss = FloatArray(nseg)
+        var best = Float.MAX_VALUE
+        for (i in 0 until nseg) {
+            val a = pts[i]; val ab = pts[i + 1] - a
+            val l2 = ab.lengthSq(); if (l2 < 1e-12f) { ds[i] = Float.MAX_VALUE; continue }
+            val t = (((p - a) dot ab) / l2).coerceIn(0f, 1f)
+            ds[i] = (p - (a + ab * t)).length(); ss[i] = acc[i] + sqrt(l2) * t
+            best = minOf(best, ds[i])
+        }
+        val sig = cs * 0.3f
+        var wsum = 0f; var sAcc = 0f
+        for (i in 0 until nseg) { if (ds[i] == Float.MAX_VALUE) continue; val w = exp(-((ds[i] - best) / sig).let { it * it }); wsum += w; sAcc += w * ss[i] }
+        return best to sAcc / wsum
+    }
+
+    /**
+     * Floor height at [p]. With [solid] a plateau keeps its full height a little past its cell edges: that is the height
+     * for the plateau's own floor and the walls round it (the plain value drops to nothing just inside those walls).
+     */
+    fun at(p: Vec3, solid: Boolean = false): Float {
         var h = 0f
         if (hillAmp != 0f) h += hillAmp * (noise(p * hillFreq + Vec3(3.1f, 7.7f, 1.3f)) * 0.75f + noise(p * (hillFreq * 2.1f) + Vec3(9.2f, 2.4f, 5.5f)) * 0.25f)
         for (b in bumps) {
@@ -56,24 +117,17 @@ class Elevation(private val cs: Float) {
         var top = 0f
         for (r in ridges) {
             if (p.x < r.lo.x || p.y < r.lo.y || p.z < r.lo.z || p.x > r.hi.x || p.y > r.hi.y || p.z > r.hi.z) continue
-            // distance along the run, blended between nearby segments so there is no step on the inside of a bend
-            val nseg = r.pts.size - 1
-            val ds = FloatArray(nseg); val ss = FloatArray(nseg)
-            var best = Float.MAX_VALUE
-            for (i in 0 until nseg) {
-                val a = r.pts[i]; val ab = r.pts[i + 1] - a
-                val l2 = ab.lengthSq(); if (l2 < 1e-12f) { ds[i] = Float.MAX_VALUE; continue }
-                val t = (((p - a) dot ab) / l2).coerceIn(0f, 1f)
-                ds[i] = (p - (a + ab * t)).length(); ss[i] = r.acc[i] + sqrt(l2) * t
-                best = minOf(best, ds[i])
-            }
-            val sig = cs * 0.3f
-            var wsum = 0f; var sAcc = 0f
-            for (i in 0 until nseg) { if (ds[i] == Float.MAX_VALUE) continue; val w = exp(-((ds[i] - best) / sig).let { it * it }); wsum += w; sAcc += w * ss[i] }
-            val bestS = sAcc / wsum
+            val (best, bestS) = along(r.pts, r.acc, p)
             val d = best
             val w = 1f - smooth((d - r.half) / r.fall)
             if (w > 0f) top = maxOf(top, r.prof(bestS) * w)
+        }
+        for (r in plateaus) {
+            if (p.x < r.lo.x || p.y < r.lo.y || p.z < r.lo.z || p.x > r.hi.x || p.y > r.hi.y || p.z > r.hi.z) continue
+            val out = r.outside(p, cs)
+            val w = if (solid) 1f - smooth((out - 0.1f) / 0.1f) else 1f - smooth((out + 0.075f) / 0.065f)
+            if (w <= 0f) continue
+            top = maxOf(top, r.prof(along(r.pts, r.acc, p).second) * w)
         }
         return h + top
     }

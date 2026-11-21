@@ -232,9 +232,22 @@ class Marble(private val maze: Maze) {
         }
     }
 
+    /** Wall end points as the walls actually stand: walls round a raised turret stand at its height, not on the ground
+     *  corners the cells share with the corridors next door. */
+    private val wallEnds: Array<Vec3> by lazy {
+        val v = maze.mesh.vertices
+        Array(maze.edgeCount * 2) { i ->
+            val e = i / 2; val p = v[if (i % 2 == 0) maze.edgeA[e] else maze.edgeB[e]]
+            if (surface.lift == null) p else {
+                val mid = (v[maze.edgeA[e]] + v[maze.edgeB[e]]) * 0.5f
+                if ((surface.projectSolid(mid) - surface.project(mid)).length() > maze.cellSize * 0.01f) surface.projectSolid(p) else p
+            }
+        }
+    }
+
     private fun hit(e: Int, minDist: Float) {
-        val a = maze.mesh.vertices[maze.edgeA[e]]
-        val b = maze.mesh.vertices[maze.edgeB[e]]
+        val a = wallEnds[e * 2]
+        val b = wallEnds[e * 2 + 1]
         val ab = b - a
         val t = (((position - a) dot ab) / ab.lengthSq()).coerceIn(0f, 1f)
         val q = a + ab * t

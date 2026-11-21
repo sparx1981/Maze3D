@@ -75,13 +75,13 @@ class DumpSceneTest {
         }
         if (maze.mesh.surface.lift != null) maze.applyLift()
         var look = maze.solution[0] to maze.solution[1]
-        castle?.turrets?.firstOrNull()?.let { t -> if (System.getenv("MAZE_AT_TURRET") != null) { marble.reset(t.cells[0]); look = t.cells[0] to t.cells[2] } }
+        castle?.turrets?.firstOrNull()?.let { t -> when (System.getenv("MAZE_AT_TURRET")) { null -> {}; "2" -> { marble.reset(t.cells[7]); look = t.cells[7] to t.cells[5] }; else -> { marble.reset(t.cells[0]); look = t.cells[0] to t.cells[2] } } }
         if (maze.mesh.surface.lift != null && System.getenv("MAZE_AT_TURRET") == null) marble.reset(maze.start)
         val b = SceneBuilder(maze, pal)
         b.castle = castle
         val rn = com.maze3d.core.Rain(maze, java.util.Random(4))
         for (i in rn.level.indices) rn.level[i] = 0.35f + 0.65f * ((i * 37) % 10) / 10f
-        val hz = com.maze3d.core.Hazards(maze, java.util.Random(5), true, true)
+        val hz = com.maze3d.core.Hazards(maze, java.util.Random(5), true, true, avoid = castle?.let { cas -> (cas.courtyards.flatMap { it.toList() } + cas.turrets.flatMap { it.cells.toList() }).toSet() } ?: emptySet())
         var sandJson: String? = null
         if (System.getenv("MAZE_FIELD") != null && terrain != "") {
             val f = com.maze3d.core.SandField(maze, terrain == "MUD", 22)
@@ -125,7 +125,15 @@ class DumpSceneTest {
                 }
                 var q = 0; while (q < pm.idx.size) { mb.tri(base + pm.idx[q], base + pm.idx[q + 1], base + pm.idx[q + 2]); q += 3 }
             }
-            if (System.getenv("MAZE_HAZGAL") == "draw") {
+            if (System.getenv("MAZE_HAZGAL") == "fx") {
+                fun shifted(pm: PropMesh, dx: Float, dy: Float, dz: Float) = PropMesh(FloatArray(pm.pos.size) { i -> pm.pos[i] + when (i % 3) { 0 -> dx; 1 -> dy; else -> dz } }, pm.nrm, pm.col, pm.idx)
+                add(HazardModels.crusherFrame(), -2.4f, 0f); add(shifted(HazardModels.crusherRam(), 0f, 0f, 0.45f), -2.4f, 0f)
+                add(HazardModels.belt(), -1.2f, 0f); for (k in 0 until 3) add(shifted(HazardModels.chevron(), -0.3f + k * 0.3f, 0f, 0f), -1.2f, 0f)
+                add(HazardModels.seesawBase(), 0f, 0f); add(HazardModels.seesawPlank(), 0f, 0f)
+                add(HazardModels.sweeper(), 1.2f, 0f)
+                add(HazardModels.bridgeFrame(0.36f), 2.4f, 0f); for (k in 0 until 7) add(shifted(HazardModels.bridgeBoard(0.36f), -0.45f + (k + 0.5f) * 0.9f / 7f, 0f, 0f), 2.4f, 0f)
+                add(shifted(HazardModels.swingSeat(0.5f), 0f, 0f, HazardModels.SWING_LENGTH), 3.7f, 0f)
+            } else if (System.getenv("MAZE_HAZGAL") == "draw") {
                 add(HazardModels.gatehouse(), -1.2f, 0f); add(HazardModels.moatWater(), -1.2f, 0f)
                 add(PropMesh(FloatArray(HazardModels.drawbridgeDeck().pos.size) { val pm = HazardModels.drawbridgeDeck(); if (it % 3 == 0) pm.pos[it] + HazardModels.DRAW_HINGE else pm.pos[it] }, HazardModels.drawbridgeDeck().nrm, HazardModels.drawbridgeDeck().col, HazardModels.drawbridgeDeck().idx), -1.2f, 0f)
                 add(HazardModels.gatehouse(), 1.2f, 0f)

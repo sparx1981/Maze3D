@@ -167,7 +167,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
             for (c in drawCells) { busy.add(maze.centers[c]); for (o in maze.links[c]) busy.add(maze.centers[o]) }
             val want = if (fxWant > 0) fxWant else ((maze.cellCount / 55f) * scale).toInt().coerceIn(3, 9)
             val placed = ArrayList<Vec3>()
-            val order = ArrayList<Int>().apply { repeat(if (fxKinds != null) 14 else 2) { addAll((fxKinds ?: (0 until FX_KINDS).toList()).shuffled(fxRnd)) } }
+            val order = ArrayList<Int>().apply { repeat(if (fxKinds != null) 14 else 2) { addAll((fxKinds ?: (0 until FX_KINDS).filter { it != FX_OIL }).shuffled(fxRnd)) } }   // oil slicks are retired
             val cells = (0 until maze.cellCount).shuffled(fxRnd)
             for (kind in order) {
                 if (fk.size >= want) break

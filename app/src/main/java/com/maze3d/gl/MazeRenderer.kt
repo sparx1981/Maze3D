@@ -2325,8 +2325,9 @@ class MazeRenderer(private val host: Host) : GLSurfaceView.Renderer {
                 Matrix.rotateM(aL, 0, -a.dir * 14f, 1f, 0f, 0f)
                 Matrix.scaleM(aL, 0, bd.size * g, bd.size * g, bd.size * g)
                 drawPart(uModel, a.frame, aL, bd.body)
-                val burst = maxOf(rk, if (bd.glide) (0.15f + 0.85f * maxOf(0f, kotlin.math.sin(t * 0.7f + ph))) else 1f)
-                val flap = if (bd.flap > 0f) 38f * burst * kotlin.math.sin(t * bd.flap * (1f + rk) + ph) else 0f
+                val wp = ph + a.wingPh
+                val burst = maxOf(rk, if (bd.glide) (0.15f + 0.85f * maxOf(0f, kotlin.math.sin(t * 0.7f + wp))) else 1f)
+                val flap = if (bd.flap > 0f) 38f * burst * kotlin.math.sin(t * bd.flap * (1f + rk) + wp) else 0f
                 System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingL)
                 System.arraycopy(aL, 0, aF, 0, 16); Matrix.rotateM(aF, 0, -flap, 1f, 0f, 0f); drawPart(uModel, a.frame, aF, bd.wingR)
                 continue

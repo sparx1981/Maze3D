@@ -68,7 +68,7 @@ object PropLibrary {
                 butterfly(c(255, 130, 20), c(40, 20, 10))) }
         2 -> { val tr = trophy(); val fp = flagPole()
             val gs = grandstand(c(220, 30, 30), c(250, 250, 250), c(30, 30, 34))
-            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), flagPart(fp, chequerCloth, flagLen, listOf(Vec3(0.02f, 0f, 0.62f))), crowdSpec(gs)), null, listOf(gs, gs, gs), ring = gs, ringCount = 18) }
+            ThemeProps(trafficCone(), tyreStack(), tr, fp, raceCar(), null, mapOf(whole(tr, Anim.SPIN, 0.5f), flagPart(fp, chequerCloth, flagLen, listOf(Vec3(0.02f, 0f, 0.62f))), crowdSpec(gs)), bird(c(240, 240, 242), c(170, 174, 182), 4, 0.5f, 3.4f, 6f), listOf(gs, gs, gs), ring = gs, ringCount = 18) }
         3 -> { val cf = cornerFlag(); val fb = football(); val tr = trophy()
             val gs = grandstand(c(40, 90, 220), c(250, 214, 40), c(40, 140, 60))
             ThemeProps(cf, fb, tr, floodlight(), goalNet(), null, mapOf(flagPart(cf, cornerCloth, 0.3f, listOf(Vec3(0.018f, 0f, 0.68f)), 0.08f, 1.4f, 1.1f), whole(fb, Anim.BOB, 1f, 1f), whole(tr, Anim.SPIN, 0.5f), crowdSpec(gs)),
@@ -87,10 +87,11 @@ object PropLibrary {
         7 -> { val sp = snowPine(); val sm = snowman()
             val pg = penguin()
             ThemeProps(lampPost(), sm, sp, sp, iceCrystals(), null, mapOf(whole(sp, Anim.SWAY, 0.7f, 0.8f), whole(sm, Anim.NOD, 0.6f, 0.6f), whole(pg, Anim.BOB, 1.4f, 0.8f)),
-                bird(c(200, 40, 30), c(110, 70, 50), 4, 0.35f, 2.2f, 9f), listOf(pg)) }
+                bird(c(112, 84, 60), c(100, 74, 52), 4, 0.35f, 2.2f, 9f, cBelly = c(226, 96, 44)), listOf(pg)) }
         8 -> { val sx = sphinx()
             val tq = torch(); val pt = palmTree()
-            ThemeProps(obelisk(), canopicJar(), sx, pyramidProp(), pt, tq, mapOf(whole(pt, Anim.SWAY, 0.8f, 1f), part(tq, flame(0.06f, 0.2f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.78f)))), falcon(), listOf(mummy())) }
+            ThemeProps(obelisk(), canopicJar(), sx, pyramidProp(), pt, tq, mapOf(whole(pt, Anim.SWAY, 0.8f, 1f), part(tq, flame(0.06f, 0.2f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.78f)))), falcon(), listOf(mummy()),
+                birds2 = bird(c(46, 40, 44), c(36, 32, 38), 5, 0.32f, 2.0f, 10f, cBelly = c(226, 214, 196), cBeak = c(30, 28, 30))) }
         9 -> { val hg = hologram(); val sA = holoSign(1, nMag); val sB = holoSign(2, nCyan); val mast = roofMast(); val bl = adBlimp(); val pl = palmPlanter()
             ThemeProps(sA, vendingMachine(), noodleStall(), bl, neonTriangle(), sB,
                 mapOf(whole(hg, Anim.SPIN, 1.1f), whole(bl, Anim.BOB, 0.4f, 0.6f), whole(pl, Anim.SWAY, 0.6f, 0.5f)), hoverCar(),
@@ -105,10 +106,11 @@ object PropLibrary {
                 parrot(), listOf(bn, bb, ms, hl, jt2), junctionMore = listOf(bn, ms, hl, bb), floor = listOf(fn, br, ms, hl, bb, jt2, fn, br), birds2 = toucan(), junctionShare = 0.85f, birds3 = butterfly(c(60, 140, 255), c(20, 20, 40))) }
         11 -> { val gb = glowBell(); val gc = glowCluster(); val gp = glowParasol(); val gg = glowGiant(); val bn = bonnets(); val ik = inkcap()
             ThemeProps(gb, gc, gp, gg, bn, ik, mapOf(whole(gb, Anim.SWAY, 0.5f, 0.6f), whole(gc, Anim.SWAY, 0.6f, 0.5f), whole(gp, Anim.SWAY, 0.45f, 0.7f),
-                whole(bn, Anim.SWAY, 0.7f, 0.6f), whole(ik, Anim.SWAY, 0.55f, 0.6f))) }
+                whole(bn, Anim.SWAY, 0.7f, 0.6f), whole(ik, Anim.SWAY, 0.55f, 0.6f)), butterfly(c(90, 255, 210) * 1.6f, c(20, 60, 70))) }
         12 -> { val at = autumnTree(); val pk = pumpkin()
             val sc = scarecrow()
-            ThemeProps(pk, leafPile(), hayBale(), at, sc, pk, mapOf(whole(at, Anim.SWAY, 0.8f, 0.9f), whole(sc, Anim.SWAY, 1.1f, 1.3f)), crow()) }
+            ThemeProps(pk, leafPile(), hayBale(), at, sc, pk, mapOf(whole(at, Anim.SWAY, 0.8f, 0.9f), whole(sc, Anim.SWAY, 1.1f, 1.3f)), crow(),
+                birds2 = bird(c(130, 96, 62), c(112, 82, 54), 5, 0.3f, 1.8f, 11f, cBelly = c(222, 200, 166)), birds3 = butterfly(c(240, 140, 30), c(40, 24, 16))) }
         13 -> { val dk = duck(); val tr = toyRocket(); val sb = starBlock()
             val jb = jackInBox(); val st = spinningTop()
             ThemeProps(legoBrick(), dk, toyCar(), tr, blockStack(), sb, mapOf(whole(dk, Anim.BOB, 1f, 1f), whole(tr, Anim.BOB, 0.5f, 0.8f), whole(sb, Anim.SPIN, 0.6f),
@@ -144,7 +146,8 @@ object PropLibrary {
             mapOf(part(cf, flame(0.12f, 0.36f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.08f)), 1.1f), flagPart(bn, gonfalonCloth, -0.52f, listOf(Vec3(0.02f, 0f, 0.865f)), 0.07f, 0.9f, 0.6f), whole(ca, Anim.NOD, 0.7f, 0.5f),
                 flagPart(cs, castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f, 1.4f),
                 whole(gd, Anim.NOD, 0.35f, 0.35f)),
-            dragon(), listOf(cf, cf, ca, sw, gd, gd), birds2 = bird(c(40, 40, 46), c(30, 30, 36), 4, 0.45f, 2.6f, 6f))
+            dragon(), listOf(cf, cf, ca, sw, gd, gd), birds2 = bird(c(40, 40, 46), c(30, 30, 36), 4, 0.45f, 2.6f, 6f, cBelly = c(52, 52, 58), cBeak = c(36, 34, 36)),
+            birds3 = butterfly(c(250, 250, 240), c(70, 70, 80)))
     }
 
     // ---------------------------------------------------------------- shared animated parts
@@ -173,14 +176,86 @@ object PropLibrary {
         return wing(1f) to wing(-1f)
     }
 
-    private fun bird(cBody: Vec3, cWing: Vec3, count: Int, size: Float, height: Float, flap: Float): Bird {
-        val body = PM().apply {
-            col = cBody; at { scale(1f, 0.6f, 0.6f); sphere(0.12f, 12, 8) }
-            at(0.13f, 0f, 0.03f) { sphere(0.06f, 10, 8) }
-            col = c(250, 180, 40); at(0.19f, 0f, 0.03f) { rotY((PI / 2).toFloat()); cone(0.02f, 0.06f, 6) }
-            col = cWing; at(-0.16f, 0f, 0f) { scale(1f, 1f, 0.2f); cone(0.06f, 0.12f, 6) }
+    /** A flat convex plate in the xy plane, [h] thick, centred on height [z] (any winding). */
+    private fun PM.slab(poly: List<FloatArray>, h: Float, z: Float = 0f) {
+        var area = 0f
+        for (i in poly.indices) { val p = poly[i]; val q = poly[(i + 1) % poly.size]; area += p[0] * q[1] - q[0] * p[1] }
+        at(z = z - h * 0.5f) { prism(if (area < 0f) poly.reversed() else poly, h) }
+    }
+
+    /** One feather (or petal-like vane) as a tapered convex outline: from [x],[y] along ([dx],[dy]) for [len], [w] wide. */
+    private fun featherOutline(x: Float, y: Float, dx: Float, dy: Float, len: Float, w: Float): List<FloatArray> {
+        val l = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1e-6f); val ux = dx / l; val uy = dy / l; val nx = -uy; val ny = ux
+        fun p(a: Float, b: Float) = floatArrayOf(x + ux * a + nx * b, y + uy * a + ny * b)
+        return listOf(p(0f, -w * 0.32f), p(len * 0.45f, -w * 0.5f), p(len * 0.82f, -w * 0.4f), p(len, 0f), p(len * 0.82f, w * 0.4f), p(len * 0.45f, w * 0.5f), p(0f, w * 0.32f))
+    }
+
+    /**
+     * Feathered wings (left along +y): a gently arched arm of [cA] coverts layered over a row of rounded [cB] secondaries,
+     * then long primaries splayed like fingers at the tip, darkening to [cTip]. [fingers] primaries.
+     */
+    private fun featherWings(span: Float, chord: Float, cA: Vec3, cB: Vec3, cTip: Vec3 = cB * 0.7f, fingers: Int = 5): Pair<PropMesh, PropMesh> {
+        fun wing(sg: Float) = PM().apply {
+            val arm = span * 0.6f
+            val st = 6
+            fun le(t: Float) = chord * (0.3f - 0.1f * t * t)                 // leading edge, swept back toward the wrist
+            fun te(t: Float) = -chord * (0.62f - 0.22f * t)                  // trailing edge of the secondaries
+            fun lift(t: Float) = 0.01f * t                                   // the arm lifts a little toward the wrist
+            // the arm: one smooth panel of flight feathers, coverts over its front half and a pale leading edge
+            val zA = lift(0.5f)
+            col = cB; slab(listOf(floatArrayOf(le(0f) * 0.3f, 0f), floatArrayOf(te(0f), 0f), floatArrayOf(te(1f), sg * arm), floatArrayOf(le(1f) * 0.3f, sg * arm)), 0.008f, zA)
+            for (k in 0 until st) {                                             // overlapping rounded secondaries along the trailing edge
+                val tm = (k + 0.5f) / st
+                col = cB * (0.94f + 0.08f * ((k * 5) % 3) / 2f)
+                slab(featherOutline(te(tm) + chord * 0.2f, sg * arm * tm, -1f, -sg * 0.18f, chord * 0.34f, arm / st * 1.5f), 0.006f, zA - 0.002f - 0.0008f * k)
+            }
+            col = cA; slab(listOf(floatArrayOf(le(0f), 0f), floatArrayOf(le(0f) - chord * 0.55f, 0f), floatArrayOf(le(1f) - chord * 0.45f, sg * arm), floatArrayOf(le(1f), sg * arm)), 0.01f, zA + 0.005f)
+            for (k in 0 until st) {                                             // a row of covert tips over the flight feathers
+                val tm = (k + 0.5f) / st
+                col = cA * (0.9f + 0.1f * (k % 2))
+                slab(featherOutline(le(tm) - chord * 0.4f, sg * arm * tm, -1f, -sg * 0.1f, chord * 0.22f, arm / st * 1.4f), 0.008f, zA + 0.006f)
+            }
+            col = Vec3.lerp(cA, c(245, 240, 230), 0.25f); slab(listOf(floatArrayOf(le(0f), 0f), floatArrayOf(le(0f) - chord * 0.14f, 0f), floatArrayOf(le(1f) - chord * 0.14f, sg * arm), floatArrayOf(le(1f), sg * arm)), 0.012f, zA + 0.008f)
+            // primaries fanning from the wrist, longest at the front
+            val wy = sg * arm * 0.97f; val zw = lift(0.5f)
+            for (i in 0 until fingers) {
+                val f = i / (fingers - 1f).coerceAtLeast(1f)
+                val ang = -0.1f + 0.95f * f                                      // swept back further for the rear feathers
+                val len = span * (0.46f - 0.14f * f)
+                val x0 = le(1f) - chord * (0.1f + 0.62f * f)
+                val dx = -sin(ang); val dy = sg * cos(ang)
+                val w = chord * (0.2f - 0.03f * f)
+                col = cB; slab(featherOutline(x0, wy, dx, dy, len, w), 0.006f, zw - 0.001f * i)
+                col = cTip; slab(featherOutline(x0 + dx * len * 0.55f, wy + dy * len * 0.55f, dx, dy, len * 0.45f, w * 0.82f), 0.0065f, zw - 0.001f * i + 0.0012f)
+            }
+            col = cA; slab(featherOutline(le(1f) - chord * 0.05f, wy, -0.5f, sg * 1f, chord * 0.45f, chord * 0.24f), 0.012f, zw + 0.006f)   // wrist coverts
         }.build()
-        val (l, r) = wingPair(0.3f, 0.14f, cWing, cWing * 0.8f)
+        return wing(1f) to wing(-1f)
+    }
+
+    /** A songbird-shaped body along +x: plump chest, pale belly, round head with bright eyes, a pointed beak, a fanned tail. */
+    private fun birdBody(cBody: Vec3, cBelly: Vec3, cBeak: Vec3, cTail: Vec3, hooked: Boolean = false) = PM().apply {
+        col = cBody; at { scale(1f, 0.56f, 0.56f); sphere(0.13f, 18, 12) }
+        col = cBelly; at(0.025f, 0f, -0.022f) { scale(0.88f, 0.5f, 0.46f); sphere(0.125f, 16, 10) }
+        col = cBody; at(0.085f, 0f, 0.02f) { scale(1f, 0.8f, 0.85f); sphere(0.07f, 14, 10) }               // neck
+        at(0.135f, 0f, 0.04f) { sphere(0.058f, 16, 12) }                                                    // head
+        col = cBeak
+        if (hooked) { tube((0..6).map { k -> val t = k / 6f; Vec3(0.185f + 0.05f * t, 0f, 0.035f - 0.03f * t * t) }, 0.014f, 8, taper = { 1f - 0.85f * it }) }
+        else at(0.185f, 0f, 0.035f) { rotY((PI / 2).toFloat()); cone(0.017f, 0.055f, 10) }
+        for (s in intArrayOf(-1, 1)) {
+            col = c(18, 16, 16); at(0.162f, s * 0.036f, 0.055f) { sphere(0.012f, 10, 8) }
+            col = c(255, 255, 255) * 1.3f; at(0.168f, s * 0.042f, 0.06f) { sphere(0.0035f, 6, 4) }
+        }
+        col = cTail
+        for (k in 0 until 5) { val a = (k - 2) * 0.16f                                                       // fanned tail
+            slab(featherOutline(-0.1f, (k - 2) * 0.008f, -cos(a), sin(a), 0.15f - 0.012f * kotlin.math.abs(k - 2), 0.05f), 0.007f, 0.006f - 0.001f * kotlin.math.abs(k - 2)) }
+        col = c(60, 50, 44); for (s in intArrayOf(-1, 1)) at(-0.01f, s * 0.025f, -0.06f) { rotY(-1.9f); cylinder(0.006f, 0.04f, 5) }   // tucked legs
+    }.build()
+
+    private fun bird(cBody: Vec3, cWing: Vec3, count: Int, size: Float, height: Float, flap: Float,
+                     cBelly: Vec3 = Vec3.lerp(cBody, c(236, 232, 222), 0.5f), cBeak: Vec3 = c(240, 176, 50), hooked: Boolean = false): Bird {
+        val body = birdBody(cBody, cBelly, cBeak, cWing * 0.85f, hooked)
+        val (l, r) = featherWings(0.32f, 0.15f, cWing, cWing * 0.8f, cWing * 0.55f)
         return Bird(body, l, r, count, size, height, flap)
     }
 
@@ -192,17 +267,17 @@ object PropLibrary {
             col = c(250, 250, 250); for (s in intArrayOf(-1, 1)) at(0.165f, s * 0.04f, 0.06f) { sphere(0.015f, 6, 4) }
             col = c(40, 100, 230); push(); translate(-0.13f, 0f, 0f); rotY((PI / 2).toFloat() + 0.2f); scale(0.4f, 1f, 1f); cylinder(0.06f, 0.26f, 8, 0.01f); pop()
         }.build()
-        val (l, r) = wingPair(0.34f, 0.16f, c(230, 40, 40), c(40, 110, 230), 0.45f)
+        val (l, r) = featherWings(0.36f, 0.16f, c(230, 40, 40), c(250, 200, 40), c(40, 110, 230))
         return Bird(body, l, r, 5, 0.6f, 2.6f, 8f)
     }
 
     private fun crow(): Bird {
-        val b = bird(c(30, 30, 36), c(24, 24, 30), 5, 0.55f, 2.8f, 6f)
+        val b = bird(c(30, 30, 36), c(24, 24, 30), 5, 0.55f, 2.8f, 6f, cBelly = c(40, 40, 46), cBeak = c(30, 28, 30))
         return Bird(b.body, b.wingL, b.wingR, 6, 0.55f, 2.8f, 6f, glide = true)
     }
 
     private fun falcon(): Bird {
-        val b = bird(c(150, 110, 70), c(110, 80, 50), 3, 0.75f, 3.6f, 4f)
+        val b = bird(c(120, 86, 56), c(104, 76, 50), 3, 0.75f, 3.6f, 4f, cBelly = c(236, 220, 190), cBeak = c(250, 200, 60), hooked = true)
         return Bird(b.body, b.wingL, b.wingR, 3, 0.75f, 3.6f, 4f, glide = true)
     }
 
@@ -217,11 +292,37 @@ object PropLibrary {
         return Bird(body, l, r, 3, 0.9f, 3.6f, 3f, glide = true)
     }
 
+    /**
+     * A butterfly: furry thorax, ringed abdomen, clubbed antennae, and two pairs of wings each with a dark border, a bright
+     * panel, a lighter flush near the body and eye-spots. [cA] is the main wing colour, [cB] the border and veins.
+     */
     private fun butterfly(cA: Vec3, cB: Vec3): Bird {
-        val body = PM().apply { col = c(40, 30, 30); at { scale(1f, 0.3f, 0.3f); sphere(0.08f, 8, 6) } }.build()
-        fun wing(sgn: Float) = PM().apply {
-            col = cA * 1.1f; push(); translate(0.02f, sgn * 0.11f, 0f); scale(1f, 1f, 0.06f); sphere(0.1f, 12, 8); pop()
-            col = cB; push(); translate(-0.07f, sgn * 0.08f, 0f); scale(1f, 1f, 0.06f); sphere(0.065f, 10, 6); pop()
+        val body = PM().apply {
+            col = c(40, 32, 30); at(0.02f, 0f, 0f) { scale(1f, 0.55f, 0.55f); sphere(0.04f, 12, 8) }                 // thorax
+            for (k in 0 until 5) { col = if (k % 2 == 0) c(52, 40, 36) else c(70, 58, 50); at(-0.025f - k * 0.022f, 0f, -0.004f * k) { scale(1f, 0.8f, 0.8f); sphere(0.022f - 0.002f * k, 10, 6) } }
+            col = c(30, 26, 26); at(0.055f, 0f, 0.008f) { sphere(0.02f, 10, 8) }                                         // head
+            for (s in intArrayOf(-1, 1)) {
+                tube(listOf(Vec3(0.065f, s * 0.008f, 0.015f), Vec3(0.11f, s * 0.035f, 0.05f), Vec3(0.15f, s * 0.05f, 0.07f)), 0.0028f, 4)
+                at(0.152f, s * 0.051f, 0.071f) { sphere(0.007f, 6, 4) }
+            }
+        }.build()
+        fun wing(sg: Float) = PM().apply {
+            fun pts(vararg v: Float) = (v.indices step 2).map { floatArrayOf(v[it], sg * v[it + 1]) }
+            fun inset(poly: List<FloatArray>, k: Float): List<FloatArray> {
+                val cx = poly.sumOf { it[0].toDouble() }.toFloat() / poly.size; val cy = poly.sumOf { it[1].toDouble() }.toFloat() / poly.size
+                return poly.map { floatArrayOf(cx + (it[0] - cx) * k, cy + (it[1] - cy) * k) }
+            }
+            val fore = pts(0.03f, 0.01f, 0.1f, 0.07f, 0.13f, 0.15f, 0.11f, 0.2f, 0.06f, 0.21f, 0.0f, 0.15f, -0.01f, 0.05f)
+            val hind = pts(0.0f, 0.01f, 0.0f, 0.09f, -0.04f, 0.15f, -0.09f, 0.15f, -0.13f, 0.1f, -0.12f, 0.05f, -0.05f, 0.01f)
+            for ((w, base) in listOf(fore to 0f, hind to -0.003f)) {
+                col = cB; slab(w, 0.004f, base)
+                col = cA; slab(inset(w, 0.8f), 0.0045f, base + 0.001f)
+                col = Vec3.lerp(cA, c(255, 250, 235), 0.35f); slab(inset(w, 0.42f).map { floatArrayOf(it[0] * 0.8f, it[1] * 0.7f) }, 0.005f, base + 0.0018f)
+            }
+            col = cB; for ((x, y) in listOf(0.085f to 0.165f, 0.055f to 0.185f, -0.09f to 0.12f)) at(x, sg * y, 0.003f) { scale(1f, 1f, 0.1f); sphere(0.012f, 10, 6) }
+            col = c(255, 255, 255) * 1.1f; for ((x, y) in listOf(0.087f to 0.167f, -0.088f to 0.122f)) at(x, sg * y, 0.0042f) { scale(1f, 1f, 0.1f); sphere(0.005f, 8, 4) }
+            col = Vec3.lerp(cA, cB, 0.6f); for (k in 0 until 3) { val a = 0.5f + k * 0.35f                                                   // veins
+                tube(listOf(Vec3(0.01f, sg * 0.01f, 0.0035f), Vec3(0.01f + cos(a) * 0.09f, sg * sin(a) * 0.12f, 0.0035f)), 0.0015f, 3) }
         }.build()
         return Bird(body, wing(1f), wing(-1f), 6, 0.35f, 0.9f, 14f)
     }
@@ -247,7 +348,8 @@ object PropLibrary {
 
     /** Preview harness only: the props and flocks being worked on, shown side by side. */
     /** Preview harness only: the props being worked on, shown side by side. */
-    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(groundDragon(), monkey(), dino(), idol(), trafficCone()) to listOf(dragon(), dragonfly(), mosquito())
+    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(snowPine(), iceCrystals(), grandstand(c(220, 30, 30), c(250, 250, 250), c(30, 30, 34)), snowman()) to emptyList<Bird>()
+    internal fun previewBirds(): List<Bird> = listOf(bird(c(250, 250, 250), c(200, 200, 205), 5, 0.5f, 3.2f, 7f), bird(c(112, 84, 60), c(100, 74, 52), 4, 0.35f, 2.2f, 9f, cBelly = c(226, 96, 44)), falcon(), crow(), parrot(), toucan(), butterfly(c(255, 120, 200), c(120, 220, 255)), butterfly(c(240, 140, 30), c(40, 24, 16)), butterfly(c(60, 140, 255), c(20, 20, 40)))
     internal fun previewSetFlags(): Pair<List<PropMesh>, List<Bird>> {
         fun withFlag(host: PropMesh, sp: AnimSpec, ph: Float): PropMesh {
             val parts = listOf(host) + sp.at.map { o -> flagPose(sp, ph + o.x * 5f).let { m -> PropMesh(FloatArray(m.pos.size) { i -> m.pos[i] + when (i % 3) { 0 -> o.x; 1 -> o.y; else -> o.z } }, m.nrm, m.col, m.idx) } }
@@ -625,36 +727,32 @@ object PropLibrary {
         col = c(100, 70, 40); at(0.05f, 0f, 0.42f) { cylinder(0.05f, 0.08f, 10, 0.06f) }
     }.build()
 
-    /** Crown of a turret: a round parapet of merlons with gaps where the path comes in and leaves ([gaps] are angles in
-     *  the prop's xy plane), a flagpole with a pennant and two torches. About one cell across. */
-    /** Where on the turret crown ring its flagpole stands: the first spot clear of the path gaps. */
-    fun turretFlagAngle(gaps: List<Float>): Float {
-        fun inGap(a: Float) = gaps.any { g -> val d = kotlin.math.abs(((a - g + 9.42478f) % 6.28318f) - 3.14159f); d < 0.62f }
-        var fa = 0f; while (inGap(fa)) fa += 0.7f
-        return fa
-    }
     val turretPennant by lazy { pennantCloth(c(200, 30, 40), c(250, 214, 40), 0.3f, 0.1f) }
 
-    fun turretCrown(gaps: List<Float>) = PM().apply {
-        val stone = c(160, 152, 138); val dark = c(120, 114, 104)
-        fun inGap(a: Float) = gaps.any { g -> val d = kotlin.math.abs(((a - g + 9.42478f) % 6.28318f) - 3.14159f); d < 0.62f }
-        val nM = 14
-        for (k in 0 until nM) {
-            val a = k * 6.28318f / nM
-            if (inGap(a)) continue
-            val r = 0.6f
-            col = if (k % 2 == 0) stone else dark
-            push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a); box(0.12f, 0.2f, 0.34f); pop()                // parapet
-            if (k % 2 == 0) { col = stone; push(); translate(cos(a) * r, sin(a) * r, 0.24f); rotZ(a); box(0.13f, 0.18f, 0.14f); pop() }   // merlon
-        }
-        val fa = turretFlagAngle(gaps)
-        col = c(80, 60, 40); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.3f) { cylinder(0.012f, 0.62f, 6) }      // flagpole (its pennant flies as cloth)
-        col = c(214, 168, 70); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.93f) { sphere(0.016f, 6, 4) }
-        var ta = fa + 3.14f; while (inGap(ta)) ta += 0.7f
-        for (dt in floatArrayOf(-0.45f, 0.45f)) { val a = ta + dt; if (inGap(a)) continue
-            col = c(60, 44, 30); at(cos(a) * 0.52f, sin(a) * 0.52f, 0.3f) { cylinder(0.012f, 0.12f, 5) }
-            col = c(255, 140, 40) * 2.4f; at(cos(a) * 0.52f, sin(a) * 0.52f, 0.43f) { scale(1f, 1f, 1.6f); sphere(0.025f, 8, 6) } }
-    }.build()
+    /** A flagpole for a turret's battlements: iron shoe, tarred pole, cleat and a gilt finial (the pennant flies as cloth). */
+    val turretPole by lazy { PM().apply {
+        col = c(46, 44, 46); cylinder(0.034f, 0.05f, 12, 0.03f)                           // iron shoe set into the merlon
+        col = c(30, 28, 30); at(z = 0.05f) { cylinder(0.022f, 0.025f, 10) }
+        col = c(84, 62, 40); at(z = 0.06f) { cylinder(0.014f, 0.56f, 8, 0.011f) }             // the pole, tapering
+        col = c(60, 58, 60); at(0.016f, 0f, 0.16f) { box(0.012f, 0.03f, 0.008f) }            // halyard cleat
+        col = c(236, 232, 222); tube(listOf(Vec3(0.016f, 0f, 0.16f), Vec3(0.02f, 0f, 0.4f), Vec3(0.016f, 0f, 0.6f)), 0.002f, 3)   // halyard
+        col = c(222, 176, 70); at(z = 0.62f) { cylinder(0.02f, 0.012f, 10) }; at(z = 0.645f) { sphere(0.022f, 10, 8) }
+        at(z = 0.67f) { cone(0.008f, 0.04f, 8) }
+    }.build() }
+
+    /** A battlement torch: an iron cresset on a short spike, with a bright flame and embers. */
+    val turretTorch by lazy { PM().apply {
+        col = c(40, 38, 40); cylinder(0.03f, 0.03f, 10, 0.025f)
+        col = c(56, 52, 50); at(z = 0.03f) { cylinder(0.012f, 0.12f, 8) }
+        col = c(44, 40, 38)
+        for (k in 0 until 6) { val a = k * 1.0472f                                             // basket of iron straps
+            tube(listOf(Vec3(0f, 0f, 0.14f), Vec3(cos(a) * 0.04f, sin(a) * 0.04f, 0.17f), Vec3(cos(a) * 0.05f, sin(a) * 0.05f, 0.22f)), 0.005f, 4) }
+        at(z = 0.2f) { torus(0.048f, 0.005f, 14, 4) }
+        col = c(70, 40, 24); at(z = 0.18f) { sphere(0.034f, 10, 8) }                          // pitch-soaked rag
+        col = c(255, 120, 30) * 2.2f; at(z = 0.25f) { scale(1f, 1f, 1.7f); sphere(0.034f, 12, 10) }
+        col = c(255, 200, 90) * 3.2f; at(z = 0.24f) { scale(1f, 1f, 1.5f); sphere(0.02f, 10, 8) }
+        col = c(255, 90, 20) * 2.2f; at(0.012f, 0.008f, 0.32f) { scale(1f, 1f, 1.8f); sphere(0.014f, 8, 6) }
+    }.build() }
 
     // ---------------------------------------------------------------- ground animals
     private fun monkey() = PM().apply {
@@ -1008,46 +1106,100 @@ object PropLibrary {
     }.build()
 
     // ---------------------------------------------------------------- space
+
     private fun beacon() = PM().apply {
-        // antenna mast: tripod, lattice and a blinking warning light on top (lights its surroundings red)
-        val steel = c(170, 178, 192)
-        col = c(120, 128, 142); cylinder(0.26f, 0.06f, 14, 0.2f)
-        col = steel
-        for (s in 0 until 3) { val a = s * 2.094f; tube(listOf(Vec3(cos(a) * 0.18f, sin(a) * 0.18f, 0.05f), Vec3(cos(a) * 0.03f, sin(a) * 0.03f, 0.82f)), 0.012f, 5) }
-        for (k in 0 until 6) at(z = 0.15f + k * 0.12f) { torus(0.16f - 0.18f * (0.15f + k * 0.12f), 0.006f, 12, 3) }
-        col = c(210, 214, 224); at(z = 0.6f) { push(); rotX(1.2f); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.1f, 0.03f), floatArrayOf(0.12f, 0.05f)), 14, true); pop() }
-        col = c(255, 60, 60) * 2.4f; at(z = 0.86f) { sphere(0.06f, 12, 8) }
-        col = c(60, 64, 76); at(z = 0.82f) { cylinder(0.05f, 0.02f, 10) }
+        // a comms mast: a bolted base pad, a three-legged lattice tower with zigzag cross-bracing and ring frames, a small
+        // work platform, a pair of panel antennas and a dish, a cable down one leg and a blinking warning light on top
+        val steel = c(176, 184, 198); val dk = c(84, 90, 104)
+        col = c(130, 136, 150); cylinder(0.27f, 0.04f, 18, 0.25f)
+        col = dk; for (k in 0 until 8) { val a = k * 0.785f; at(cos(a) * 0.23f, sin(a) * 0.23f, 0.042f) { cylinder(0.012f, 0.012f, 6) } }
+        col = c(250, 190, 30); at(z = 0.041f) { torus(0.2f, 0.006f, 24, 3) }
+        fun leg(k: Int, z: Float): Vec3 { val a = k * 2.0944f + 0.5f; val r = 0.17f - 0.13f * (z / 0.86f); return Vec3(cos(a) * r, sin(a) * r, z) }
+        col = steel; for (k in 0 until 3) tube(listOf(leg(k, 0.04f), leg(k, 0.86f)), 0.011f, 6)
+        col = steel * 0.9f
+        val lv = 7
+        for (j in 0 until lv) { val z0 = 0.06f + j * 0.11f; val z1 = z0 + 0.11f
+            for (k in 0 until 3) { tube(listOf(leg(k, z0), leg((k + 1) % 3, z1)), 0.0045f, 3); tube(listOf(leg(k, z1), leg((k + 1) % 3, z1)), 0.005f, 3) } }
+        col = dk; at(z = 0.5f) { cylinder(0.11f, 0.012f, 16) }; at(z = 0.5f) { torus(0.11f, 0.004f, 16, 3) }                 // platform
+        for (k in 0 until 6) { val a = k * 1.047f; tube(listOf(Vec3(cos(a) * 0.11f, sin(a) * 0.11f, 0.512f), Vec3(cos(a) * 0.11f, sin(a) * 0.11f, 0.56f)), 0.003f, 3) }
+        at(z = 0.56f) { torus(0.11f, 0.003f, 16, 3) }
+        col = c(232, 234, 240); for (k in 0 until 2) { val a = k * 3.14f + 0.3f; at(cos(a) * 0.07f, sin(a) * 0.07f, 0.68f) { rotZ(a); box(0.015f, 0.05f, 0.16f) } }
+        col = c(214, 218, 228); push(); translate(0.06f, 0.04f, 0.6f); rotY(-1.0f); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.06f, 0.012f), floatArrayOf(0.085f, 0.03f)), 18, true)
+        col = dk; cylinder(0.005f, 0.06f, 4); pop()
+        col = c(30, 30, 34); tube(listOf(leg(0, 0.05f) + Vec3(0.012f, 0f, 0f), leg(0, 0.45f) + Vec3(0.012f, 0f, 0f), leg(0, 0.8f) + Vec3(0.01f, 0f, 0f)), 0.004f, 4)
+        col = dk; at(z = 0.86f) { cylinder(0.035f, 0.03f, 12) }
+        col = c(255, 50, 50) * 2.6f; at(z = 0.905f) { sphere(0.03f, 12, 8) }
+        col = c(200, 210, 230); at(z = 0.905f) { torus(0.032f, 0.004f, 12, 3) }
     }.build()
 
+
     private fun dish() = PM().apply {
-        col = c(170, 176, 190); cylinder(0.3f, 0.08f, 16, 0.2f); cylinder(0.04f, 0.35f, 8)
-        push(); translate(0f, 0f, 0.45f); rotX(-0.9f)
-        col = c(230, 232, 240); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.2f, 0.03f), floatArrayOf(0.4f, 0.12f), floatArrayOf(0.45f, 0.16f)), 26, true)
-        col = c(120, 128, 142); cylinder(0.012f, 0.3f, 6); at(z = 0.3f) { col = c(255, 90, 160) * 1.8f; sphere(0.03f, 8, 6) }
+        // a radio telescope: a turntable base, a yoke fork carrying the dish on trunnions, a panelled reflector with ribs on
+        // its back, a feed horn held at the focus on three struts, and a status light
+        val wht = c(232, 234, 240); val grey = c(150, 156, 170); val dk = c(70, 76, 90)
+        col = grey; cylinder(0.3f, 0.06f, 22, 0.27f); col = dk; at(z = 0.06f) { cylinder(0.2f, 0.04f, 20) }
+        col = c(250, 190, 30); at(z = 0.061f) { torus(0.27f, 0.006f, 26, 3) }
+        col = wht; at(z = 0.1f) { cylinder(0.08f, 0.2f, 14, 0.06f) }
+        for (sg in intArrayOf(-1, 1)) { col = wht; tube(listOf(Vec3(0f, sg * 0.05f, 0.28f), Vec3(0f, sg * 0.2f, 0.34f), Vec3(0f, sg * 0.24f, 0.46f)), 0.022f, 8)
+            col = dk; at(0f, sg * 0.24f, 0.46f) { rotX((PI / 2).toFloat()); translate(0f, 0f, -0.02f); cylinder(0.035f, 0.04f, 12) } }
+        push(); translate(0f, 0f, 0.46f); rotY(-0.9f)
+        col = wht
+        lathe(listOf(floatArrayOf(0f, -0.04f), floatArrayOf(0.2f, 0.0f), floatArrayOf(0.38f, 0.08f), floatArrayOf(0.44f, 0.13f), floatArrayOf(0.445f, 0.15f),
+            floatArrayOf(0.42f, 0.14f), floatArrayOf(0.36f, 0.1f), floatArrayOf(0.18f, 0.03f), floatArrayOf(0f, 0.0f)), 32, true) { u, v ->
+            if (v > 0.6f && ((u * 32f).toInt() % 2 == 0)) wht * 0.94f else if (v in 0.25f..0.6f) grey else wht }
+        col = grey; for (k in 0 until 12) { val a = k * 0.5236f; tube(listOf(Vec3(cos(a) * 0.05f, sin(a) * 0.05f, -0.04f), Vec3(cos(a) * 0.25f, sin(a) * 0.25f, -0.005f), Vec3(cos(a) * 0.42f, sin(a) * 0.42f, 0.1f)), 0.008f, 4) }
+        col = dk; for (k in 0 until 3) { val a = k * 2.0944f; tube(listOf(Vec3(cos(a) * 0.4f, sin(a) * 0.4f, 0.13f), Vec3(0f, 0f, 0.36f)), 0.006f, 4) }
+        col = wht; at(z = 0.33f) { cylinder(0.035f, 0.07f, 12, 0.025f) }
+        col = c(40, 44, 52); at(z = 0.32f) { cylinder(0.02f, 0.012f, 10) }
+        col = c(255, 90, 160) * 2.0f; at(z = 0.41f) { sphere(0.014f, 8, 6) }
         pop()
     }.build()
 
+
     private fun canister() = PM().apply {
-        // ribbed fuel tank with hazard band, valve wheel and carry handle
+        // a ribbed fuel tank on a skirted base with feet, a yellow-black hazard band, a stencilled panel and a hazard
+        // diamond, a gauge, a lit level strip, a pipe loop with a red valve wheel and a carry handle
         val steel = c(206, 212, 222)
-        col = steel; lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.26f, 0f), floatArrayOf(0.28f, 0.03f), floatArrayOf(0.28f, 0.62f), floatArrayOf(0.22f, 0.7f), floatArrayOf(0.08f, 0.74f), floatArrayOf(0f, 0.74f)), 24)
-        col = c(170, 176, 188); for (k in 0 until 4) at(z = 0.1f + k * 0.15f) { torus(0.283f, 0.012f, 24, 4) }
-        for (i in 0 until 8) { col = if (i % 2 == 0) c(250, 190, 30) else c(30, 30, 34); push(); rotZ(i * 0.785f); at(0f, 0f, 0.36f) { lathe(listOf(floatArrayOf(0.286f, 0f), floatArrayOf(0.286f, 0.08f)), 6, false) }; pop() }
-        col = c(84, 224, 255) * 1.6f; at(0f, -0.28f, 0.52f) { box(0.12f, 0.01f, 0.05f) }
+        col = c(90, 96, 108); cylinder(0.27f, 0.05f, 24, 0.26f)
+        col = c(60, 64, 74); for (k in 0 until 4) { val a = k * 1.571f + 0.785f; at(cos(a) * 0.24f, sin(a) * 0.24f, 0f) { box(0.07f, 0.07f, 0.02f) } }
+        col = steel; lathe(listOf(floatArrayOf(0f, 0.05f), floatArrayOf(0.26f, 0.05f), floatArrayOf(0.28f, 0.08f), floatArrayOf(0.28f, 0.62f), floatArrayOf(0.22f, 0.7f),
+            floatArrayOf(0.08f, 0.74f), floatArrayOf(0f, 0.74f)), 28)
+        col = c(170, 176, 188); for (k in 0 until 4) at(z = 0.13f + k * 0.14f) { torus(0.283f, 0.011f, 28, 4) }
+        for (i in 0 until 10) { col = if (i % 2 == 0) c(250, 190, 30) else c(30, 30, 34); push(); rotZ(i * 0.628f); lathe(listOf(floatArrayOf(0.286f, 0.36f), floatArrayOf(0.286f, 0.44f)), 6, false); pop() }
+        push(); rotZ(-(PI / 2).toFloat())
+        col = c(236, 238, 242); at(0.287f, 0f, 0.53f) { box(0.004f, 0.16f, 0.07f) }
+        col = c(30, 30, 34); for (k in 0 until 5) at(0.29f, -0.06f + k * 0.03f, 0.545f) { box(0.003f, 0.02f, 0.012f) }; for (k in 0 until 7) at(0.29f, -0.06f + k * 0.02f, 0.515f) { box(0.003f, 0.012f, 0.006f) }
+        col = c(250, 120, 30); at(0.288f, 0.12f, 0.24f) { rotX(0.785f); box(0.004f, 0.07f, 0.07f) }
+        col = c(30, 30, 34); at(0.29f, 0.12f, 0.24f) { box(0.003f, 0.01f, 0.03f) }
+        col = c(84, 224, 255) * 1.7f; at(0.288f, -0.12f, 0.24f) { box(0.004f, 0.016f, 0.16f) }
+        col = c(60, 64, 74); at(0.288f, -0.12f, 0.24f) { box(0.003f, 0.024f, 0.17f) }
+        pop()
+        col = c(40, 44, 52); at(0.2f, 0.2f, 0.64f) { rotZ(0.785f); rotY((PI / 2).toFloat()); cylinder(0.04f, 0.015f, 14) }
+        col = c(240, 240, 240); at(0.211f, 0.211f, 0.64f) { rotZ(0.785f); rotY((PI / 2).toFloat()); cylinder(0.032f, 0.004f, 14) }
+        col = c(200, 40, 40); at(0.215f, 0.215f, 0.64f) { box(0.004f, 0.004f, 0.026f) }
         col = c(90, 96, 108); at(z = 0.74f) { cylinder(0.03f, 0.1f, 10) }
-        col = c(220, 40, 40); at(z = 0.84f) { torus(0.07f, 0.012f, 14, 5) }
-        col = c(60, 64, 74); tube(listOf(Vec3(-0.16f, 0f, 0.68f), Vec3(-0.12f, 0f, 0.82f), Vec3(0.12f, 0f, 0.82f), Vec3(0.16f, 0f, 0.68f)), 0.015f, 6)
+        tube(listOf(Vec3(0f, 0f, 0.8f), Vec3(-0.08f, 0f, 0.83f), Vec3(-0.2f, 0f, 0.8f), Vec3(-0.29f, 0f, 0.62f), Vec3(-0.3f, 0f, 0.4f)), 0.014f, 6)
+        col = c(220, 40, 40); at(z = 0.86f) { torus(0.07f, 0.012f, 16, 5) }; for (k in 0 until 3) { val a = k * 2.0944f; tube(listOf(Vec3(0f, 0f, 0.86f), Vec3(cos(a) * 0.07f, sin(a) * 0.07f, 0.86f)), 0.006f, 4) }
+        col = c(60, 64, 74); tube(listOf(Vec3(-0.16f, 0.1f, 0.68f), Vec3(-0.12f, 0.1f, 0.8f), Vec3(0.12f, 0.1f, 0.8f), Vec3(0.16f, 0.1f, 0.68f)), 0.014f, 6)
     }.build()
 
+
     private fun rocket() = PM().apply {
-        col = c(240, 242, 248)
-        lathe(listOf(floatArrayOf(0f, 0.1f), floatArrayOf(0.14f, 0.1f), floatArrayOf(0.15f, 0.6f), floatArrayOf(0.1f, 0.85f), floatArrayOf(0f, 1f)), 24, true) { _, v -> if (v > 0.78f) c(230, 50, 50) else c(240, 242, 248) }
-        col = c(60, 160, 255); at(0f, -0.145f, 0.55f) { sphere(0.06f, 10, 8) }
-        col = c(230, 50, 50)
-        for (i in 0 until 3) { push(); rotZ(i * 2.094f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.0125f)
-            prism(listOf(floatArrayOf(0.12f, 0.08f), floatArrayOf(0.34f, 0.04f), floatArrayOf(0.12f, 0.46f)), 0.025f); pop() }
-        col = c(60, 66, 78); at(z = 0.02f) { cylinder(0.08f, 0.1f, 14, 0.12f) }
+        // a two-stage rocket: a white body with black roll-pattern panels, an interstage ring, a red-tipped capsule with
+        // three portholes and an escape tower, four swept fins, engine bell with a glowing throat, and panel lines
+        val wht = c(240, 242, 248); val blk = c(30, 30, 36); val red = c(214, 44, 44)
+        lathe(listOf(floatArrayOf(0f, 0.1f), floatArrayOf(0.13f, 0.1f), floatArrayOf(0.14f, 0.14f), floatArrayOf(0.14f, 0.52f), floatArrayOf(0.125f, 0.55f), floatArrayOf(0.125f, 0.72f),
+            floatArrayOf(0.1f, 0.84f), floatArrayOf(0.05f, 0.93f), floatArrayOf(0f, 0.95f)), 28, true) { u, v ->
+            when { v > 0.8f -> red; v in 0.12f..0.62f && ((u * 4f).toInt() + (v * 6f).toInt()) % 2 == 0 -> blk; else -> wht } }
+        col = c(170, 176, 188); at(z = 0.535f) { torus(0.135f, 0.012f, 28, 4) }; at(z = 0.3f) { torus(0.142f, 0.004f, 28, 3) }
+        for (k in 0 until 3) { val a = k * 0.5f - 0.5f; col = c(160, 166, 178); at(cos(a - 1.571f) * 0.123f, sin(a - 1.571f) * 0.123f, 0.65f) { rotZ(a - 1.571f); rotY((PI / 2).toFloat()); torus(0.022f, 0.005f, 12, 4) }
+            col = c(60, 160, 255) * 1.3f; at(cos(a - 1.571f) * 0.12f, sin(a - 1.571f) * 0.12f, 0.65f) { scale(0.5f, 0.5f, 0.5f); sphere(0.04f, 10, 8) } }
+        col = c(160, 166, 178); at(z = 0.94f) { cylinder(0.008f, 0.12f, 6) }; for (k in 0 until 3) { val a = k * 2.0944f; tube(listOf(Vec3(cos(a) * 0.03f, sin(a) * 0.03f, 0.94f), Vec3(0f, 0f, 1.0f)), 0.004f, 3) }
+        col = red; at(z = 1.06f) { cone(0.012f, 0.05f, 8) }
+        for (i in 0 until 4) { push(); rotZ(i * 1.5708f + 0.785f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.0125f)
+            col = if (i % 2 == 0) red else blk; prism(listOf(floatArrayOf(0.13f, 0.1f), floatArrayOf(0.3f, 0.02f), floatArrayOf(0.32f, 0.08f), floatArrayOf(0.13f, 0.34f)), 0.025f); pop() }
+        col = c(70, 74, 86); at(z = 0.02f) { lathe(listOf(floatArrayOf(0.05f, 0.08f), floatArrayOf(0.07f, 0.06f), floatArrayOf(0.11f, 0.0f), floatArrayOf(0.1f, 0.0f), floatArrayOf(0.06f, 0.05f)), 20, true) }
+        col = c(255, 170, 90) * 2.2f; at(z = 0.06f) { cylinder(0.05f, 0.01f, 14) }
     }.build()
 
     // ---------------------------------------------------------------- fast food
@@ -1146,16 +1298,27 @@ object PropLibrary {
     }.build()
 
     // ---------------------------------------------------------------- ice
+
     private fun iceCrystals() = PM().apply {
-        // a cluster of faceted ice shards, glowing faintly from inside
-        col = c(180, 214, 240); at(z = 0.01f) { scale(1f, 1f, 0.25f); sphere(0.3f, 10, 6) }
-        for (i in 0 until 7) {
-            val a = i * 0.9f; val r = if (i == 0) 0f else 0.14f + 0.04f * (i % 2); val h = if (i == 0) 0.95f else 0.4f + 0.35f * ((i * 3) % 5) / 4f
-            push(); translate(cos(a) * r, sin(a) * r, 0.02f); rotZ(a); rotX(if (i == 0) 0f else 0.35f * (if (i % 2 == 0) 1f else -0.7f))
-            col = c(210, 240, 255) * (if (i % 2 == 0) 1.12f else 1.3f); cylinder(0.07f + 0.03f * (i == 0).compareTo(false), h * 0.72f, 6, 0.06f)
-            col = c(235, 250, 255) * 1.4f; at(z = h * 0.72f) { cone(0.065f + 0.03f * (i == 0).compareTo(false), h * 0.3f, 6) }
+        // a cluster of hexagonal ice prisms with faceted points, each face a slightly different blue, frosted bright edges
+        // catching the light, rising from a wind-sculpted snow drift dusted with frost sparkles
+        col = c(240, 246, 255); at(z = 0f) { scale(1.2f, 0.9f, 0.2f); sphere(0.3f, 16, 8) }
+        col = c(228, 238, 252); at(0.2f, 0.12f, 0.01f) { scale(1.4f, 1f, 0.35f); sphere(0.09f, 10, 6) }; at(-0.18f, -0.14f, 0.01f) { scale(1f, 1.3f, 0.3f); sphere(0.08f, 10, 6) }
+        val cr = listOf(floatArrayOf(0f, 0f, 0.085f, 0.72f, 0f), floatArrayOf(0.1f, 0.4f, 0.06f, 0.46f, 0.4f), floatArrayOf(0.12f, 1.9f, 0.055f, 0.38f, 0.5f),
+            floatArrayOf(0.11f, 3.3f, 0.06f, 0.52f, 0.35f), floatArrayOf(0.15f, 4.5f, 0.045f, 0.3f, 0.65f), floatArrayOf(0.06f, 5.5f, 0.05f, 0.58f, 0.2f),
+            floatArrayOf(0.17f, 2.7f, 0.04f, 0.24f, 0.8f), floatArrayOf(0.18f, 0.9f, 0.035f, 0.2f, 0.85f))
+        for ((i, q) in cr.withIndex()) {
+            val (r, a, rad, h, tilt) = q.toList()
+            push(); translate(cos(a) * r, sin(a) * r, 0.02f); rotZ(a); rotY(tilt); rotZ(i * 0.7f)
+            lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(rad, 0f), floatArrayOf(rad, h), floatArrayOf(0f, h + rad * 1.5f)), 6, false) { u, v ->
+                val k = (u * 6f).toInt() % 3
+                (when (k) { 0 -> c(214, 238, 255); 1 -> c(170, 214, 246); else -> c(196, 228, 252) }) * (1.05f + 0.25f * v) }
+            col = c(250, 254, 255) * 1.5f
+            tube(listOf(Vec3(rad * 1.004f, 0f, h * 0.06f), Vec3(rad * 1.004f, 0f, h * 0.99f), Vec3(0.004f, 0f, h + rad * 1.45f)), 0.0035f, 3)
+            tube(listOf(Vec3(rad * 0.5f, rad * 0.869f, h * 0.3f), Vec3(rad * 0.5f, rad * 0.869f, h * 0.99f)), 0.0025f, 3)
             pop()
         }
+        col = c(255, 255, 255) * 2.2f; for (k in 0 until 7) { val a = k * 2.3f; val rr = 0.12f + 0.18f * hf(k + 3); at(cos(a) * rr, sin(a) * rr * 0.8f, 0.05f + 0.01f * hf(k)) { sphere(0.006f, 5, 4) } }
     }.build()
 
     private fun snowman() = PM().apply {
@@ -1191,39 +1354,134 @@ object PropLibrary {
         col = c(240, 248, 255); at(z = 1.06f) { push(); scale(1f, 1f, 0.45f); sphere(0.13f, 12, 6); pop() }
     }.build()
 
+
     private fun snowPine() = PM().apply {
-        // layered fir with drooping boughs, snow lying on each tier, a trunk flare and a star of frost at the top
-        col = c(96, 64, 40); cylinder(0.05f, 0.25f, 10, 0.04f)
-        for (i in 0 until 5) {
-            val z = 0.15f + i * 0.15f; val r = 0.4f - i * 0.07f
-            col = Vec3.lerp(c(30, 90, 56), c(46, 120, 70), i / 4f)
-            at(z = z) { lathe(listOf(floatArrayOf(0f, 0.22f), floatArrayOf(r * 0.4f, 0.12f), floatArrayOf(r, -0.02f), floatArrayOf(r * 0.94f, -0.05f), floatArrayOf(r * 0.3f, 0.0f)), 14) { u, _ -> if ((u * 14f).toInt() % 2 == 0) c(30, 96, 60) else c(40, 110, 66) } }
-            col = c(244, 248, 255); at(z = z + 0.04f) { lathe(listOf(floatArrayOf(0f, 0.17f), floatArrayOf(r * 0.38f, 0.095f), floatArrayOf(r * 0.85f, 0.01f), floatArrayOf(r * 0.7f, 0f)), 14) }
+        // a snow-laden spruce: a tapering trunk, whorls of drooping boughs (a dark needle mass along each branch, lighter
+        // toward the tip) heaped with snow along their tops, a spire leader with a snow cap and a drift at its foot
+        col = c(244, 248, 255); at(z = 0.0f) { scale(1f, 1f, 0.12f); sphere(0.3f, 16, 6) }
+        col = c(232, 240, 252); at(0.12f, -0.08f, 0.01f) { scale(1.3f, 1f, 0.25f); sphere(0.08f, 10, 5) }
+        col = c(92, 62, 40); cylinder(0.045f, 0.9f, 10, 0.012f)
+        val tiers = 7
+        for (t in 0 until tiers) {
+            val f = t / (tiers - 1f)
+            val z = 0.17f + 0.7f * f
+            val len = 0.4f * (1f - 0.8f * f) + 0.05f
+            val nb = if (t < 5) 7 else 5
+            for (b in 0 until nb) {
+                val a = b * 6.2832f / nb + t * 0.55f + 0.3f * hf(t * 13 + b)
+                val droop = 0.32f + 0.12f * hf(t * 5 + b + 7)
+                val lenB = len * (0.85f + 0.3f * hf(t * 11 + b))
+                push(); translate(0f, 0f, z); rotZ(a); rotY(droop)
+                col = c(70, 50, 34); tube(listOf(Vec3(0f, 0f, 0f), Vec3(lenB * 0.5f, 0f, 0.01f), Vec3(lenB, 0f, 0f)), 0.009f, 4, taper = { 1f - 0.7f * it })
+                at(lenB * 0.52f, 0f, 0f) { scale(lenB * 0.55f, lenB * 0.3f + 0.03f, 0.05f); sphere(1f, 8, 5) { u, v -> Vec3.lerp(c(22, 66, 44), c(44, 100, 64), (0.3f + 0.5f * hf(t * 7 + b)) * (0.6f + 0.4f * kotlin.math.abs(cos(u * 6.2832f)))) } }
+                col = c(246, 250, 255); at(lenB * 0.46f, 0f, 0.032f) { scale(lenB * 0.44f, lenB * 0.2f + 0.018f, 0.024f); sphere(1f, 7, 4) }
+                pop()
+            }
         }
-        col = c(230, 245, 255) * 1.4f; at(z = 0.98f) { sphere(0.035f, 8, 6) }
+        col = c(30, 84, 52); at(z = 0.86f) { cone(0.05f, 0.18f, 8) }
+        col = c(246, 250, 255); at(z = 0.93f) { scale(1f, 1f, 1.4f); sphere(0.03f, 8, 6) }
     }.build()
+
 
     // ---------------------------------------------------------------- egypt
+    private fun hf(i: Int): Float { var h = i * 374761393 + 668265263; h = (h xor (h ushr 13)) * 1274126177; return ((h xor (h ushr 16)) and 0xffff) / 65535f }
+
+    /**
+     * A column of made-up Egyptian picture glyphs on a face whose plane is yz, facing +x at depth [xAt](z): eyes, ankhs,
+     * birds, water ripples, reeds, sun discs, seated figures and snakes, [n] of them from [z0] up [h], [w] wide. Cut ones
+     * take [cut]; every third is painted from [paint].
+     */
+    private fun PM.egyptGlyphs(seed: Int, n: Int, xAt: (Float) -> Float, z0: Float, h: Float, w: Float, cut: Vec3, paint: List<Vec3>) {
+        val cell = h / n; val s = minOf(cell * 0.82f, w)
+        for (g in 0 until n) {
+            val z = z0 + h - (g + 0.5f) * cell
+            val x = xAt(z) + 0.002f
+            val kind = (hf(seed * 31 + g * 7) * 8f).toInt().coerceIn(0, 7)
+            col = if (hf(seed * 17 + g * 3 + 5) < 0.34f) paint[(hf(seed + g * 13) * paint.size).toInt().coerceIn(0, paint.size - 1)] else cut
+            val t = 0.006f
+            when (kind) {
+                0 -> { at(x, 0f, z) { scale(0.15f, 1f, 0.42f); sphere(s * 0.42f, 10, 6) }; at(x + 0.002f, 0f, z) { sphere(s * 0.09f, 6, 4) }
+                       at(x, 0f, z + s * 0.3f) { box(t, s * 0.8f, s * 0.08f) }; at(x, -s * 0.1f, z - s * 0.3f) { box(t, s * 0.08f, s * 0.3f) } }
+                1 -> { at(x, 0f, z + s * 0.25f) { rotY((PI / 2).toFloat()); scale(0.8f, 1f, 1f); torus(s * 0.13f, s * 0.045f, 10, 4) }
+                       at(x, 0f, z - s * 0.12f) { box(t, s * 0.1f, s * 0.5f) }; at(x, 0f, z + s * 0.08f) { box(t, s * 0.55f, s * 0.09f) } }
+                2 -> { at(x, 0f, z) { scale(0.2f, 1f, 0.55f); sphere(s * 0.32f, 10, 6) }; at(x, s * 0.28f, z + s * 0.2f) { sphere(s * 0.1f, 6, 4) }
+                       at(x, -s * 0.36f, z - s * 0.05f) { box(t, s * 0.3f, s * 0.1f) }; for (k in intArrayOf(-1, 1)) at(x, k * s * 0.06f, z - s * 0.32f) { box(t, s * 0.05f, s * 0.25f) } }
+                3 -> { for (k in 0 until 3) for (j in 0 until 4) at(x, -s * 0.36f + j * s * 0.24f, z + (k - 1) * s * 0.26f + (if (j % 2 == 0) s * 0.04f else -s * 0.04f)) { box(t, s * 0.22f, s * 0.06f) } }
+                4 -> { at(x, 0f, z - s * 0.05f) { box(t, s * 0.1f, s * 0.8f) }; at(x, s * 0.08f, z + s * 0.32f) { rotX(-0.6f); box(t, s * 0.08f, s * 0.3f) } }
+                5 -> { at(x, 0f, z) { rotY((PI / 2).toFloat()); cylinder(s * 0.3f, t, 14) }; at(x + 0.002f, 0f, z) { rotY((PI / 2).toFloat()); torus(s * 0.32f, s * 0.03f, 14, 3) } }
+                6 -> { at(x, 0f, z + s * 0.3f) { sphere(s * 0.12f, 8, 6) }; at(x, 0f, z) { box(t, s * 0.22f, s * 0.42f) }; at(x, s * 0.16f, z - s * 0.28f) { box(t, s * 0.4f, s * 0.12f) } }
+                else -> { tube((0..6).map { k -> val v = k / 6f; Vec3(x, -s * 0.45f + s * 0.9f * v, z + s * 0.16f * sin(v * 9f)) }, s * 0.05f, 4)
+                          at(x, s * 0.45f, z + s * 0.05f) { sphere(s * 0.08f, 6, 4) } }
+            }
+        }
+    }
+
+
     private fun obelisk() = PM().apply {
-        // a tapering granite needle on a stepped base, carved with glyph rows and capped in gold
-        col = c(190, 152, 96); push(); translate(0f, 0f, 0.03f); box(0.44f, 0.44f, 0.06f); pop(); push(); translate(0f, 0f, 0.08f); box(0.34f, 0.34f, 0.04f); pop()
-        push(); translate(0f, 0f, 0.1f); rotZ((PI / 4).toFloat())
-        lathe(listOf(floatArrayOf(0.19f, 0f), floatArrayOf(0.12f, 0.78f)), 4, false) { _, v -> if (((v * 24f).toInt() % 3) == 0) c(176, 138, 84) else c(214, 176, 112) }
-        col = c(255, 206, 70) * 1.25f; at(z = 0.78f) { cone(0.12f, 0.16f, 4) }
+        // a tapering red-granite needle on a stepped sandstone plinth: each face carved with a column of glyphs between
+        // cartouche lines, the stone flecked and weathered, and an electrum-capped pyramidion catching the sun
+        val gran = c(190, 120, 98); val granDk = c(120, 74, 62); val sand = c(214, 184, 130)
+        col = sand * 0.88f; at(z = 0.03f) { box(0.56f, 0.56f, 0.06f) }
+        col = sand; at(z = 0.085f) { box(0.46f, 0.46f, 0.05f) }
+        col = sand * 1.06f; at(z = 0.125f) { box(0.37f, 0.37f, 0.03f) }
+        col = sand * 0.75f; for (k in 0 until 4) { push(); rotZ(k * PI.toFloat() / 2f); at(0.281f, 0.1f - 0.18f * hf(k), 0.03f) { box(0.004f, 0.006f, 0.055f) }; pop() }   // block joints
+        val z0 = 0.14f; val z1 = 0.95f; val r0 = 0.122f; val r1 = 0.078f
+        fun half(z: Float) = r0 + (r1 - r0) * ((z - z0) / (z1 - z0))
+        push(); translate(0f, 0f, z0); rotZ((PI / 4).toFloat())
+        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(r0 * 1.4142f, 0f), floatArrayOf(r1 * 1.4142f, z1 - z0), floatArrayOf(0f, z1 - z0)), 4, false) { u, v -> gran * (0.9f + 0.1f * sin(u * 47f + v * 13f) * sin(v * 29f + u * 5f)) }
         pop()
+        col = c(255, 210, 90) * 1.35f; push(); translate(0f, 0f, z1); rotZ((PI / 4).toFloat()); cone(r1 * 1.4142f * 1.01f, 0.13f, 4); pop()
+        for (f in 0 until 4) {
+            push(); rotZ(f * PI.toFloat() / 2f)
+            col = granDk
+            for (sy in floatArrayOf(-1f, 1f)) tube(listOf(Vec3(half(0.2f) + 0.002f, sy * 0.05f, 0.2f), Vec3(half(0.9f) + 0.002f, sy * 0.035f, 0.9f)), 0.004f, 4)
+            egyptGlyphs(f * 11 + 3, 10, { z -> half(z) }, 0.22f, 0.64f, 0.06f, granDk, listOf(c(40, 100, 180), c(200, 60, 40), c(230, 180, 60)))
+            pop()
+        }
     }.build()
 
+
     private fun canopicJar() = PM().apply {
-        // painted jar with a jackal-head lid, hieroglyph bands and gold rims
-        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.2f, 0f), floatArrayOf(0.27f, 0.2f), floatArrayOf(0.26f, 0.45f), floatArrayOf(0.18f, 0.58f), floatArrayOf(0.16f, 0.6f)), 24) { u, v ->
-            when { v in 0.3f..0.36f -> c(40, 100, 180); v in 0.38f..0.44f -> if ((u * 16f).toInt() % 2 == 0) c(200, 50, 40) else c(240, 220, 170); else -> c(232, 214, 176) } }
-        col = c(255, 206, 70); at(z = 0.0f) { torus(0.2f, 0.015f, 20, 4) }; at(z = 0.6f) { torus(0.165f, 0.015f, 20, 4) }
-        col = c(30, 30, 36)
-        at(z = 0.6f) { cylinder(0.15f, 0.06f, 18, 0.13f) }
-        at(z = 0.72f) { scale(1f, 0.85f, 1f); sphere(0.12f, 14, 10) }
-        at(0.13f, 0f, 0.7f) { rotY(1.4f); cone(0.06f, 0.14f, 10) }
-        for (s in intArrayOf(-1, 1)) at(-0.02f, s * 0.06f, 0.82f) { cone(0.035f, 0.14f, 8) }
-        col = c(255, 206, 70) * 1.2f; for (s in intArrayOf(-1, 1)) at(0.09f, s * 0.045f, 0.76f) { sphere(0.012f, 6, 4) }
+        // a pair of alabaster canopic jars on a low painted stand: one with the jackal head of Duamutef, one with a human
+        // head in a striped wig. Gold rims, painted collar bands and a column of glyphs down each front
+        col = c(132, 92, 58); at(z = 0.03f) { box(0.66f, 0.34f, 0.04f) }
+        col = c(40, 100, 180); at(0f, -0.171f, 0.03f) { box(0.66f, 0.004f, 0.012f) }
+        col = c(230, 180, 60); at(0f, -0.171f, 0.042f) { box(0.66f, 0.004f, 0.005f) }
+        col = c(110, 76, 46); for (sx in floatArrayOf(-0.3f, 0.3f)) for (sy in floatArrayOf(-0.14f, 0.14f)) at(sx, sy, 0f) { box(0.04f, 0.04f, 0.02f) }
+        val alab = c(238, 228, 206)
+        fun jar(ox: Float, sc: Float, jackal: Boolean, seed: Int) {
+            push(); translate(ox, 0f, 0.05f); scale(sc, sc, sc)
+            lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.14f, 0f), floatArrayOf(0.17f, 0.03f), floatArrayOf(0.235f, 0.22f), floatArrayOf(0.245f, 0.38f),
+                floatArrayOf(0.22f, 0.5f), floatArrayOf(0.17f, 0.57f), floatArrayOf(0.15f, 0.6f)), 28) { u, v ->
+                when { v > 0.8f && v < 0.9f -> if ((u * 24f).toInt() % 2 == 0) c(40, 100, 180) else c(200, 60, 40)
+                       else -> alab * (0.94f + 0.06f * sin(u * 70f + v * 23f) * sin(v * 41f)) } }
+            col = c(255, 206, 70); at(z = 0.005f) { torus(0.15f, 0.012f, 22, 4) }; at(z = 0.6f) { torus(0.15f, 0.014f, 22, 4) }
+            push(); rotZ(-(PI / 2).toFloat())                                     // glyph column down the front (-y)
+            col = c(30, 30, 36); for (sy in floatArrayOf(-1f, 1f)) at(0.246f, sy * 0.045f, 0.3f) { box(0.004f, 0.006f, 0.24f) }
+            egyptGlyphs(seed, 4, { 0.245f }, 0.19f, 0.22f, 0.07f, c(40, 40, 50), listOf(c(40, 100, 180), c(200, 60, 40)))
+            pop()
+            if (jackal) {
+                col = c(26, 26, 30)
+                at(z = 0.6f) { cylinder(0.14f, 0.05f, 20, 0.12f) }
+                at(z = 0.71f) { scale(0.95f, 0.85f, 1f); sphere(0.11f, 16, 12) }
+                tube(listOf(Vec3(0f, -0.06f, 0.72f), Vec3(0f, -0.16f, 0.7f), Vec3(0f, -0.22f, 0.68f)), 0.045f, 10, taper = { 1f - 0.55f * it })   // snout
+                col = c(14, 14, 16); at(0f, -0.235f, 0.682f) { sphere(0.016f, 6, 4) }
+                for (sg in intArrayOf(-1, 1)) {
+                    col = c(26, 26, 30); push(); translate(sg * 0.055f, 0.02f, 0.78f); rotY(sg * 0.25f); scale(1f, 0.45f, 1f); cone(0.042f, 0.15f, 8); pop()
+                    col = c(255, 206, 70) * 1.2f; at(sg * 0.045f, -0.085f, 0.75f) { scale(1f, 0.6f, 0.55f); sphere(0.016f, 8, 6) }
+                    col = c(255, 206, 70); at(sg * 0.1f, 0f, 0.62f) { box(0.012f, 0.06f, 0.08f) }
+                }
+            } else {
+                col = c(40, 100, 180); at(z = 0.6f) { cylinder(0.15f, 0.05f, 20, 0.13f) }
+                at(z = 0.67f) { scale(1f, 0.95f, 0.9f); sphere(0.135f, 16, 12) { u, v -> if ((v * 14f).toInt() % 2 == 0) c(40, 100, 180) else c(230, 190, 80) } }   // striped wig
+                col = c(222, 170, 120); at(0f, -0.07f, 0.69f) { scale(0.78f, 0.62f, 0.95f); sphere(0.1f, 14, 10) }                                        // face
+                col = c(20, 20, 26); for (sg in intArrayOf(-1, 1)) { at(sg * 0.035f, -0.128f, 0.71f) { scale(1.5f, 0.5f, 0.7f); sphere(0.012f, 6, 4) }; at(sg * 0.05f, -0.124f, 0.705f) { box(0.03f, 0.004f, 0.004f) } }
+                col = c(200, 130, 100); at(0f, -0.135f, 0.685f) { sphere(0.012f, 6, 4) }; col = c(170, 70, 60); at(0f, -0.128f, 0.658f) { box(0.028f, 0.006f, 0.006f) }
+                col = c(255, 206, 70); at(0f, -0.06f, 0.6f) { scale(1f, 0.7f, 0.25f); torus(0.11f, 0.02f, 18, 4) }
+            }
+            pop()
+        }
+        jar(-0.16f, 0.85f, true, 21); jar(0.16f, 0.8f, false, 22)
     }.build()
 
     private fun sphinx() = PM().apply {
@@ -1252,11 +1510,32 @@ object PropLibrary {
         col = c(120, 90, 60); at(0f, -0.36f, 0.5f) { box(0.03f, 0.03f, 0.1f) }                    // beard
     }.build()
 
+
     private fun pyramidProp() = PM().apply {
-        col = c(224, 188, 122); push(); rotZ((PI / 4).toFloat()); cone(0.52f, 0.85f, 4); pop()
-        col = c(255, 206, 70); at(z = 0.82f) { push(); rotZ((PI / 4).toFloat()); cone(0.05f, 0.1f, 4); pop() }
-        col = c(210, 170, 110)
-        for (i in 0 until 5) { val r = 0.5f * (1f - i * 0.18f); at(z = i * 0.16f) { push(); rotZ((PI / 4).toFloat()); cylinder(r * 1.03f, 0.012f, 4); pop() } }
+        // a great pyramid: stepped limestone courses, weathered and jointed low down, the smooth white casing still on its
+        // upper part, a gilded capstone, a dark entrance high on one face, and drifted sand round its foot
+        val H = 0.88f; val W = 0.54f; val courses = 12; val ch = H * 0.74f / courses
+        col = c(222, 192, 136)
+        lathe(listOf(floatArrayOf(0f, -0.09f), floatArrayOf(W * 0.9f, -0.07f), floatArrayOf(W * 1.32f, -0.015f), floatArrayOf(W * 1.22f, 0.012f), floatArrayOf(0f, 0.012f)), 26, true) { u, v -> c(222, 192, 136) * (0.9f + 0.1f * sin(u * 31f) * sin(v * 9f + u * 7f)) }
+        for (i in 0 until courses) {
+            val z = i * ch; val w = W * (1f - (z + ch) / H) + ch * 0.32f
+            col = Vec3.lerp(c(206, 172, 116), c(226, 196, 140), hf(i * 7 + 1)) * (0.94f + 0.06f * (i % 2))
+            at(z = z + ch * 0.5f) { box(w * 2f, w * 2f, ch) }
+            if (i < courses - 2) {
+                col = c(150, 120, 80)
+                for (f in 0 until 4) { push(); rotZ(f * PI.toFloat() / 2f)
+                    for (j in 0 until 3) at(w + 0.0012f, w * (-0.66f + 0.6f * j + 0.25f * hf(i * 13 + f * 3 + j)), z + ch * 0.5f) { box(0.003f, 0.004f, ch * 0.92f) }
+                    at(w + 0.001f, 0f, z + 0.001f) { box(0.003f, w * 2f, 0.003f) }
+                    pop() }
+            }
+        }
+        val zc = courses * ch; val wc = W * (1f - zc / H)
+        col = c(238, 228, 204); push(); translate(0f, 0f, zc); rotZ((PI / 4).toFloat()); cone(wc * 1.4142f, H - zc, 4); pop()
+        col = c(255, 210, 90) * 1.35f; push(); translate(0f, 0f, H * 0.9f); rotZ((PI / 4).toFloat()); cone(W * 0.1f * 1.4142f * 1.02f, H * 0.1f, 4); pop()
+        val ze = ch * 3.5f; val we = W * (1f - ze / H) + ch * 0.32f
+        col = c(30, 22, 18); at(we + 0.004f, 0f, ze) { box(0.01f, 0.05f, 0.06f) }
+        col = c(232, 204, 150); at(we + 0.006f, 0f, ze + 0.04f) { rotY(0.0f); box(0.012f, 0.08f, 0.02f) }
+        for (k in 0 until 5) { val a = k * 1.3f + 0.4f; col = c(200, 166, 110); at(cos(a) * W * 1.05f, sin(a) * W * 1.05f, 0.01f) { scale(1.4f, 1f, 0.6f); sphere(0.03f + 0.015f * hf(k + 40), 7, 5) } }
     }.build()
 
     // ---------------------------------------------------------------- neon
@@ -1667,19 +1946,35 @@ object PropLibrary {
             pop() }
     }.build()
 
+
     private fun volcanoProp() = PM().apply {
-        // rugged cone, glowing crater, lava rivulets down the flanks and a plume of smoke
-        lathe(listOf(floatArrayOf(0.02f, 0f), floatArrayOf(0.48f, 0f), floatArrayOf(0.4f, 0.12f), floatArrayOf(0.26f, 0.48f), floatArrayOf(0.16f, 0.76f), floatArrayOf(0.13f, 0.8f), floatArrayOf(0.08f, 0.74f), floatArrayOf(0.02f, 0.72f)), 22, false) { u, v ->
-            val n = sin(u * 37f) * sin(v * 23f + u * 11f)
-            if (v > 0.9f) c(255, 120, 30) * 2f else c(84, 64, 54) * (0.8f + 0.25f * n) }
-        col = c(255, 110, 20) * 2.4f; at(z = 0.74f) { cylinder(0.1f, 0.02f, 14) }
+        // a rugged volcano: a cone carved into gullies and ridges with banded ash and scree, a jagged crater rim round a
+        // glowing lava lake, bright lava rivers with dark crusted edges down the flanks, a smaller side vent, boulders at
+        // the foot and a tall plume of smoke darkening as it rises
+        val prof = listOf(floatArrayOf(0.02f, 0f), floatArrayOf(0.5f, 0f), floatArrayOf(0.47f, 0.05f), floatArrayOf(0.38f, 0.16f), floatArrayOf(0.3f, 0.32f),
+            floatArrayOf(0.22f, 0.52f), floatArrayOf(0.16f, 0.72f), floatArrayOf(0.145f, 0.79f), floatArrayOf(0.12f, 0.785f), floatArrayOf(0.1f, 0.75f), floatArrayOf(0.02f, 0.73f))
+        lathe(prof, 36, true) { u, v ->
+            val gully = 0.5f + 0.5f * sin(u * 6.2832f * 9f + v * 4f + sin(u * 31f) * 0.8f)
+            val band = 0.5f + 0.5f * sin(v * 40f + u * 3f)
+            if (v > 0.85f) c(120, 50, 30) else Vec3.lerp(c(58, 46, 42), c(118, 102, 92), 0.25f + 0.35f * band * gully) * (0.8f + 0.3f * gully) }
+        fun surfR(z: Float): Float { for (i in 1 until 8) if (z <= prof[i][1] || i == 7) { val t = ((z - prof[i - 1][1]) / (prof[i][1] - prof[i - 1][1])).coerceIn(0f, 1f); return prof[i - 1][0] + (prof[i][0] - prof[i - 1][0]) * t }; return 0.15f }
+        col = c(255, 120, 30) * 2.4f; at(z = 0.752f) { cylinder(0.105f, 0.012f, 18) }
+        col = c(255, 200, 90) * 2.6f; at(z = 0.758f) { scale(1f, 1f, 0.15f); sphere(0.05f, 12, 5) }
+        col = c(52, 42, 40); for (k in 0 until 11) { val a = k * 0.571f + 0.2f * hf(k); at(cos(a) * 0.135f, sin(a) * 0.135f, 0.785f) { rotZ(a); cone(0.03f + 0.012f * hf(k + 3), 0.04f + 0.04f * hf(k + 5), 5) } }
         for (i in 0 until 4) {
-            val a = i * 1.57f + 0.4f
-            col = c(255, 100, 20) * 2f
-            tube((0..5).map { k -> val v = k / 5f; val r = 0.14f + 0.33f * v; Vec3(cos(a + 0.2f * sin(v * 6f)) * r, sin(a + 0.2f * sin(v * 6f)) * r, 0.78f - 0.74f * v) }, 0.016f, 5, taper = { 1f - 0.6f * it })
+            val a0 = i * 1.57f + 0.4f
+            fun at3(v: Float, off: Float): Vec3 { val z = 0.77f - 0.74f * v; val a = a0 + 0.22f * sin(v * 6f) + off; val r = surfR(z) + 0.006f; return Vec3(cos(a) * r, sin(a) * r, z) }
+            col = c(255, 100, 20) * 2.1f; tube((0..9).map { at3(it / 9f, 0f) }, 0.02f, 6, taper = { 1f - 0.45f * it })
+            col = c(255, 190, 80) * 2.4f; tube((0..9).map { at3(it / 9f * 0.7f, 0f) + Vec3(0f, 0f, 0.004f) }, 0.008f, 4)
+            col = c(40, 30, 30); for (sd in floatArrayOf(-1f, 1f)) tube((0..9).map { v -> at3(v / 9f, sd * (0.05f + 0.03f * v / 9f) / (0.15f + 0.3f * v / 9f)) }, 0.011f, 4)
         }
-        col = c(90, 86, 90)
-        for (k in 0 until 5) at(0.04f * sin(k * 2f), 0.04f * cos(k * 1.3f), 0.86f + k * 0.07f) { sphere(0.07f + 0.025f * k, 10, 8) }
+        val vz = 0.3f; val va = 2.6f; val vr = surfR(vz)
+        col = c(70, 56, 50); at(cos(va) * vr, sin(va) * vr, vz - 0.03f) { cone(0.06f, 0.08f, 10) }
+        col = c(255, 110, 30) * 2.2f; at(cos(va) * vr, sin(va) * vr, vz + 0.045f) { cylinder(0.022f, 0.008f, 10) }
+        col = c(40, 32, 32); for (k in 0 until 7) { val a = k * 0.9f + 0.3f; at(cos(a) * 0.5f, sin(a) * 0.5f, 0.03f) { rotZ(a); scale(1.3f, 1f, 0.8f); sphere(0.04f + 0.02f * hf(k + 20), 6, 4) } }
+        for (k in 0 until 8) { val t = k / 7f
+            col = Vec3.lerp(c(130, 120, 120), c(62, 58, 64), t)
+            at(0.05f * sin(k * 2f) + 0.08f * t, 0.05f * cos(k * 1.3f), 0.84f + k * 0.075f) { sphere(0.07f + 0.035f * k, 12, 8) } }
     }.build()
 
     private fun ammonite() = PM().apply {
@@ -1754,40 +2049,90 @@ object PropLibrary {
     }.build()
 
     // ---------------------------------------------------------------- lava
+
     private fun emberSpire() = PM().apply {
-        // a cluster of basalt columns with molten seams
-        val rock = c(36, 28, 32)
-        val hs = floatArrayOf(0.95f, 0.7f, 0.55f, 0.8f, 0.45f)
-        for (i in 0 until 5) {
-            val a = i * 1.26f; val r = if (i == 0) 0f else 0.17f
-            col = rock; push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a); cylinder(0.11f, hs[i], 6, 0.1f)
-            col = c(255, 100, 20) * 2.2f; at(z = hs[i]) { cylinder(0.075f, 0.012f, 6) }
-            col = c(255, 120, 30) * 1.8f; at(0.1f, 0f, hs[i] * 0.4f) { box(0.012f, 0.02f, hs[i] * 0.8f) }
+        // a cluster of hexagonal basalt columns with chamfered tops, heat-split by glowing seams zigzagging up their faces,
+        // scorched ground and a molten puddle at their feet, and a few embers lifting off the tallest
+        col = c(28, 22, 24); at(z = 0.006f) { scale(1f, 1f, 0.07f); sphere(0.36f, 18, 6) }
+        col = c(255, 96, 20) * 2.0f; at(0.15f, -0.13f, 0.01f) { scale(1.4f, 1f, 0.08f); sphere(0.075f, 12, 5) }
+        col = c(255, 170, 60) * 2.3f; at(0.15f, -0.13f, 0.014f) { scale(1.4f, 1f, 0.06f); sphere(0.04f, 10, 4) }
+        val hs = floatArrayOf(0.98f, 0.72f, 0.56f, 0.84f, 0.46f, 0.64f)
+        for (i in 0 until 6) {
+            val a = i * 1.1f + 0.3f; val r = if (i == 0) 0f else 0.15f + 0.03f * (i % 2)
+            val h = hs[i]; val rr = if (i == 0) 0.105f else 0.082f
+            val tone = 0.85f + 0.3f * hf(i + 70)
+            push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a * 1.7f); if (i > 0) rotX(0.07f * (if (i % 2 == 0) 1f else -1f))
+            lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(rr, 0f), floatArrayOf(rr * 0.93f, h * 0.96f), floatArrayOf(rr * 0.72f, h), floatArrayOf(0f, h * 1.01f)), 6, false) { u, v ->
+                c(38, 30, 34) * (tone * (0.85f + 0.2f * sin(v * 37f + u * 9f))) }
+            col = c(255, 150, 50) * 2.2f; at(z = h * 1.005f) { cylinder(rr * 0.45f, 0.008f, 6) }
+            col = c(255, 104, 24) * 2.1f
+            for (f in 0 until 2) { val fa = (0.5f + f * 3f) * 1.0472f; val d = rr * 0.87f * 0.96f + 0.003f
+                tube((0..6).map { k -> val v = k / 6f; val z = h * (0.08f + 0.78f * v); val lat = (if (k % 2 == 0) 0.018f else -0.018f) * (1f - 0.4f * v)
+                    Vec3(cos(fa) * d - sin(fa) * lat, sin(fa) * d + cos(fa) * lat, z) }, 0.0045f, 4, taper = { 1f - 0.6f * it }) }
+            pop()
+        }
+        col = c(255, 170, 60) * 2.6f; for (k in 0 until 4) at(0.03f * sin(k * 2.1f), 0.03f * cos(k * 1.7f), 1.04f + k * 0.07f) { sphere(0.009f - 0.001f * k, 6, 4) }
+    }.build()
+
+
+    private fun lavaRocks() = PM().apply {
+        // a heap of jagged cooled-lava boulders split by a web of glowing cracks, round a small lava pool with a bright
+        // core and dark crust plates floating on it
+        col = c(255, 86, 18) * 2.0f; at(z = 0.006f) { cylinder(0.27f, 0.014f, 22) }
+        col = c(255, 180, 70) * 2.4f; at(z = 0.012f) { scale(1.2f, 1f, 0.08f); sphere(0.12f, 14, 5) }
+        col = c(46, 32, 30); for (k in 0 until 4) { val a = k * 1.6f + 0.2f; at(cos(a) * 0.13f, sin(a) * 0.12f, 0.02f) { rotZ(a); scale(1.3f, 1f, 0.15f); sphere(0.05f, 7, 4) } }
+        for (i in 0 until 6) {
+            val a = i * 1.05f + 0.4f; val r = 0.2f + 0.07f * (i % 2); val bs = 0.11f + 0.05f * hf(i + 11)
+            val ox = cos(a) * r; val oy = sin(a) * r; val oz = bs * 0.65f
+            for (j in 0 until 3) {                                                    // two or three lumps fused into a jagged rock
+                col = Vec3.lerp(c(34, 26, 28), c(58, 44, 42), hf(i * 5 + j)) 
+                at(ox + 0.04f * sin(j * 2.3f + i), oy + 0.04f * cos(j * 1.9f + i), oz + 0.03f * j) { rotZ(a + j * 1.3f); rotX(0.4f * j); scale(1.15f, 0.9f, 0.75f + 0.15f * j); sphere(bs * (1f - 0.2f * j), 6, 4) }
+            }
+            col = c(255, 110, 28) * 2.0f
+            for (f in 0 until 2) { val fa = a + 1.2f + f * 2.4f
+                tube((0..5).map { k -> val v = k / 5f; val ang = fa + 0.6f * v + (if (k % 2 == 0) 0.12f else -0.12f); val rad = bs * (1.02f - 0.25f * v)
+                    Vec3(ox + cos(ang) * rad * 1.05f, oy + sin(ang) * rad * 0.9f, oz - bs * 0.45f + bs * 1.05f * v) }, 0.005f, 4, taper = { 1f - 0.7f * it }) }
+        }
+    }.build()
+
+
+    private fun obsidianCrystal() = PM().apply {
+        // a cluster of glossy black volcanic-glass shards bursting from a rough rock base, purple sheen on their faces,
+        // ember light caught along their edges and a hot core glowing between them
+        col = c(255, 110, 30) * 2.2f; at(z = 0.07f) { sphere(0.07f, 10, 8) }
+        col = c(48, 40, 42); for (k in 0 until 4) { val a = k * 1.7f; at(cos(a) * 0.12f, sin(a) * 0.12f, 0.04f) { rotZ(a); scale(1.3f, 1f, 0.6f); sphere(0.1f, 7, 5) } }
+        val shards = listOf(floatArrayOf(0f, 0f, 0.1f, 0.75f, 0f), floatArrayOf(0.12f, 0.6f, 0.07f, 0.48f, 0.45f), floatArrayOf(0.12f, 2.3f, 0.065f, 0.42f, 0.5f),
+            floatArrayOf(0.13f, 4.0f, 0.06f, 0.36f, 0.55f), floatArrayOf(0.16f, 5.2f, 0.05f, 0.28f, 0.7f), floatArrayOf(0.06f, 3.1f, 0.055f, 0.55f, 0.25f), floatArrayOf(0.17f, 1.4f, 0.045f, 0.24f, 0.75f))
+        for ((i, sd) in shards.withIndex()) {
+            val (r, a, rad, h, tilt) = sd.toList()
+            push(); translate(cos(a) * r, sin(a) * r, 0.03f); rotZ(a); rotY(tilt); rotZ(i * 0.5f)
+            lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(rad, 0f), floatArrayOf(rad * 0.92f, h), floatArrayOf(0f, h + rad * 1.7f)), 6, false) { u, v ->
+                Vec3.lerp(c(16, 12, 20), c(70, 46, 90), (0.5f + 0.5f * sin(u * 37.7f + i)) * 0.55f * (0.4f + 0.6f * v)) }
+            col = c(255, 130, 50) * 1.5f; tube(listOf(Vec3(rad * 1.003f, 0f, h * 0.05f), Vec3(rad * 0.925f, 0f, h * 0.98f), Vec3(0.003f, 0f, h + rad * 1.65f)), 0.0035f, 3)
             pop()
         }
     }.build()
 
-    private fun lavaRocks() = PM().apply {
-        // rough boulders split by glowing cracks, with a small pool of lava between them
-        col = c(255, 90, 20) * 2.1f; at(z = 0.005f) { cylinder(0.3f, 0.02f, 18) }
-        for (i in 0 until 5) {
-            val a = i * 1.3f; val r = 0.12f + 0.12f * (i % 2)
-            col = c(42, 32, 34)
-            push(); translate(cos(a) * r, sin(a) * r, 0.1f + 0.04f * (i % 3)); rotZ(a); rotX(0.3f * (i % 2)); scale(1.2f, 0.9f, 0.8f + 0.2f * (i % 3)); sphere(0.14f, 7, 5); pop()
-            col = c(255, 110, 30) * 1.9f
-            push(); translate(cos(a) * r, sin(a) * r, 0.12f); rotZ(a + 0.5f); box(0.2f, 0.012f, 0.012f); pop()
-        }
-    }.build()
-
-    private fun obsidianCrystal() = PM().apply {
-        col = c(24, 18, 28); cylinder(0.14f, 0.6f, 6, 0.1f); at(z = 0.6f) { cone(0.1f, 0.3f, 6) }
-        col = c(255, 90, 30) * 1.7f; push(); translate(0.1f, 0f, 0.0f); box(0.02f, 0.02f, 0.6f); pop()
-        col = c(40, 26, 34); push(); translate(0.22f, 0.1f, 0f); rotZ(0.6f); cylinder(0.08f, 0.38f, 6, 0.05f); pop()
-    }.build()
 
     private fun brazier() = PM().apply {
-        col = c(46, 38, 40); cylinder(0.04f, 0.4f, 8); at(z = 0.4f) { cylinder(0.24f, 0.1f, 14, 0.16f) }
-        col = c(255, 110, 30) * 1.8f; at(z = 0.48f) { cylinder(0.18f, 0.03f, 14) }          // glowing coals
+        // a great iron fire-bowl on three curved legs with claw feet, a ring brace and centre stem, a riveted bowl with a
+        // rolled rim and a decorative band, heaped with glowing coals and charcoal (the flames rise from it)
+        val iron = c(46, 40, 42); val ironLt = c(78, 70, 70)
+        col = iron; cylinder(0.035f, 0.38f, 10, 0.028f)
+        for (k in 0 until 3) { val a = k * 2.0944f
+            col = iron; tube((0..6).map { j -> val v = j / 6f; val rr = 0.24f - 0.12f * v + 0.05f * sin(v * PI.toFloat()); Vec3(cos(a) * rr, sin(a) * rr, 0.03f + 0.37f * v) }, 0.02f, 8, taper = { 1f - 0.3f * it })
+            col = ironLt; at(cos(a) * 0.245f, sin(a) * 0.245f, 0.03f) { sphere(0.035f, 10, 8) }
+            for (t in -1..1) { val ta = a + t * 0.45f; at(cos(a) * 0.245f + cos(ta) * 0.04f, sin(a) * 0.245f + sin(ta) * 0.04f, 0.0f) { rotZ(ta); rotY((PI / 2).toFloat() - 0.4f); cone(0.012f, 0.04f, 6) } } }
+        col = ironLt; at(z = 0.18f) { torus(0.155f, 0.012f, 22, 6) }
+        for (k in 0 until 6) { val a = k * 1.047f; at(cos(a) * 0.155f, sin(a) * 0.155f, 0.18f) { sphere(0.018f, 6, 4) } }
+        col = iron
+        lathe(listOf(floatArrayOf(0.03f, 0.37f), floatArrayOf(0.12f, 0.38f), floatArrayOf(0.2f, 0.42f), floatArrayOf(0.25f, 0.48f), floatArrayOf(0.265f, 0.51f),
+            floatArrayOf(0.245f, 0.505f), floatArrayOf(0.22f, 0.47f), floatArrayOf(0.0f, 0.45f)), 28, true)
+        col = ironLt; at(z = 0.508f) { torus(0.258f, 0.013f, 28, 6) }; at(z = 0.44f) { torus(0.21f, 0.008f, 26, 4) }
+        col = c(110, 96, 88); for (k in 0 until 14) { val a = k * 0.4488f; at(cos(a) * 0.236f, sin(a) * 0.236f, 0.465f) { sphere(0.008f, 5, 4) } }
+        for (k in 0 until 13) { val a = k * 2.399f; val rr = 0.17f * kotlin.math.sqrt((k + 0.5f) / 13f)
+            col = if (k % 3 == 0) c(40, 30, 28) else Vec3.lerp(c(255, 90, 20), c(255, 190, 80), hf(k + 90)) * 2.1f
+            at(cos(a) * rr, sin(a) * rr, 0.475f + 0.025f * (1f - rr / 0.17f)) { scale(1f, 1f, 0.7f); sphere(0.042f + 0.012f * hf(k + 7), 8, 6) } }
     }.build()
 
     // ---------------------------------------------------------------- jelly
@@ -1942,15 +2287,45 @@ object PropLibrary {
         tube(listOf(Vec3(-0.12f, 0.1f, 0.6f), Vec3(-0.2f, 0.12f, 0.45f)), 0.03f, 6)
     }.build()
 
+
     private fun palmTree() = PM().apply {
-        col = c(150, 110, 70)
-        tube((0..8).map { k -> val v = k / 8f; Vec3(0.12f * sin(v * 2.5f), 0f, v * 0.85f) }, 0.05f, 10, colorFn = { v -> if ((v * 14f).toInt() % 2 == 0) c(150, 110, 70) else c(120, 86, 54) }, taper = { 1f - 0.35f * it })
-        col = c(60, 150, 50)
-        for (k in 0 until 7) {
-            val a = k * 0.9f
-            tube((0..5).map { j -> val v = j / 5f; Vec3(0.12f * sin(2.5f) + cos(a) * v * 0.42f, sin(a) * v * 0.42f, 0.85f + 0.12f * v - 0.3f * v * v) }, 0.035f, 5, taper = { 1f - 0.8f * it })
+        // a date palm: a gently leaning trunk of overlapping leaf-base scales, a crown of arching feathered fronds (a stiff
+        // midrib with leaflets down both sides, young ones raised, old ones drooping) and hanging clusters of dates
+        fun trunk(v: Float) = Vec3(0.14f * sin(v * 2.2f), 0.03f * sin(v * 3f), v * 0.9f)
+        val segs = 15
+        for (k in 0 until segs) {
+            val v0 = k / segs.toFloat(); val v1 = (k + 1) / segs.toFloat()
+            val p0 = trunk(v0); val p1 = trunk(v1)
+            col = if (k % 2 == 0) c(142, 108, 70) else c(118, 86, 56)
+            tube(listOf(p0, p0 + (p1 - p0) * 0.5f, p1 + (p1 - p0) * 0.15f), 0.056f * (1f - 0.3f * v0), 9, taper = { 0.84f + 0.3f * it })
         }
-        col = c(120, 80, 40); for (k in 0 until 3) at(0.12f * sin(2.5f) + 0.05f * cos(k * 2.1f), 0.05f * sin(k * 2.1f), 0.8f) { sphere(0.04f, 8, 6) }
+        col = c(150, 120, 80); at(z = 0.012f) { scale(1f, 1f, 0.35f); sphere(0.085f, 12, 6) }                   // root flare
+        val top = trunk(1f)
+        col = c(118, 104, 56); at(top.x, top.y, top.z) { scale(1f, 1f, 0.8f); sphere(0.07f, 12, 8) }
+        for (i in 0 until 12) {
+            val a = i * 2.39996f
+            val up = when { i < 4 -> 1.0f; i < 8 -> 0.45f; else -> 0.05f }
+            val len = 0.46f + 0.1f * hf(i + 3)
+            val dir = Vec3(cos(a), sin(a), 0f); val side = Vec3(-sin(a), cos(a), 0f)
+            fun rib(v: Float) = top + dir * (len * v) + Vec3(0f, 0f, len * (up * v - 1.25f * v * v))
+            col = c(126, 142, 66); tube((0..7).map { rib(it / 7f) }, 0.009f, 4, taper = { 1f - 0.7f * it })
+            for (j in 1..11) {
+                val v = j / 12f; val p = rib(v); val tng = (rib(v + 0.02f) - rib(v - 0.02f)).normalized()
+                val L = 0.04f + 0.14f * sin(PI.toFloat() * minOf(1f, v * 1.15f))
+                for (sg in intArrayOf(-1, 1)) {
+                    val q = p + side * (sg * L * 0.85f) + tng * (L * 0.35f) + Vec3(0f, 0f, -L * (0.35f + 0.4f * v))
+                    val wv = 0.011f
+                    val cIn = Vec3.lerp(c(52, 110, 46), c(70, 126, 52), hf(i * 40 + j * 2 + sg)); val cTip = Vec3.lerp(cIn, c(150, 160, 70), 0.35f + 0.3f * v)
+                    flat(p - tng * wv, p + tng * wv, q + tng * (wv * 0.25f), q - tng * (wv * 0.25f), cIn, cIn, cTip, cTip)
+                }
+            }
+        }
+        for (k in 0 until 3) {                                                                                     // dates
+            val a = k * 2.1f + 0.5f; val o = top + Vec3(cos(a) * 0.06f, sin(a) * 0.06f, -0.04f)
+            col = c(200, 160, 60); tube(listOf(o, o + Vec3(cos(a) * 0.05f, sin(a) * 0.05f, -0.06f), o + Vec3(cos(a) * 0.07f, sin(a) * 0.07f, -0.16f)), 0.006f, 4)
+            for (d in 0 until 9) { col = if (d % 3 == 0) c(150, 60, 24) else c(200, 104, 34)
+                at(o.x + cos(a) * (0.05f + 0.02f * hf(d + k * 9)) + 0.025f * sin(d * 2.3f), o.y + sin(a) * (0.05f + 0.02f * hf(d + k * 9)) + 0.025f * cos(d * 2.3f), o.z - 0.07f - d * 0.012f) { scale(1f, 1f, 1.3f); sphere(0.016f, 7, 5) } }
+        }
     }.build()
 
     private fun torch() = PM().apply {
@@ -2000,30 +2375,101 @@ object PropLibrary {
         col = c(150, 154, 166); for (k in 0 until 6) at(z = 0.03f + k * 0.032f) { rotX(0.6f); torus(0.024f, 0.006f, 8, 3) }
     }.build()
 
+
     private fun lavaPool() = PM().apply {
-        col = c(40, 30, 32); lathe(listOf(floatArrayOf(0.2f, 0f), floatArrayOf(0.44f, 0f), floatArrayOf(0.42f, 0.08f), floatArrayOf(0.32f, 0.1f), floatArrayOf(0.3f, 0.06f)), 18, false)
-        col = c(255, 100, 20) * 2.3f; at(z = 0.05f) { cylinder(0.31f, 0.01f, 22) }
-        col = c(255, 180, 50) * 2.6f; for (k in 0 until 4) at(cos(k * 1.7f) * 0.15f, sin(k * 1.7f) * 0.15f, 0.06f) { scale(1f, 1f, 0.5f); sphere(0.05f, 8, 6) }
+        // a bubbling lava pool: a ring of jagged dark rocks (some cracked with light) round a molten surface that is white-
+        // hot at its heart and cools to deep orange at the edge, dark crust plates drifting on it and bubbles breaking
+        col = c(255, 74, 14) * 1.9f; at(z = 0.03f) { cylinder(0.34f, 0.012f, 26) }
+        col = c(255, 140, 36) * 2.2f; at(z = 0.036f) { scale(1f, 1f, 0.06f); sphere(0.23f, 20, 5) }
+        col = c(255, 214, 110) * 2.6f; at(z = 0.04f) { scale(1f, 1f, 0.06f); sphere(0.1f, 14, 4) }
+        col = c(44, 30, 28); for (k in 0 until 5) { val a = k * 1.3f + 0.5f; val rr = 0.16f + 0.08f * hf(k + 30)
+            at(cos(a) * rr, sin(a) * rr, 0.045f) { rotZ(a * 2f); scale(1.4f, 1f, 0.12f); sphere(0.045f + 0.02f * hf(k), 7, 4) } }
+        col = c(255, 200, 100) * 2.5f; for (k in 0 until 4) { val a = k * 1.9f + 1f; val rr = 0.06f + 0.12f * hf(k + 50)
+            at(cos(a) * rr, sin(a) * rr, 0.04f) { scale(1f, 1f, 0.7f); sphere(0.025f + 0.012f * hf(k + 60), 10, 6) } }
+        for (k in 0 until 13) { val a = k * 0.483f; val rr = 0.37f + 0.03f * hf(k + 2); val bs = 0.055f + 0.035f * hf(k + 8)
+            col = Vec3.lerp(c(34, 26, 28), c(60, 46, 44), hf(k + 40))
+            at(cos(a) * rr, sin(a) * rr, bs * 0.5f) { rotZ(a); rotX(0.3f * hf(k)); scale(1.3f, 1f, 0.9f); sphere(bs, 6, 4) }
+            if (k % 3 == 0) { col = c(255, 110, 28) * 1.9f; tube(listOf(Vec3(cos(a) * (rr - bs), sin(a) * (rr - bs), 0.02f), Vec3(cos(a + 0.05f) * rr, sin(a + 0.05f) * rr, bs * 1.1f)), 0.005f, 4) } }
     }.build()
+
 
     private fun moonRover() = PM().apply {
-        col = c(220, 224, 232); push(); translate(0f, 0f, 0.22f); box(0.5f, 0.32f, 0.1f); pop()
-        col = c(230, 180, 60); push(); translate(0f, 0f, 0.29f); box(0.46f, 0.28f, 0.03f); pop()
-        col = c(60, 64, 76); for (x in floatArrayOf(-0.2f, 0f, 0.2f)) for (s in intArrayOf(-1, 1)) { push(); translate(x, s * 0.2f, 0.09f); rotX((PI / 2).toFloat()); translate(0f, 0f, -0.03f); cylinder(0.08f, 0.06f, 14); pop() }
-        col = c(200, 204, 214); tube(listOf(Vec3(0.15f, 0f, 0.3f), Vec3(0.18f, 0f, 0.55f)), 0.012f, 6)
-        push(); translate(0.18f, 0f, 0.58f); rotY(-0.6f); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.12f, 0.04f), floatArrayOf(0.14f, 0.06f)), 18, true); pop()
-        col = c(80, 255, 140) * 1.8f; at(-0.15f, 0.1f, 0.33f) { sphere(0.025f, 6, 4) }
-        col = c(40, 80, 160); push(); translate(-0.1f, 0f, 0.35f); rotY(0.2f); box(0.2f, 0.36f, 0.01f); pop()
+        // a six-wheeled rover: a gold-foil body under a deck of solar panels, rocker-bogie legs to treaded wire wheels, a
+        // mast with a two-eyed camera head, a high-gain dish, a whip antenna, a folded arm at the front and status lights
+        val foil = c(222, 176, 70); val wht = c(226, 230, 238); val dk = c(56, 60, 72)
+        col = foil; at(z = 0.25f) { box(0.42f, 0.28f, 0.12f) }
+        col = foil * 0.8f; for (k in 0 until 4) at(-0.15f + k * 0.1f, -0.141f, 0.25f) { box(0.003f, 0.003f, 0.11f) }
+        col = wht; at(z = 0.315f) { box(0.46f, 0.32f, 0.012f) }
+        col = c(30, 50, 110); for (i in 0 until 4) for (j in 0 until 3) at(-0.165f + i * 0.11f, -0.1f + j * 0.1f, 0.323f) { box(0.1f, 0.09f, 0.006f) }
+        col = dk
+        for (sg in intArrayOf(-1, 1)) {
+            val y = sg * 0.19f
+            tube(listOf(Vec3(0.18f, y, 0.09f), Vec3(0.05f, y, 0.22f), Vec3(-0.05f, y, 0.17f)), 0.012f, 5)                 // rocker
+            tube(listOf(Vec3(-0.05f, y, 0.17f), Vec3(-0.18f, y, 0.09f)), 0.012f, 5)
+            tube(listOf(Vec3(-0.05f, y, 0.17f), Vec3(0f, y, 0.09f)), 0.012f, 5)                                         // bogie
+            at(0.05f, y * 0.9f, 0.22f) { sphere(0.022f, 8, 6) }
+            for (x in floatArrayOf(-0.18f, 0f, 0.18f)) {
+                push(); translate(x, y + sg * 0.02f, 0.075f); rotX((PI / 2).toFloat())
+                col = c(170, 176, 188); torus(0.064f, 0.012f, 20, 6)
+                col = dk; for (k in 0 until 8) { val a = k * 0.785f; tube(listOf(Vec3(0f, 0f, 0f), Vec3(cos(a) * 0.06f, sin(a) * 0.06f, 0f)), 0.004f, 3) }
+                at(z = -0.02f) { cylinder(0.02f, 0.04f, 10) }
+                col = c(120, 126, 138); for (k in 0 until 12) { val a = k * 0.5236f; at(cos(a) * 0.075f, sin(a) * 0.075f, 0f) { rotZ(a); box(0.008f, 0.012f, 0.04f) } }
+                pop(); col = dk
+            }
+        }
+        col = wht; tube(listOf(Vec3(0.15f, 0.08f, 0.32f), Vec3(0.15f, 0.08f, 0.56f)), 0.012f, 6)
+        col = wht; at(0.15f, 0.08f, 0.59f) { box(0.06f, 0.12f, 0.05f) }
+        col = c(20, 22, 28); for (sg in intArrayOf(-1, 1)) at(0.181f, 0.08f + sg * 0.035f, 0.595f) { rotY((PI / 2).toFloat()); cylinder(0.014f, 0.01f, 10) }
+        col = c(80, 160, 255) * 1.5f; for (sg in intArrayOf(-1, 1)) at(0.192f, 0.08f + sg * 0.035f, 0.595f) { sphere(0.006f, 6, 4) }
+        col = wht; push(); translate(-0.1f, -0.06f, 0.36f); rotY(-0.5f); cylinder(0.01f, 0.06f, 6)
+        at(z = 0.06f) { lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.07f, 0.02f), floatArrayOf(0.085f, 0.035f)), 18, true) }; pop()
+        col = dk; tube(listOf(Vec3(-0.18f, 0.12f, 0.32f), Vec3(-0.2f, 0.12f, 0.62f)), 0.003f, 3)
+        col = c(255, 60, 60) * 2.0f; at(-0.2f, 0.12f, 0.625f) { sphere(0.008f, 6, 4) }
+        col = dk; tube(listOf(Vec3(0.21f, -0.08f, 0.24f), Vec3(0.27f, -0.08f, 0.2f), Vec3(0.25f, -0.02f, 0.13f)), 0.01f, 5)
+        col = c(170, 176, 188); at(0.25f, -0.02f, 0.12f) { box(0.03f, 0.04f, 0.03f) }
+        col = c(80, 255, 140) * 1.8f; at(-0.19f, 0.1f, 0.33f) { sphere(0.012f, 6, 4) }
     }.build()
 
+
     private fun mummy() = PM().apply {
-        // a sarcophagus standing upright with a gold mask
-        col = c(200, 160, 70)
-        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.18f, 0f), floatArrayOf(0.22f, 0.4f), floatArrayOf(0.2f, 0.7f), floatArrayOf(0.15f, 0.9f), floatArrayOf(0f, 0.95f)), 18) { _, v ->
-            if (v in 0.3f..0.65f && ((v * 30f).toInt() % 2 == 0)) c(40, 100, 180) else c(200, 160, 70) }
-        col = c(255, 214, 90) * 1.1f; at(0f, -0.15f, 0.78f) { scale(1f, 0.6f, 1.1f); sphere(0.1f, 12, 8) }
-        col = c(20, 20, 30); for (s in intArrayOf(-1, 1)) at(s * 0.035f, -0.21f, 0.8f) { sphere(0.014f, 6, 4) }
-        col = c(40, 100, 180); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.09f, -0.13f, 0.6f); rotY(s * 0.3f); box(0.06f, 0.04f, 0.26f); pop() }
+        // an upright anthropoid coffin on a stone step: a gold face mask framed by a blue-and-gold striped nemes, a broad
+        // jewelled collar, arms crossed over the chest holding crook and flail, the wings of Nut across the body and a
+        // band of glyphs down the legs to the foot-box
+        col = c(196, 170, 120); at(z = 0.03f) { box(0.42f, 0.36f, 0.06f) }
+        val gold = c(232, 184, 70); val blue = c(36, 84, 170); val red = c(190, 56, 40)
+        push(); translate(0f, 0f, 0.06f); scale(1f, 0.62f, 1f)
+        lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.13f, 0f), floatArrayOf(0.15f, 0.12f), floatArrayOf(0.17f, 0.4f), floatArrayOf(0.2f, 0.58f),
+            floatArrayOf(0.2f, 0.66f), floatArrayOf(0.16f, 0.74f), floatArrayOf(0.17f, 0.82f), floatArrayOf(0.14f, 0.92f), floatArrayOf(0f, 0.95f)), 24) { u, v ->
+            val back = u > 0.0f && u < 0.5f                                   // the +y half faces away
+            when { back -> c(150, 104, 50); v < 0.1f -> gold * 0.85f; v < 0.55f -> if ((u * 30f).toInt() % 2 == 0) gold else c(214, 160, 60); else -> gold } }
+        pop()
+        val fy = -0.125f                                                         // the front surface (y)
+        // nemes headdress: stripes falling to the shoulders, and the gold face
+        for (i in 0 until 7) { col = if (i % 2 == 0) blue else gold
+            for (sg in intArrayOf(-1, 1)) at(sg * (0.13f - i * 0.004f), fy + 0.03f, 0.92f - i * 0.04f) { box(0.05f, 0.05f, 0.038f) } }
+        col = blue; at(0f, fy + 0.04f, 0.95f) { scale(1.25f, 0.8f, 0.6f); sphere(0.13f, 16, 10) { _, v -> if ((v * 12f).toInt() % 2 == 0) blue else gold } }
+        col = c(255, 214, 96) * 1.15f; at(0f, fy - 0.005f, 0.86f) { scale(0.82f, 0.45f, 1f); sphere(0.1f, 16, 12) }
+        col = c(18, 18, 26); for (sg in intArrayOf(-1, 1)) { at(sg * 0.035f, fy - 0.048f, 0.885f) { scale(1.6f, 0.5f, 0.7f); sphere(0.012f, 8, 6) }
+            at(sg * 0.056f, fy - 0.046f, 0.88f) { box(0.03f, 0.004f, 0.005f) }; at(sg * 0.035f, fy - 0.046f, 0.905f) { box(0.04f, 0.004f, 0.006f) } }
+        col = c(200, 150, 70); at(0f, fy - 0.05f, 0.865f) { scale(0.6f, 0.8f, 1f); sphere(0.014f, 6, 4) }
+        col = blue; at(0f, fy - 0.04f, 0.79f) { box(0.024f, 0.02f, 0.06f) }                                           // false beard
+        col = gold * 1.2f; at(0f, fy - 0.05f, 0.975f) { sphere(0.016f, 8, 6) }                                       // uraeus
+        // broad collar: rows of colour in an arc
+        for (r in 0 until 4) { col = listOf(blue, gold, red, c(40, 150, 120))[r]; val R = 0.05f + r * 0.022f
+            tube((0..10).map { k -> val a = -1.45f + 2.9f * k / 10f; Vec3(sin(a) * R * 1.25f, fy - 0.035f + 0.02f * (1f - cos(a)), 0.81f - cos(a) * R) }, 0.011f, 4) }
+        // crossed arms with crook and flail
+        for (sg in intArrayOf(-1, 1)) {
+            col = gold; tube(listOf(Vec3(sg * 0.16f, fy + 0.02f, 0.72f), Vec3(sg * 0.11f, fy - 0.03f, 0.6f), Vec3(-sg * 0.06f, fy - 0.045f, 0.66f)), 0.026f, 8)
+            col = c(214, 168, 70); at(-sg * 0.07f, fy - 0.05f, 0.665f) { sphere(0.026f, 8, 6) }
+        }
+        col = blue; tube(listOf(Vec3(-0.07f, fy - 0.07f, 0.6f), Vec3(-0.04f, fy - 0.07f, 0.75f), Vec3(-0.06f, fy - 0.075f, 0.8f), Vec3(-0.09f, fy - 0.07f, 0.79f)), 0.008f, 5, colorFn = { t -> if ((t * 8f).toInt() % 2 == 0) blue else gold })
+        tube(listOf(Vec3(0.07f, fy - 0.07f, 0.6f), Vec3(0.05f, fy - 0.07f, 0.74f)), 0.008f, 5, colorFn = { t -> if ((t * 8f).toInt() % 2 == 0) blue else gold })
+        col = gold; for (k in 0 until 3) tube(listOf(Vec3(0.05f, fy - 0.07f, 0.74f), Vec3(0.07f + k * 0.015f, fy - 0.075f, 0.7f)), 0.004f, 4)
+        // wings of Nut and the glyph band down the legs
+        for (sg in intArrayOf(-1, 1)) for (k in 0 until 4) { col = if (k % 2 == 0) red else blue
+            push(); translate(sg * (0.04f + k * 0.03f), fy - 0.02f + k * 0.004f, 0.52f - k * 0.012f); rotY(-sg * (0.25f + k * 0.08f)); box(0.03f, 0.01f, 0.07f - k * 0.008f); pop() }
+        col = c(236, 214, 160); at(0f, fy + 0.02f, 0.3f) { box(0.07f, 0.03f, 0.36f) }
+        push(); rotZ(-(PI / 2).toFloat()); egyptGlyphs(41, 6, { -fy - 0.003f }, 0.13f, 0.34f, 0.055f, c(40, 40, 50), listOf(blue, red)); pop()
     }.build()
 
     // ---------------------------------------------------------------- jungle (rich pass)
@@ -2137,25 +2583,67 @@ object PropLibrary {
             col = c(230, 40, 30); at(0.35f, 0f, 0.02f) { sphere(0.012f, 6, 4) }
             col = c(24, 24, 28); push(); translate(-0.15f, 0f, 0f); rotY((PI / 2).toFloat() + 0.25f); scale(0.5f, 1f, 1f); cylinder(0.05f, 0.16f, 8, 0.02f); pop()
         }.build()
-        val (l, r) = wingPair(0.28f, 0.15f, c(24, 24, 28), c(30, 30, 36), 0.5f)
+        val (l, r) = featherWings(0.3f, 0.15f, c(28, 28, 32), c(22, 22, 26), c(16, 16, 20))
         return Bird(body, l, r, 4, 0.6f, 2.0f, 7f, glide = true)
     }
 
     // ---------------------------------------------------------------- stadium
     /** Concrete stepped grandstand facing +y, with a roof on posts and advertising boards. The crowd is separate (animated rows). */
+
     private fun grandstand(seatA: Vec3, seatB: Vec3, board: Vec3) = PM().apply {
-        val conc = c(170, 172, 180)
-        for (r in 0 until 4) {                           // four tiers, each a step up and back
-            val top = 0.1f + 0.16f * r
-            col = conc; push(); translate(0f, 0.18f - r * 0.13f, top * 0.5f); box(1.0f, 0.13f, top); pop()
-            col = if (r % 2 == 0) seatA else seatB
-            for (k in 0 until 9) { push(); translate(-0.44f + k * 0.11f, 0.18f - r * 0.13f + 0.03f, top + 0.015f); box(0.09f, 0.05f, 0.03f); pop() }
+        // a covered grandstand facing +y: four concrete tiers with painted step edges and rows of bucket seats, two aisles
+        // with steps and handrails, a glazed hospitality band at the back, steel columns carrying cantilever roof trusses,
+        // a ribbed roof with a coloured fascia and a bank of floodlights, glass end screens and sponsor boards at the front
+        val conc = c(176, 178, 186); val steelC = c(84, 90, 104); val glass = c(40, 70, 110)
+        val aisles = floatArrayOf(-0.25f, 0.25f)
+        for (r in 0 until 4) {
+            val top = 0.1f + 0.16f * r; val y = 0.18f - r * 0.13f
+            col = conc * (0.94f + 0.04f * (r % 2)); at(0f, y, top * 0.5f) { box(1.0f, 0.13f, top) }
+            col = c(250, 214, 40); at(0f, y + 0.066f, top - 0.003f) { box(1.0f, 0.004f, 0.006f) }                  // step nosing
+            for (k in 0 until 12) {
+                val x = -0.46f + k * 0.0836f
+                if (aisles.any { kotlin.math.abs(x - it) < 0.05f }) continue
+                col = if ((k + r) % 7 == 3) seatB * 0.9f else if (r % 2 == 0) seatA else seatB
+                at(x, y + 0.012f, top + 0.018f) { box(0.062f, 0.05f, 0.01f) }
+                at(x, y - 0.018f, top + 0.05f) { rotX(-0.2f); box(0.062f, 0.01f, 0.06f) }
+                col = steelC * 0.8f; at(x, y + 0.0f, top + 0.006f) { box(0.012f, 0.03f, 0.012f) }
+            }
+            for (ax in aisles) { col = conc * 1.08f; at(ax, y + 0.035f, top - 0.08f) { box(0.07f, 0.06f, 0.004f) }; col = c(250, 214, 40); at(ax, y + 0.066f, top - 0.08f) { box(0.07f, 0.004f, 0.005f) } }
         }
-        col = conc * 0.8f; push(); translate(0f, -0.25f, 0.3f); box(1.0f, 0.06f, 0.6f); pop()                    // back wall
-        col = c(80, 84, 94); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.49f, -0.25f, 0.42f); box(0.03f, 0.03f, 0.84f); pop() }
-        col = c(230, 232, 238); push(); translate(0f, -0.06f, 0.86f); rotX(-0.18f); box(1.08f, 0.5f, 0.025f); pop()        // roof
-        col = board; push(); translate(0f, 0.33f, 0.05f); box(1.0f, 0.02f, 0.1f); pop()
-        col = c(250, 250, 250); for (k in 0 until 4) { push(); translate(-0.36f + k * 0.24f, 0.341f, 0.05f); box(0.12f, 0.004f, 0.04f); pop() }
+        col = steelC; for (ax in aisles) for (sd in floatArrayOf(-0.04f, 0.04f))
+            tube(listOf(Vec3(ax + sd, 0.25f, 0.16f), Vec3(ax + sd, -0.21f, 0.72f)), 0.004f, 4)
+        // back wall with a glazed hospitality band
+        col = conc * 0.8f; at(0f, -0.25f, 0.3f) { box(1.0f, 0.06f, 0.6f) }
+        col = glass; at(0f, -0.25f, 0.68f) { box(1.0f, 0.06f, 0.14f) }
+        col = c(214, 218, 226); for (k in 0..8) at(-0.5f + k * 0.125f, -0.218f, 0.68f) { box(0.008f, 0.006f, 0.14f) }
+        at(0f, -0.218f, 0.612f) { box(1.0f, 0.008f, 0.01f) }; at(0f, -0.218f, 0.748f) { box(1.0f, 0.008f, 0.01f) }
+        col = c(255, 236, 190) * 1.3f; for (k in 0 until 8) if (k % 3 != 1) at(-0.4375f + k * 0.125f, -0.221f, 0.66f) { box(0.09f, 0.002f, 0.03f) }
+        // columns and cantilever roof trusses
+        for (x in floatArrayOf(-0.48f, 0f, 0.48f)) {
+            col = steelC; at(x, -0.29f, 0.45f) { box(0.03f, 0.03f, 0.9f) }
+            val tA = Vec3(x, -0.29f, 0.95f); val tB = Vec3(x, 0.24f, 0.86f); val bA = Vec3(x, -0.29f, 0.8f); val bB = Vec3(x, 0.22f, 0.835f)
+            tube(listOf(tA, tB), 0.008f, 5); tube(listOf(bA, bB), 0.007f, 5)
+            for (k in 0 until 6) { val f0 = k / 6f; val f1 = (k + 1) / 6f
+                tube(listOf(bA + (bB - bA) * f0, tA + (tB - tA) * f1), 0.004f, 3) }
+        }
+        col = c(232, 234, 240); push(); translate(0f, -0.03f, 0.92f); rotX(-0.17f); box(1.08f, 0.56f, 0.02f); pop()
+        col = c(200, 204, 212); for (k in 0 until 10) { push(); translate(-0.49f + k * 0.109f, -0.03f, 0.931f); rotX(-0.17f); box(0.008f, 0.56f, 0.006f); pop() }
+        col = seatA; push(); translate(0f, 0.245f, 0.868f); rotX(-0.17f); box(1.1f, 0.02f, 0.05f); pop()                 // fascia
+        col = c(250, 250, 250); for (k in 0 until 3) at(-0.3f + k * 0.3f, 0.257f, 0.87f) { box(0.12f, 0.004f, 0.022f) }
+        col = c(255, 250, 230) * 2.0f; for (k in 0 until 6) at(-0.4f + k * 0.16f, 0.22f, 0.83f) { rotX(0.6f); box(0.05f, 0.012f, 0.03f) }
+        // glass end screens
+        for (sx in floatArrayOf(-0.505f, 0.505f)) {
+            col = c(150, 176, 200); flat(Vec3(sx, -0.27f, 0.1f), Vec3(sx, 0.24f, 0.1f), Vec3(sx, 0.24f, 0.2f), Vec3(sx, -0.27f, 0.82f))
+            col = steelC; tube(listOf(Vec3(sx, 0.24f, 0.2f), Vec3(sx, -0.27f, 0.82f)), 0.006f, 4)
+        }
+        // sponsor boards along the front
+        for (k in 0 until 4) {
+            val x = -0.375f + k * 0.25f
+            col = if (k % 2 == 0) board else seatA; at(x, 0.33f, 0.05f) { box(0.245f, 0.02f, 0.1f) }
+            col = c(250, 250, 250); at(x - 0.05f, 0.341f, 0.055f) { box(0.1f, 0.004f, 0.026f) }
+            at(x + 0.06f, 0.341f, 0.05f) { rotY((PI / 2).toFloat()); scale(1f, 1f, 0.2f); torus(0.022f, 0.006f, 12, 3) }
+        }
+        col = steelC; at(0f, 0.33f, 0.0f) { box(1.0f, 0.03f, 0.006f) }
     }.build()
 
     /** One row of spectators, to sit on a tier and be animated to cheer and do the wave. Each fan has shoulders and a shirt,

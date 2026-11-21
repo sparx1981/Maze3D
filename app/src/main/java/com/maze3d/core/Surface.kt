@@ -34,22 +34,31 @@ abstract class Surface(val name: String, val radius: Float) {
     }
 
     /** The floor under [p]: the base shape raised by [lift]. */
-    fun project(p: Vec3): Vec3 {
-        val q = baseProject(p)
-        val l = lift ?: return q
-        return q + baseNormal(q) * l.at(q)
-    }
+    fun project(p: Vec3): Vec3 = projectOf(p, false)
 
     /** Floor normal, tilted by the slope of [lift]. */
-    fun normal(p: Vec3): Vec3 {
+    fun normal(p: Vec3): Vec3 = normalOf(p, false)
+
+    /** Like [project], but a raised plateau (a turret) keeps its full height out past its cell edges: for the plateau's
+     *  own floor and the walls standing round it, which hide the sheer drop. */
+    fun projectSolid(p: Vec3): Vec3 = projectOf(p, true)
+    fun normalSolid(p: Vec3): Vec3 = normalOf(p, true)
+
+    private fun projectOf(p: Vec3, solid: Boolean): Vec3 {
+        val q = baseProject(p)
+        val l = lift ?: return q
+        return q + baseNormal(q) * l.at(q, solid)
+    }
+
+    private fun normalOf(p: Vec3, solid: Boolean): Vec3 {
         val l = lift ?: return baseNormal(p)
         val q = baseProject(p)
         val n0 = baseNormal(q)
         val a = if (abs(n0.y) < 0.9f) Vec3(0f, 1f, 0f) else Vec3(1f, 0f, 0f)
         val t1 = (a cross n0).normalized(); val t2 = n0 cross t1
         val e = l.step
-        val hx = (l.at(baseProject(q + t1 * e)) - l.at(baseProject(q - t1 * e))) / (2f * e)
-        val hy = (l.at(baseProject(q + t2 * e)) - l.at(baseProject(q - t2 * e))) / (2f * e)
+        val hx = (l.at(baseProject(q + t1 * e), solid) - l.at(baseProject(q - t1 * e), solid)) / (2f * e)
+        val hy = (l.at(baseProject(q + t2 * e), solid) - l.at(baseProject(q - t2 * e), solid)) / (2f * e)
         if (hx == 0f && hy == 0f) return n0
         return (n0 - t1 * hx - t2 * hy).normalized()
     }

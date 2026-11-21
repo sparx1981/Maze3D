@@ -74,11 +74,18 @@ object Landscape {
             if (cells.any { it in protect || it in taken || it in used }) continue
             if ((1..6).any { maze.links[cells[it]].size != 2 }) continue      // no side turnings off the raised part: one way up, one slide down
             if (cells.any { c -> used.any { (maze.centers[it] - maze.centers[c]).length() < cs * 3f } }) continue
+            // a run that folds back beside itself would share a wall between two heights
+            if ((0 until run).any { a -> (a + 2 until run).any { b -> (maze.centers[cells[a]] - maze.centers[cells[b]]).length() < cs * 1.2f } }) continue
             val pts = cells.map { maze.centers[it] }
+            val acc = FloatArray(run).also { for (k in 1 until run) it[k] = it[k - 1] + (pts[k] - pts[k - 1]).length() }
+            fun mid(k: Int) = (acc[k] + acc[k + 1]) * 0.5f
             val hgt = cs * 1.15f
-            val sTop0 = cs * 3.0f; val sTop1 = cs * 4.2f; val sEnd = cs * 6.7f
-            e.ridges.add(Elevation.Ridge(pts, cs * 0.55f, cs * 0.9f) { s -> hgt * Elevation.smooth((s - cs * 0.3f) / (sTop0 - cs * 0.3f)) * (1f - Elevation.smooth((s - sTop1) / (sEnd - sTop1))) })
-            turrets.add(Turret(cells, cells[3], intArrayOf(cells[5], cells[6]), hgt))
+            // ramp up over cells 0-3, cell 4 flat on top, slide down over cells 5-6 to the ground in cell 7
+            val s0 = acc[0] + (acc[1] - acc[0]) * 0.3f; val sTop0 = mid(3); val sTop1 = mid(4); val sEnd = acc[7] - (acc[7] - acc[6]) * 0.2f
+            val fence = cells.flatMap { block(it) }.toSet().filter { it !in cells }.map { Triple(maze.centers[it], maze.axisU[it], maze.axisV[it]) }
+            e.plateaus.add(Elevation.Plateau(pts, cells.map { maze.axisU[it] }, cells.map { maze.axisV[it] }, fence) { s ->
+                hgt * Elevation.smooth((s - s0) / (sTop0 - s0)) * (1f - Elevation.smooth((s - sTop1) / (sEnd - sTop1))) })
+            turrets.add(Turret(cells, cells[4], intArrayOf(cells[5], cells[6]), hgt))
             used.addAll(cells.toList())
         }
         return e to Castle(yards, turrets)

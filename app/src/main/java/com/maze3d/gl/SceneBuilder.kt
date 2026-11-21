@@ -17,6 +17,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     val wallHalfThickness = maze.wallHalfThickness
 
     private val yardCells by lazy { castle?.courtyards?.flatMap { it.toList() }?.toHashSet() ?: hashSetOf() }
+    private val turretCells by lazy { castle?.turrets?.flatMap { it.cells.toList() }?.toHashSet() ?: hashSetOf() }
     private val slideCells by lazy { castle?.turrets?.flatMap { it.slide.toList() }?.toHashSet() ?: hashSetOf() }
     /** Floor colour of a cell: castle courtyards are lawn and turret slides are polished planks (the stone shader picks these up by hue). */
     private fun cellFloor(c: Int): Vec3 = when (c) {
@@ -36,9 +37,10 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             for (a in 0..sub) for (b in 0..sub) {
                 val u = a / sub.toFloat(); val w = b / sub.toFloat()
                 val raw = p[0] * ((1 - u) * (1 - w)) + p[1] * (u * (1 - w)) + p[2] * (u * w) + p[3] * ((1 - u) * w)
-                val pt = surface.project(raw)
+                val raised = c in turretCells                 // turret floors stay level right out to their walls
+                val pt = if (raised) surface.projectSolid(raw) else surface.project(raw)
                 var d = 1e9f
-                for (e in wallEdges) d = min(d, distToSegment(pt, maze.mesh.vertices[maze.edgeA[e]], maze.mesh.vertices[maze.edgeB[e]]))
+                for (e in wallEdges) d = min(d, distToSegment(if (raised) raw else pt, maze.mesh.vertices[maze.edgeA[e]], maze.mesh.vertices[maze.edgeB[e]]))
                 d = max(0f, d - wallHalfThickness)
                 val ao = 1f - 0.7f * exp(-d / (cs * 0.2f))
                 var tile: Vec3? = null
@@ -46,7 +48,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 // glowing walls light the floor beside them
                 val tint = when (pal.themeId) { 17 -> (pal.wallTop ?: pal.wall) * 0.12f; 11 -> (pal.wallTop ?: pal.wall) * 0.20f; 9 -> pal.wall * 0.22f + (pal.wall2) * 0.08f; else -> Vec3.ZERO }
                 val lightOn = tint * exp(-d / (cs * 0.32f))
-                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), cellFloor(c) * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
+                base[a * (sub + 1) + b] = mb.vertex(pt, if (raised) surface.normalSolid(pt) else surface.normal(pt), cellFloor(c) * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
             }
             for (a in 0 until sub) for (b in 0 until sub) {
                 mb.quad(base[a * (sub + 1) + b], base[(a + 1) * (sub + 1) + b], base[(a + 1) * (sub + 1) + b + 1], base[a * (sub + 1) + b + 1])
@@ -127,6 +129,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val altEdge = hash(e + 9000) < 0.5f
             val c1 = wallColors(pal.wall); val c2 = if (pal.themeId == 9) wallColors(pal.wall2).first to Vec3(0.1f, 0.95f, 1.1f) * (1.05f * pal.glow) else wallColors(pal.wall2)
             addWall(mb, e, delay, prof, c1, c2, if (pal.stripes) 1 else if (altEdge && pal.wall2 !== pal.wall) 2 else 0, styled = true)
+            if (turretCells.isNotEmpty()) turretFace(mb, e, prof)
             if (pal.knobs) for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) if (bulbs.add(v)) bulb(mb, v, delay, if (hash(v + 77) < 0.5f) c1 else c2)
         }
         return mb
@@ -199,8 +202,11 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         // each wall differs by a hair in width and height so overlapping joints never share a coplanar surface (z-fight flicker)
         val t = wallHalfThickness * pd.ws * (1f + 0.014f * hash(e + 4242))
         val hgt = wallHeight * pd.hs * (1f + 0.007f * hash(e + 5151))
-        val a0 = maze.mesh.vertices[maze.edgeA[e]]
-        val b0 = maze.mesh.vertices[maze.edgeB[e]]
+        val raised = maze.edgeCellL[e] in turretCells || maze.edgeCellR[e] in turretCells     // stands on a turret's edge
+        val proj: (Vec3) -> Vec3 = if (raised) surface::projectSolid else surface::project
+        val nrmAt: (Vec3) -> Vec3 = if (raised) surface::normalSolid else surface::normal
+        val a0 = if (raised) proj(maze.mesh.vertices[maze.edgeA[e]]) else maze.mesh.vertices[maze.edgeA[e]]
+        val b0 = if (raised) proj(maze.mesh.vertices[maze.edgeB[e]]) else maze.mesh.vertices[maze.edgeB[e]]
         val dir = (b0 - a0).normalized()
         val ea = a0 - dir * wallHalfThickness
         val eb = b0 + dir * wallHalfThickness
@@ -220,12 +226,12 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         val seam = FloatArray(segs + 1)
         // the wall's mid normal guards against a bad normal at a vertex (closest-point lookups on the knot can latch onto the wrong strand)
         var nMid = (dir cross (maze.centers[maze.edgeCellR[e]] - maze.centers[maze.edgeCellL[e]])).normalized()       // from the mesh itself: never latches onto another strand
-        if ((nMid dot surface.normal(surface.project((a0 + b0) * 0.5f))) < 0f) nMid = -nMid
-        fun safeN(q: Vec3): Vec3 { val n = surface.normal(q); return if (kotlin.math.abs(n dot dir) > 0.3f || (n dot nMid) < 0.8f) nMid else n }
+        if ((nMid dot nrmAt(proj((a0 + b0) * 0.5f))) < 0f) nMid = -nMid
+        fun safeN(q: Vec3): Vec3 { val n = nrmAt(q); return if (kotlin.math.abs(n dot dir) > 0.3f || (n dot nMid) < 0.8f) nMid else n }
         val ringN = arrayOfNulls<Vec3>(segs + 1)
         for (r in 0..segs) {
             val f = r / segs.toFloat()
-            val p = if (f <= 0f) ea else if (f >= 1f) eb else surface.project(ea + (eb - ea) * f)
+            val p = if (f <= 0f) ea else if (f >= 1f) eb else proj(ea + (eb - ea) * f)
             val n = safeN(if (f <= 0f) a0 else if (f >= 1f) b0 else p)
             ringN[r] = n
             val side = (dir cross n).normalized()
@@ -335,6 +341,82 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 mb.vertex(basePos[r][k]!!, cn, col, liftV[r][k]!!, delay)
             }
             for (k in 1 until idx.size - 1) mb.tri(idx[0], idx[k], idx[k + 1])
+        }
+    }
+
+    /**
+     * The sheer outer face of a turret under one of its walls: coursed, staggered stone blocks with dark mortar, from the
+     * foot of the raised wall straight down to the ground of the corridor next door. Static, part of the ground.
+     */
+    private fun turretFace(mb: MeshBuilder, e: Int, pd: ProfileData) {
+        val cl = maze.edgeCellL[e]; val cr = maze.edgeCellR[e]
+        val inL = cl in turretCells; val inR = cr in turretCells
+        if (inL == inR) return
+        val inner = if (inL) cl else cr
+        val a0 = maze.mesh.vertices[maze.edgeA[e]]; val b0 = maze.mesh.vertices[maze.edgeB[e]]
+        val dir = (b0 - a0).normalized()
+        val off = wallHalfThickness * pd.ws * 1.12f                          // just outside the wall's own face
+        val len0 = (b0 - a0).length()
+        // sample the edge: ground point, normal, outward side and raised height
+        val n = 14
+        val gp = arrayOfNulls<Vec3>(n + 1); val gn = arrayOfNulls<Vec3>(n + 1); val hh = FloatArray(n + 1)
+        var outward = Vec3.ZERO
+        for (i in 0..n) {
+            val x = -off + (len0 + 2f * off) * i / n
+            val q = a0 + dir * x
+            val g = surface.project(q); val r = surface.projectSolid(q)
+            val nn = surface.baseNormal(g)
+            gp[i] = g; gn[i] = nn; hh[i] = ((r - g) dot nn)
+            if (i == n / 2) { outward = (dir cross nn).normalized(); if ((outward dot (maze.centers[inner] - g)) > 0f) outward = -outward }
+        }
+        if (hh.max() < cs * 0.02f) return
+        val top = wallHeight * 0.03f                                         // tuck up under the wall's foot
+        fun hAt(x: Float): Float { val f = ((x + off) / (len0 + 2f * off) * n).coerceIn(0f, n.toFloat()); val i = kotlin.math.floor(f).toInt().coerceAtMost(n - 1); val t = f - i; return hh[i] + (hh[i + 1] - hh[i]) * t }
+        fun at(x: Float, z: Float): Vec3 {
+            val f = ((x + off) / (len0 + 2f * off) * n).coerceIn(0f, n.toFloat()); val i = kotlin.math.floor(f).toInt().coerceAtMost(n - 1); val t = f - i
+            val g = gp[i]!! + (gp[i + 1]!! - gp[i]!!) * t; val nn = (gn[i]!! + (gn[i + 1]!! - gn[i]!!) * t).normalized()
+            return g + outward * off + nn * z
+        }
+        val x0 = -off; val x1 = len0 + off
+        // mortar backing, a hair behind the blocks
+        val mortar = pal.wall * 0.62f
+        val steps = 8
+        for (i in 0 until steps) {
+            val xa = x0 + (x1 - x0) * i / steps; val xb = x0 + (x1 - x0) * (i + 1) / steps
+            val ta = hAt(xa) - top; val tb = hAt(xb) - top
+            if (ta <= 0f && tb <= 0f) continue
+            val bk = -outward * (cs * 0.004f)
+            val v0 = mb.vertex(at(xa, -cs * 0.04f) + bk, outward, mortar); val v1 = mb.vertex(at(xb, -cs * 0.04f) + bk, outward, mortar)
+            val v2 = mb.vertex(at(xb, max(0f, tb)) + bk, outward, mortar); val v3 = mb.vertex(at(xa, max(0f, ta)) + bk, outward, mortar)
+            mb.quad(v0, v1, v2, v3)
+        }
+        // the blocks: courses of even height, each course's joints staggered half a block from the last
+        val course = cs * 0.125f; val block = cs * 0.27f; val gap = cs * 0.0045f
+        val hMax = hh.max()
+        var k = 0; var z = -cs * 0.04f
+        while (z < hMax) {
+            val zt = z + course
+            val stag = if (k % 2 == 0) 0f else block * 0.5f
+            var xs = x0 - stag
+            var j = 0
+            while (xs < x1) {
+                val xe = xs + block * (0.8f + 0.4f * hash(e * 131 + k * 17 + j))
+                val xa = max(xs, x0) + gap; val xb = minOf(xe, x1) - gap
+                if (xb > xa + gap) {
+                    val ca = hAt(xa) - top; val cb = hAt(xb) - top               // the wall foot caps the top course
+                    val za = z + gap
+                    val ta = minOf(zt - gap, ca); val tb = minOf(zt - gap, cb)
+                    if (ta > za || tb > za) {
+                        val tone = 0.82f + 0.24f * hash(e * 53 + k * 7 + j * 3) - 0.12f * (1f - z / max(hMax, 1e-4f)).coerceIn(0f, 1f)   // weathered darker low down
+                        val col = Vec3.lerp(pal.wall, pal.wall2, hash(e * 97 + k * 31 + j)) * tone
+                        val v0 = mb.vertex(at(xa, za), outward, col); val v1 = mb.vertex(at(xb, za), outward, col)
+                        val v2 = mb.vertex(at(xb, max(za, tb)), outward, col); val v3 = mb.vertex(at(xa, max(za, ta)), outward, col)
+                        mb.quad(v0, v1, v2, v3)
+                    }
+                }
+                xs = xe; j++
+            }
+            z = zt; k++
         }
     }
 
@@ -598,7 +680,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
 
     /** A moving prop (or moving part of one): [frame] maps prop units to local space (columns t1, t2, n scaled by size, then the origin). */
     class AnimInst(val spec: PropLibrary.AnimSpec?, val frame: FloatArray, val phase: Float, val delay: Float,
-                   val bird: PropLibrary.Bird? = null, val radius: Float = 0f, val height: Float = 0f, val dir: Float = 1f) {
+                   val bird: PropLibrary.Bird? = null, val radius: Float = 0f, val height: Float = 0f, val dir: Float = 1f, val wingPh: Float = 0f) {
         /** 0..1: how startled the prop is by the ball rolling past (decays over time). */
         var react = 0f
     }
@@ -818,18 +900,23 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             }
             for (t in cas.turrets) {
                 val i = t.cells.indexOf(t.top)
+                val prev = maze.centers[t.cells[i - 1]]; val next = maze.centers[t.cells[i + 1]]
+                // up on the battlements at the top cell's corners: the flag flies from the corner furthest from the way in
+                // and out, torches burn on the next two
+                val corners = (0..3).map { maze.mesh.vertices[maze.mesh.cellVertex(t.top, it)] }
+                val order = corners.indices.sortedByDescending { k -> (corners[k] - prev).length() + (corners[k] - next).length() + 0.02f * cs * hash(t.top * 4 + k) }
+                val wallTop = wallHeight * profileData(pal.profile).hs * 0.94f        // set a little into the stone
                 val c0 = maze.centers[t.top]
-                val n = surface.normal(c0)
-                fun dirTo(c: Int) = (maze.centers[c] - c0).let { it - n * (it dot n) }.normalized()
-                val t2 = dirTo(t.cells[i - 1]); val t1 = t2 cross n
-                val nd = dirTo(t.cells[i + 1])
-                val gapNext = kotlin.math.atan2(nd dot t2, nd dot t1)
-                placed.add(Placed(PropLibrary.turretCrown(listOf((PI / 2).toFloat(), gapNext)), c0, n, t2, cs, 0.2f))
-                val gaps = listOf((PI / 2).toFloat(), gapNext)
-                val fa = PropLibrary.turretFlagAngle(gaps)
-                anims.add(AnimInst(PropLibrary.flagSpec(PropLibrary.turretPennant, 0.3f, listOf(Vec3(cos(fa) * 0.6f + 0.012f, sin(fa) * 0.6f, 0.8f)), 0.1f, 1.5f, 1.3f),
-                    frameOf(c0, n, t2, cs), hash(t.top + 31) * 6.28f, 0.2f))
-                addLamp(c0 + n * (cs * 0.6f), Vec3(1f, 0.55f, 0.2f), 2.5f)
+                fun onTop(k: Int): Pair<Vec3, Vec3> { val q = surface.projectSolid(corners[k]); val nq = surface.baseNormal(q); return (q + nq * wallTop) to nq }
+                val (fp, fn) = onTop(order[0])
+                val ft = (fp - c0).let { it - fn * (it dot fn) }.normalized()            // the pennant streams out away from the tower
+                placed.add(Placed(PropLibrary.turretPole, fp, fn, ft, cs, 0.2f))
+                anims.add(AnimInst(PropLibrary.flagSpec(PropLibrary.turretPennant, 0.3f, listOf(Vec3(0.014f, 0f, 0.56f)), 0.1f, 1.5f, 1.3f),
+                    frameOf(fp, fn, ft, cs), hash(t.top + 31) * 6.28f, 0.2f))
+                for (k in order.subList(1, 3)) {
+                    val (tp, tn) = onTop(k)
+                    placed.add(Placed(PropLibrary.turretTorch, tp, tn, (tp - c0).let { it - tn * (it dot tn) }.normalized(), cs, 0.2f))
+                }
             }
         }
         // 3. landmarks floating around the shape
@@ -859,12 +946,25 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             }
         }
         // 4. a few birds (or butterflies, drones...) circling over the maze
+        // flocks: more of them on bigger shapes, flying in little groups (butterflies in pairs) that keep formation
+        var flyers = 0
         for ((fi, bd) in listOfNotNull(lib.bird, lib.birds2, lib.birds3).withIndex()) {
-            for (k0 in 0 until bd.count) { val k = k0 + fi * 50
+            val total = minOf(16, Math.round(bd.count * 1.8f * capK))
+            var made = 0; var g = 0
+            while (made < total && flyers < 36) {
+                val k = g + fi * 50
+                val size = minOf(total - made, if (bd.flap >= 12f) 2 else 1 + (hash(k * 13 + 5) * 3f).toInt())
                 val c = (hash(k * 977 + 31) * maze.cellCount).toInt().coerceIn(0, maze.cellCount - 1)
                 val ctr = maze.centers[c]; val n = surface.normal(ctr)
-                anims.add(AnimInst(null, frameOf(ctr, n, tangent(n, hash(k + 61)), cs), hash(k + 3) * 6.2831853f, 0.6f, bd,
-                    radius = 1.6f + 2.4f * hash(k + 17), height = bd.height * (0.8f + 0.5f * hash(k + 29)), dir = if (hash(k + 41) < 0.5f) -1f else 1f))
+                val frame = frameOf(ctr, n, tangent(n, hash(k + 61)), cs)
+                val radius = 1.6f + 2.4f * hash(k + 17); val h = bd.height * (0.8f + 0.5f * hash(k + 29))
+                val dir = if (hash(k + 41) < 0.5f) -1f else 1f; val ph0 = hash(k + 3) * 6.2831853f
+                for (m in 0 until size) {
+                    // followers trail a little behind and to either side in height, each beating its wings in its own time
+                    val lag = m * (0.32f / radius) * (if (m % 2 == 0) 1f else 1.25f)
+                    anims.add(AnimInst(null, frame, ph0 - dir * lag, 0.6f, bd, radius = radius, height = h + (if (m % 2 == 1) 0.22f else -0.18f) * m.coerceAtMost(1), dir = dir, wingPh = 1.7f * m))
+                }
+                made += size; flyers += size; g++
             }
         }
     }

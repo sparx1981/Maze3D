@@ -40,11 +40,24 @@ class LandscapeTest {
                 mb.step(d.normalized() * 3.2f, 1f / 60f); time += 1f / 60f
                 maxH = maxOf(maxH, el.at(mb.surface.baseProject(mb.position)))
                 if (mb.cell == t.cells[k]) k++
+                assertTrue("marble stayed inside the turret walls (cell ${mb.cell})", mb.cell in t.cells)
                 if (mb.cell in t.slide) topSpeed = maxOf(topSpeed, mb.velocity.length() / m.cellSize)
             }
             println("turret: reached ${k}/${t.cells.size} cells in ${"%.1f".format(time)} s, peak height ${"%.2f".format(maxH / m.cellSize)} cells, slide speed ${"%.1f".format(topSpeed)} cells/s")
             assertTrue("marble got over the turret", k == t.cells.size)
             assertTrue("marble went up onto the turret top", maxH > t.height * 0.8f)
+        }
+        // the corridors beside a turret stay on the ground: the drop is hidden under the turret's walls
+        val runCells = castle.turrets.flatMap { it.cells.toList() }.toSet()
+        for (c in 0 until m.cellCount) {
+            if (c in runCells) continue
+            // the same corner-blended points the floor mesh is built from
+            val v = (0..3).map { m.mesh.vertices[m.mesh.cellVertex(c, it)] }
+            for (a in 0..4) for (b in 0..4) {
+                val u = a / 4f; val w = b / 4f
+                val p = m.mesh.surface.baseProject(v[0] * ((1 - u) * (1 - w)) + v[1] * (u * (1 - w)) + v[2] * (u * w) + v[3] * ((1 - u) * w))
+                assertTrue("cell $c next to a turret is not raised (${el.at(p) / m.cellSize})", el.at(p) < m.cellSize * 0.005f)
+            }
         }
     }
 
