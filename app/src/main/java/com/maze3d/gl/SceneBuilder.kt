@@ -604,7 +604,7 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     /** Records the animation of a placed prop; returns true when the whole prop moves (so it is left out of the static mesh). */
     private fun animate(lib: PropLibrary.ThemeProps, mesh: PropMesh, pos: Vec3, n: Vec3, t2: Vec3, size: Float, delay: Float, seed: Int): Boolean {
         val spec = lib.anims[mesh] ?: return false
-        if (anims.size >= 140) return false                              // keep the number of moving props (draw calls) in check
+        if (anims.size >= (140 * capK).toInt()) return false                              // keep the number of moving props (draw calls) in check
         anims.add(AnimInst(spec, frameOf(pos, n, t2, size), hash(seed + 7101) * 6.2831853f, delay))
         return spec.whole
     }
@@ -675,12 +675,12 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         for (c in intArrayOf(maze.start, maze.goal)) for (k in 0..3) special.add(maze.mesh.cellVertex(c, k))
         val sizeJ = wallHalfThickness * 9f
         var junctions = 0
-        for (e in 0 until maze.edgeCount) {
+        for (e in shuffled(maze.edgeCount, 11)) {
             if (!maze.isWall(e)) continue
             for (v in intArrayOf(maze.edgeA[e], maze.edgeB[e])) {
                 if (!seen.add(v)) continue
                 if (!(v in special) && hash(v + 311) > lib.junctionShare) continue
-                if (junctions > (if (lib.junctionShare > 0.3f) 160 else 70)) continue
+                if (v !in special && junctions > ((if (lib.junctionShare > 0.3f) 160 else 70) * capK).toInt()) continue
                 val p = maze.mesh.vertices[v]
                 val n = surface.normal(p)
                 val dl = maze.depthFromStart[maze.edgeCellL[e]].toFloat() / maze.maxDepth
@@ -697,9 +697,9 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         }
         // 2. dead ends: an object standing at the closed end of the passage
         var deads = 0
-        for (c in 0 until maze.cellCount) {
+        for (c in shuffled(maze.cellCount, 23)) {
             if (maze.links[c].size != 1 || c == maze.start || c == maze.goal) continue
-            if (hash(c + 977) > 0.7f || deads >= 26) continue
+            if (hash(c + 977) > 0.7f || deads >= (26 * capK).toInt()) continue
             val centre = maze.centers[c]
             val toward = (maze.centers[maze.links[c][0]] - centre).normalized()
             val n = surface.normal(centre)
@@ -719,8 +719,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         // 2b. undergrowth: small plants tucked against the foot of the walls (jungle)
         if (lib.floor.isNotEmpty()) {
             var n = 0
-            for (c in 0 until maze.cellCount) {
-                if (c == maze.start || c == maze.goal || hash(c + 4242) > 0.7f || n > (240 * wallDetail).toInt()) continue
+            for (c in shuffled(maze.cellCount, 37)) {
+                if (c == maze.start || c == maze.goal || hash(c + 4242) > 0.7f || n > (240 * wallDetail * capK).toInt()) continue
                 val walls = (0..3).map { maze.cellEdges[c * 4 + it] }.filter { maze.isWall(it) }
                 if (walls.isEmpty()) continue
                 val e = walls[(hash(c + 77) * walls.size).toInt().coerceAtMost(walls.size - 1)]
@@ -736,8 +736,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         // 2c. motorsport: sponsor boards propped against some barriers
         if (pal.themeId == 2) {
             var nb = 0
-            for (e in 0 until maze.edgeCount) {
-                if (!maze.isWall(e) || hash(e + 6011) > 0.1f || nb > 40) continue
+            for (e in shuffled(maze.edgeCount, 41)) {
+                if (!maze.isWall(e) || hash(e + 6011) > 0.1f || nb > (40 * capK).toInt()) continue
                 val a0 = maze.mesh.vertices[maze.edgeA[e]]; val b0 = maze.mesh.vertices[maze.edgeB[e]]
                 val mid = surface.project((a0 + b0) * 0.5f)
                 val n = surface.normal(mid)
@@ -753,8 +753,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             val bridges = listOf(PropLibrary.tyreArch(), PropLibrary.brandArch(), PropLibrary.startGantry())
             val used = ArrayList<Vec3>()
             var nb = 0
-            for (c in maze.solution.toList() + (0 until maze.cellCount).toList()) {
-                if (nb >= 12) break
+            for (c in maze.solution.toList() + shuffled(maze.cellCount, 53).toList()) {
+                if (nb >= (12 * capK).toInt()) break
                 if (c == maze.start || c == maze.goal || maze.links[c].size != 2 || hash(c + 8123) > 0.35f) continue
                 val p0 = maze.centers[c]
                 val a = maze.centers[maze.links[c][0]]; val b = maze.centers[maze.links[c][1]]
@@ -773,8 +773,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         if (pal.themeId == 9) {
             val used = ArrayList<Vec3>()
             var nb = 0
-            for (c in maze.solution.toList() + (0 until maze.cellCount).toList()) {
-                if (nb >= 10) break
+            for (c in maze.solution.toList() + shuffled(maze.cellCount, 59).toList()) {
+                if (nb >= (10 * capK).toInt()) break
                 if (c == maze.start || c == maze.goal || maze.links[c].size != 2 || hash(c + 9311) > 0.4f) continue
                 val p0 = maze.centers[c]
                 val a = maze.centers[maze.links[c][0]]; val b = maze.centers[maze.links[c][1]]
@@ -902,6 +902,16 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
         }
         return mb
     }
+
+    /** 0 until n in a repeatable shuffled order, so a cap on how many props are placed thins them evenly over the whole shape. */
+    private fun shuffled(n: Int, salt: Int): IntArray {
+        val a = IntArray(n) { it }
+        for (i in n - 1 downTo 1) { val j = (hash(i * 7919 + salt) * (i + 1)).toInt().coerceAtMost(i); val t = a[i]; a[i] = a[j]; a[j] = t }
+        return a
+    }
+
+    /** Bigger mazes get proportionally more props (and moving props) so the density stays similar. */
+    private val capK get() = (maze.cellCount / 1500f).coerceIn(1f, 1.5f)
 
     private fun hash(i: Int): Float {
         var h = i * 374761393 + 668265263
