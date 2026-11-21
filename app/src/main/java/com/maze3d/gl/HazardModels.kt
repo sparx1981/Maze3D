@@ -162,4 +162,42 @@ object HazardModels {
         col = c(40, 40, 46)
         for (s in intArrayOf(-1, 1)) { push(); translate(0f, s * 0.265f, 0.085f); box(0.96f, 0.025f, 0.05f); pop() }
     }.build()
+
+    // ---- castle drawbridge (frame units: x along the path, y across, z up; one unit = one cell)
+    /** Hinge of the drawbridge: on the far side of the moat. */
+    const val DRAW_HINGE = 0.46f
+    /** The bridge deck, hinged at the origin and lying along -x when lowered: oak planks on two iron-bound beams. */
+    fun drawbridgeDeck() = PM().apply {
+        val len = 0.92f
+        for (k in 0 until 7) { col = if (k % 2 == 0) c(120, 84, 52) else c(104, 72, 44)
+            at(-len * (k + 0.5f) / 7f, 0f, 0.015f) { box(len / 7f * 0.94f, 0.82f, 0.03f) } }
+        col = c(70, 50, 34); for (sy in floatArrayOf(-0.3f, 0.3f)) at(-len / 2f, sy, -0.012f) { box(len, 0.06f, 0.035f) }
+        col = c(60, 62, 68); for (sy in floatArrayOf(-0.3f, 0.3f)) for (x in floatArrayOf(-0.08f, -0.84f)) at(x, sy, 0.0f) { box(0.05f, 0.08f, 0.05f) }
+        col = c(130, 132, 140); for (sy in floatArrayOf(-0.4f, 0.4f)) at(-len + 0.03f, sy, 0.03f) { torus(0.025f, 0.006f, 10, 4) }   // chain rings
+    }.build()
+
+    /** Gatehouse over the far bank: two crenellated towers on the walls, an arch over the way through, a raised portcullis
+     *  and a pair of torches. Its back is at +x; the bridge hinges at its front (x = [DRAW_HINGE]). */
+    fun gatehouse() = PM().apply {
+        val stone = c(150, 144, 132); val dark = c(118, 112, 102)
+        for (sy in floatArrayOf(-0.62f, 0.62f)) {
+            col = stone; at(DRAW_HINGE + 0.2f, sy, 0.6f) { box(0.36f, 0.3f, 1.2f) }
+            for (k in 0 until 4) { col = if (k % 2 == 0) stone else dark
+                val a = k * 1.5708f; at(DRAW_HINGE + 0.2f + cos(a) * 0.12f, sy + sin(a) * 0.1f, 1.27f) { box(0.1f, 0.09f, 0.14f) } }
+            col = c(30, 26, 24); at(DRAW_HINGE + 0.01f, sy, 0.8f) { box(0.012f, 0.03f, 0.14f) }                         // arrow slit
+            col = c(60, 44, 30); at(DRAW_HINGE + 0.0f, sy * 0.78f, 0.5f) { rotY(1.2f); cylinder(0.012f, 0.1f, 5) }
+            col = c(255, 140, 40) * 2.4f; at(DRAW_HINGE - 0.08f, sy * 0.78f, 0.58f) { scale(1f, 1f, 1.6f); sphere(0.024f, 8, 6) }
+        }
+        col = stone; at(DRAW_HINGE + 0.2f, 0f, 1.0f) { box(0.36f, 0.95f, 0.26f) }                                      // lintel
+        for (k in 0 until 5) { col = if (k % 2 == 0) stone else dark; at(DRAW_HINGE + 0.2f, -0.36f + k * 0.18f, 1.18f) { box(0.12f, 0.1f, 0.12f) } }
+        col = c(70, 72, 78); for (k in 0 until 7) at(DRAW_HINGE + 0.06f, -0.36f + k * 0.12f, 0.9f) { box(0.02f, 0.02f, 0.18f) }   // portcullis, raised
+        at(DRAW_HINGE + 0.06f, 0f, 0.82f) { box(0.02f, 0.78f, 0.02f) }
+        col = c(50, 50, 56); for (sy in floatArrayOf(-0.4f, 0.4f)) tube(listOf(Vec3(DRAW_HINGE + 0.02f, sy, 0.86f), Vec3(DRAW_HINGE - 0.3f, sy, 0.5f)), 0.006f, 4)   // chains
+    }.build()
+
+    /** Dark green moat water filling the pit, with a few lily pads. */
+    fun moatWater() = PM().apply {
+        col = c(30, 62, 58); at(0f, 0f, -0.16f) { box(0.98f, 1.0f, 0.01f) }
+        col = c(60, 120, 60); for (k in 0 until 3) at(-0.25f + k * 0.22f, (k - 1) * 0.25f, -0.152f) { cylinder(0.05f, 0.004f, 10) }
+    }.build()
 }

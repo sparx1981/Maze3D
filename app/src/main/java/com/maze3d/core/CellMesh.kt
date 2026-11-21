@@ -8,6 +8,9 @@ import kotlin.math.tan
 /** A quad-cell tiling of a closed surface. Cells are 4 vertex indices in cyclic order. */
 class CellMesh(val surface: Surface, val vertices: List<Vec3>, val cells: IntArray) {
     val cellCount get() = cells.size / 4
+
+    /** Moves every corner onto the raised floor once the surface has a [Surface.lift]. */
+    fun liftVertices() { val v = vertices as MutableList<Vec3>; for (i in v.indices) v[i] = surface.project(v[i]) }
     fun cellVertex(cell: Int, k: Int) = cells[cell * 4 + k]
 
     companion object {

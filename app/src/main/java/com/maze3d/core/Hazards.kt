@@ -8,7 +8,8 @@ import kotlin.math.sin
  * Per-level moving hazards: sliding doors on open passages and floor holes that open and close.
  * The timing formulas are mirrored in the shaders (SCENE_VS for doors, HOLE_FS for holes).
  */
-class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false, fxRnd: Random? = null, fxKinds: List<Int>? = null, fxWant: Int = -1) {
+class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles: Boolean, withBridges: Boolean = false, withHammers: Boolean = false, scale: Float = 1f, withSwings: Boolean = false, fxRnd: Random? = null, fxKinds: List<Int>? = null, fxWant: Int = -1,
+              avoid: Set<Int> = emptySet(), drawRnd: Random? = null) {
     val doorEdges: IntArray
     val doorPhase: FloatArray
     val holeCells: IntArray
@@ -28,6 +29,10 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     val swingDir: Array<Vec3>
     val swingPhase: FloatArray
     private val swingIndex = IntArray(maze.cellCount) { -1 }
+    /** Castle drawbridges over moats cut across straight stretches of the route; they raise and lower on a timer. */
+    val drawCells: IntArray
+    val drawDir: Array<Vec3>
+    val drawPhase: FloatArray
     /** Floor effects: spring pads, oil slicks, conveyor belts, crushers, paddle sweepers and seesaws (kinds FX_*). */
     val fxKind: IntArray
     val fxCell: IntArray
@@ -37,7 +42,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     val holeRadius = maze.cellSize * 0.40f
 
     init {
-        val protectedCells = HashSet<Int>()
+        val protectedCells = HashSet<Int>(avoid)                  // e.g. castle turrets and courtyards: no hazards on them
         for (c in listOf(maze.start, maze.goal)) {
             protectedCells.add(c)
             for (o in maze.links[c]) protectedCells.add(o)
@@ -132,12 +137,34 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         swingPhase = FloatArray(sks.size) { rnd.nextFloat() }
         swingCells.forEachIndexed { i, c -> swingIndex[c] = i }
 
+        // drawbridges: like swings they need three straight corridor cells; the moat is cut across the middle one
+        val dks = ArrayList<Int>()
+        if (drawRnd != null) {
+            val spots = ArrayList<Int>()
+            for (k in 2 until path.size - 2) {
+                val tri = listOf(path[k - 1], path[k], path[k + 1])
+                if (tri.any { it in taken || maze.links[it].size != 2 } || holes.any { h -> tri.any { (maze.centers[h] - maze.centers[it]).length() < maze.cellSize * 3f } }) continue
+                val a = maze.centers[path[k - 1]]; val c = maze.centers[path[k]]; val b = maze.centers[path[k + 1]]
+                if (((c - a).normalized() dot (b - c).normalized()) > 0.97f) spots.add(k)
+            }
+            val want = ((maze.cellCount / 160f) * scale).toInt().coerceIn(2, 4)
+            for (k in spots.shuffled(drawRnd)) {
+                if (dks.size >= want) break
+                if (used.any { kotlin.math.abs(it - k) < 5 } || dks.any { kotlin.math.abs(it - k) < 8 }) continue
+                dks.add(k); used.add(k)
+            }
+        }
+        drawCells = IntArray(dks.size) { path[dks[it]] }
+        drawDir = Array(dks.size) { dirAt(dks[it]) }
+        drawPhase = FloatArray(dks.size) { (drawRnd ?: rnd).nextFloat() }
+
         val fk = ArrayList<Int>(); val fc = ArrayList<Int>(); val fd = ArrayList<Vec3>()
         if (fxRnd != null) {
             val busy = ArrayList<Vec3>()
             for (c in taken) busy.add(maze.centers[c])
             for (c in bridgeCells) busy.add(maze.centers[c]); for (c in hammerCells) busy.add(maze.centers[c])
             for (c in swingCells) { busy.add(maze.centers[c]); for (o in maze.links[c]) busy.add(maze.centers[o]) }
+            for (c in drawCells) { busy.add(maze.centers[c]); for (o in maze.links[c]) busy.add(maze.centers[o]) }
             val want = if (fxWant > 0) fxWant else ((maze.cellCount / 55f) * scale).toInt().coerceIn(3, 9)
             val placed = ArrayList<Vec3>()
             val order = ArrayList<Int>().apply { repeat(if (fxKinds != null) 14 else 2) { addAll((fxKinds ?: (0 until FX_KINDS).toList()).shuffled(fxRnd)) } }
@@ -183,6 +210,18 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
     fun seesawAngle(i: Int, t: Float) = SEESAW_MAX * sin(fxPh(i, SEESAW_W, t))
 
     val hasSwings get() = swingCells.isNotEmpty()
+    val hasDrawbridges get() = drawCells.isNotEmpty()
+    /** 1 = drawbridge [i] lowered across the moat, 0 = fully raised. Down most of the time, with a short raise and pause. */
+    fun drawDown(i: Int, t: Float): Float {
+        val p = ((t / DRAW_PERIOD + drawPhase[i]) % 1f + 1f) % 1f
+        return when {
+            p < 0.55f -> 1f
+            p < 0.66f -> 1f - smooth(0f, 1f, (p - 0.55f) / 0.11f)
+            p < 0.84f -> 0f
+            p < 0.95f -> smooth(0f, 1f, (p - 0.84f) / 0.11f)
+            else -> 1f
+        }
+    }
     fun swingAt(cell: Int) = swingIndex[cell]
     /** Platform position along the corridor in cells, 0 = centre of the pit. */
     fun swingX(i: Int, t: Float) = SWING_AMP * sin(SWING_W * t + swingPhase[i] * 2 * PI.toFloat())
@@ -230,6 +269,7 @@ class Hazards(private val maze: Maze, rnd: Random, withDoors: Boolean, withHoles
         const val HAMMER_W = 1.7f; const val HAMMER_MAX = 1.2f
         const val FX_BUMPER = 0; const val FX_OIL = 1; const val FX_CONVEYOR = 2; const val FX_CRUSHER = 3; const val FX_SWEEPER = 4; const val FX_SEESAW = 5; const val FX_KINDS = 6
         const val CRUSH_W = 1.9f; const val SWEEP_W = 1.35f; const val SWEEP_REACH = 0.44f; const val SEESAW_W = 1.0f; const val SEESAW_MAX = 0.22f
+        const val DRAW_PERIOD = 7f; const val MOAT_HALF = 0.4f
         const val SWING_AMP = 0.5f; const val SWING_W = 0.9f; const val SWING_HALF = 0.5f; const val SWING_HALFPIT = 0.5f
         private fun smooth(a: Float, b: Float, x: Float): Float {
             val t = ((x - a) / (b - a)).coerceIn(0f, 1f)

@@ -192,4 +192,18 @@ class Maze(val mesh: CellMesh, seed: Long) {
     }
 
     fun isWall(edge: Int) = !open[edge]
+
+    /** Raises corners and cell centres onto the floor after the surface was given hills or ramps. */
+    fun applyLift() {
+        mesh.liftVertices()
+        for (c in centers.indices) centers[c] = mesh.surface.project(centers[c])
+    }
+
+    /** Knocks down the wall [edge] (courtyards); both cells become linked. */
+    fun openEdge(edge: Int) {
+        if (open[edge]) return
+        open[edge] = true
+        val a = edgeCellL[edge]; val b = edgeCellR[edge]
+        links[a] = links[a] + b; links[b] = links[b] + a
+    }
 }

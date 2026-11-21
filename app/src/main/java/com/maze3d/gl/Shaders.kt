@@ -530,9 +530,24 @@ void main() {
     } else if (uMat == 21) {    // carved stone: weathered blocks
         float n1 = vnoise3(P * 55.9 + vec3(7.27, 9.89, 7.07));
         float n2 = vnoise3(P * 346.9 + vec3(1.58, 2.06, 3.78));
-        albedo *= 0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5);
-        hgt = (n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003;
+        float lawn = smoothstep(0.08, 0.2, vCol.g - vCol.r);                // castle courtyards: grass
+        float plank = smoothstep(0.12, 0.26, vCol.r - vCol.b) * (1.0 - lawn); // turret slides: polished boards
+        albedo *= mix(0.62 + 0.55 * n1 + 0.18 * (n2 - 0.5), 1.0, max(lawn, plank));
+        hgt = ((n1 - 0.5) * 0.0008 + (n2 - 0.5) * 0.0003) * (1.0 - max(lawn, plank));
         rough = 0.86;
+        if (lawn > 0.0) {
+            float blade = vnoise3(P * 900.0); float clump = vnoise3(P * 60.0 + 4.0);
+            albedo = mix(albedo, albedo * (0.6 + 0.6 * blade) * (0.8 + 0.4 * clump), lawn);
+            hgt += (blade - 0.5) * 0.0005 * lawn;
+        }
+        if (plank > 0.0) {
+            vec3 an = abs(normalize(vNL));
+            vec2 sq = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);
+            float board = fract(sq.x * 90.0); float bid = floor(sq.x * 90.0);
+            float grain = vnoise3(vec3(sq.x * 90.0, sq.y * 6.0, bid));
+            albedo = mix(albedo, albedo * (0.8 + 0.3 * hash11(bid)) * (0.85 + 0.25 * grain) * (1.0 - 0.45 * smoothstep(0.92, 1.0, board)), plank);
+            rough = mix(rough, 0.25, plank); coat = max(coat, plank * 0.7);   // waxed smooth
+        }
         if (uHiero > 0.5) {
             vec3 an = abs(normalize(vNL));
             vec2 sq = (an.x >= an.y && an.x >= an.z) ? P.yz : (an.y >= an.z ? P.xz : P.xy);

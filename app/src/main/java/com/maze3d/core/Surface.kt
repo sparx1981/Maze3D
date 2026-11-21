@@ -14,18 +14,44 @@ abstract class Surface(val name: String, val radius: Float) {
     /** Closest point of the core to [p]. */
     abstract fun core(p: Vec3): Vec3
 
-    fun project(p: Vec3): Vec3 {
+    /** Optional height of the floor above the base shape (hills, ramps), given a point on the base shape. */
+    var lift: Elevation? = null
+
+    /** Closest point on the base shape, ignoring any [lift]. */
+    fun baseProject(p: Vec3): Vec3 {
         val c = core(p)
         var d = p - c
         if (d.lengthSq() < 1e-12f) d = fallbackDir(c)
         return c + d.normalized() * radius
     }
 
-    fun normal(p: Vec3): Vec3 {
+    /** Normal of the base shape, ignoring any [lift] (the direction 'down' points against on hills). */
+    fun baseNormal(p: Vec3): Vec3 {
         val c = core(p)
         var d = p - c
         if (d.lengthSq() < 1e-12f) d = fallbackDir(c)
         return d.normalized()
+    }
+
+    /** The floor under [p]: the base shape raised by [lift]. */
+    fun project(p: Vec3): Vec3 {
+        val q = baseProject(p)
+        val l = lift ?: return q
+        return q + baseNormal(q) * l.at(q)
+    }
+
+    /** Floor normal, tilted by the slope of [lift]. */
+    fun normal(p: Vec3): Vec3 {
+        val l = lift ?: return baseNormal(p)
+        val q = baseProject(p)
+        val n0 = baseNormal(q)
+        val a = if (abs(n0.y) < 0.9f) Vec3(0f, 1f, 0f) else Vec3(1f, 0f, 0f)
+        val t1 = (a cross n0).normalized(); val t2 = n0 cross t1
+        val e = l.step
+        val hx = (l.at(baseProject(q + t1 * e)) - l.at(baseProject(q - t1 * e))) / (2f * e)
+        val hy = (l.at(baseProject(q + t2 * e)) - l.at(baseProject(q - t2 * e))) / (2f * e)
+        if (hx == 0f && hy == 0f) return n0
+        return (n0 - t1 * hx - t2 * hy).normalized()
     }
 
     protected open fun fallbackDir(c: Vec3) = Vec3(0f, 1f, 0f)

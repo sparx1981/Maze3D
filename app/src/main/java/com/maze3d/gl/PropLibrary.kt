@@ -441,6 +441,76 @@ object PropLibrary {
         return Bird(body, fin(1f), fin(-1f), 5, 0.75f, 2.4f, 0f, glide = true)
     }
 
+    // ---------------------------------------------------------------- castle grounds
+    /** A broad oak for the courtyard lawns: gnarled trunk, spreading boughs and clumped leafy crown. */
+    fun oakTree() = PM().apply {
+        val bark = c(92, 70, 50); val leaf = c(70, 118, 48); val leaf2 = c(96, 140, 60)
+        col = bark
+        tube(listOf(Vec3(0f, 0f, 0f), Vec3(0.02f, 0f, 0.25f), Vec3(-0.01f, 0.02f, 0.45f)), 0.07f, 10, taper = { 1f - 0.35f * it })
+        for (r in 0 until 4) { val a = r * 1.57f + 0.4f
+            tube(listOf(Vec3(0f, 0f, 0.02f), Vec3(cos(a) * 0.09f, sin(a) * 0.09f, 0.0f)), 0.025f, 6) }
+        for (b in 0 until 4) { val a = b * 1.6f + 0.3f
+            tube(listOf(Vec3(0f, 0f, 0.4f), Vec3(cos(a) * 0.12f, sin(a) * 0.12f, 0.52f), Vec3(cos(a) * 0.22f, sin(a) * 0.22f, 0.6f)), 0.03f, 6, taper = { 1f - 0.6f * it }) }
+        for (k in 0 until 9) { val a = k * 2.4f; val r = if (k == 0) 0f else 0.16f + 0.06f * (k % 3)
+            col = if (k % 2 == 0) leaf else leaf2
+            at(cos(a) * r, sin(a) * r, 0.66f + 0.08f * (k % 3) + (if (k == 0) 0.12f else 0f)) { scale(1f, 1f, 0.8f); sphere(0.15f + 0.03f * (k % 2), 12, 8) } }
+    }.build()
+
+    /** A clump of long grass. */
+    fun grassTuft() = PM().apply {
+        for (k in 0 until 9) { val a = k * 0.7f; val l = 0.16f + 0.08f * ((k * 7) % 3)
+            col = if (k % 2 == 0) c(80, 130, 50) else c(110, 150, 60)
+            val b = Vec3(cos(a) * 0.02f, sin(a) * 0.02f, 0f); val tip = Vec3(cos(a) * 0.08f, sin(a) * 0.08f, l)
+            val side = Vec3(-sin(a), cos(a), 0f) * 0.012f
+            flat(b - side, b + side, tip, tip) }
+    }.build()
+
+    /** A few wild flowers on short stems. */
+    fun flowerPatch() = PM().apply {
+        val heads = listOf(c(240, 230, 90), c(240, 240, 250), c(200, 90, 200), c(230, 80, 70))
+        for (k in 0 until 5) { val a = k * 1.3f; val r = 0.05f + 0.03f * (k % 2); val h = 0.1f + 0.04f * (k % 3)
+            col = c(70, 120, 50); tube(listOf(Vec3(cos(a) * r, sin(a) * r, 0f), Vec3(cos(a) * r, sin(a) * r, h)), 0.006f, 4)
+            col = heads[k % heads.size]; at(cos(a) * r, sin(a) * r, h) { scale(1f, 1f, 0.5f); sphere(0.025f, 8, 4) } }
+        grassTuftInto(this)
+    }.build()
+    private fun grassTuftInto(pm: PM) = pm.apply { for (k in 0 until 4) { val a = k * 1.6f; col = c(90, 140, 55)
+        val b = Vec3(cos(a) * 0.03f, sin(a) * 0.03f, 0f); val tip = Vec3(cos(a) * 0.07f, sin(a) * 0.07f, 0.12f); val side = Vec3(-sin(a), cos(a), 0f) * 0.01f
+        flat(b - side, b + side, tip, tip) } }
+
+    /** Stone well with a little tiled roof and a bucket. */
+    fun well() = PM().apply {
+        col = c(150, 144, 132); lathe(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.3f, 0f), floatArrayOf(0.3f, 0.32f), floatArrayOf(0.24f, 0.32f), floatArrayOf(0.24f, 0.05f), floatArrayOf(0f, 0.05f)), 18, false)
+        col = c(30, 50, 70); at(z = 0.2f) { cylinder(0.24f, 0.01f, 18) }
+        col = c(110, 80, 50); for (sy in floatArrayOf(-0.26f, 0.26f)) at(0f, sy, 0.3f) { box(0.05f, 0.05f, 0.5f) }
+        at(z = 0.6f) { rotX((PI / 2).toFloat()); cylinder(0.025f, 0.56f, 8) }
+        col = c(140, 60, 40); for (s in intArrayOf(-1, 1)) { push(); translate(s * 0.12f, 0f, 0.78f); rotY(s * 0.75f); box(0.32f, 0.66f, 0.03f); pop() }
+        col = c(100, 70, 40); at(0.05f, 0f, 0.42f) { cylinder(0.05f, 0.08f, 10, 0.06f) }
+    }.build()
+
+    /** Crown of a turret: a round parapet of merlons with gaps where the path comes in and leaves ([gaps] are angles in
+     *  the prop's xy plane), a flagpole with a pennant and two torches. About one cell across. */
+    fun turretCrown(gaps: List<Float>) = PM().apply {
+        val stone = c(160, 152, 138); val dark = c(120, 114, 104)
+        fun inGap(a: Float) = gaps.any { g -> val d = kotlin.math.abs(((a - g + 9.42478f) % 6.28318f) - 3.14159f); d < 0.62f }
+        val nM = 14
+        for (k in 0 until nM) {
+            val a = k * 6.28318f / nM
+            if (inGap(a)) continue
+            val r = 0.6f
+            col = if (k % 2 == 0) stone else dark
+            push(); translate(cos(a) * r, sin(a) * r, 0f); rotZ(a); box(0.12f, 0.2f, 0.34f); pop()                // parapet
+            if (k % 2 == 0) { col = stone; push(); translate(cos(a) * r, sin(a) * r, 0.24f); rotZ(a); box(0.13f, 0.18f, 0.14f); pop() }   // merlon
+        }
+        var fa = 0f; while (inGap(fa)) fa += 0.7f
+        col = c(80, 60, 40); at(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.3f) { cylinder(0.012f, 0.6f, 6) }
+        col = c(200, 30, 40); push(); translate(cos(fa) * 0.6f, sin(fa) * 0.6f, 0.82f)
+        prism(listOf(floatArrayOf(0f, 0f), floatArrayOf(0.22f, 0.05f), floatArrayOf(0f, 0.1f)), 0.008f); pop()
+        var ta = fa + 3.14f; while (inGap(ta)) ta += 0.7f
+        for (dt in floatArrayOf(-0.45f, 0.45f)) { val a = ta + dt; if (inGap(a)) continue
+            col = c(60, 44, 30); at(cos(a) * 0.52f, sin(a) * 0.52f, 0.3f) { cylinder(0.012f, 0.12f, 5) }
+            col = c(255, 140, 40) * 2.4f; at(cos(a) * 0.52f, sin(a) * 0.52f, 0.43f) { scale(1f, 1f, 1.6f); sphere(0.025f, 8, 6) } }
+    }.build()
+
     // ---------------------------------------------------------------- ground animals
     private fun monkey() = PM().apply {
         // a sitting plush chimp: soft black fur, a tan heart-shaped face with big glossy amber eyes, big tan ears,

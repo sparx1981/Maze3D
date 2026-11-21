@@ -38,6 +38,8 @@ class Marble(private val maze: Maze) {
     var field: MediumField? = null
     /** 0 basic, 1 detailed, 2 ultra: how much the loose-material behaviour is simulated. */
     var simDetail = 1
+    /** Pull towards the base shape: on hills and ramps it makes the marble roll downhill. */
+    var slopeG = 0f
     private var mudLoad = 0f
 
     /** Depth of puddle water the marble is rolling through right now (0..1), for effects and sound. */
@@ -133,6 +135,10 @@ class Marble(private val maze: Maze) {
         val gt = g - nrm * (g dot nrm)
         // 5/7 for a solid ball rolling without slipping.
         velocity += gt * (0.714f * h * terrain.accel)
+        if (slopeG > 0f && surface.lift != null) {
+            val down = surface.baseNormal(position) * -slopeG
+            velocity += (down - nrm * (down dot nrm)) * (0.714f * h)
+        }
         velocity -= nrm * (velocity dot nrm)
         if (studPitch > 0f) studPush(position, nrm, h)
         val rn = rain
@@ -170,10 +176,18 @@ class Marble(private val maze: Maze) {
 
         position += velocity * h
         // Back onto the surface (marble centre sits one radius above it).
-        position = surface.project(position) + surface.normal(position) * radius
+        settle()
 
         collide()
         updateCell()
+    }
+
+    /** Puts the marble back on the floor: find the contact point under its centre (along the floor normal, so it doesn't
+     *  creep downhill on slopes) and sit the centre one radius above it. */
+    private fun settle() {
+        var c = surface.project(position - surface.normal(position) * radius)
+        if (surface.lift != null) repeat(3) { c = surface.project(position - surface.normal(c) * radius) }   // refine the contact on slopes
+        position = c + surface.normal(c) * radius
     }
 
     private var obstacleAt: Map<Int, Triple<Int, Vec3, Float>> = emptyMap()
@@ -201,7 +215,7 @@ class Marble(private val maze: Maze) {
                     if (vn < 0f) velocity -= dir * (vn * 1.3f)
                 }
             }
-            position = surface.project(position) + surface.normal(position) * radius
+            settle()
         }
     }
 

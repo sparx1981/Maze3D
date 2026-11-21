@@ -16,6 +16,15 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     val wallHeight = maze.marbleRadius * 1.6f
     val wallHalfThickness = maze.wallHalfThickness
 
+    private val yardCells by lazy { castle?.courtyards?.flatMap { it.toList() }?.toHashSet() ?: hashSetOf() }
+    private val slideCells by lazy { castle?.turrets?.flatMap { it.slide.toList() }?.toHashSet() ?: hashSetOf() }
+    /** Floor colour of a cell: castle courtyards are lawn and turret slides are polished planks (the stone shader picks these up by hue). */
+    private fun cellFloor(c: Int): Vec3 = when (c) {
+        in yardCells -> Vec3(0.30f, 0.44f, 0.20f)
+        in slideCells -> Vec3(0.50f, 0.34f, 0.20f)
+        else -> pal.floor
+    }
+
     fun floor(tiles: Boolean = false): MeshBuilder {
         val mb = MeshBuilder(if (tiles) MeshBuilder.STRIDE + 3 else MeshBuilder.STRIDE)
         val sub = 4
@@ -37,12 +46,13 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 // glowing walls light the floor beside them
                 val tint = when (pal.themeId) { 17 -> (pal.wallTop ?: pal.wall) * 0.12f; 11 -> (pal.wallTop ?: pal.wall) * 0.20f; 9 -> pal.wall * 0.22f + (pal.wall2) * 0.08f; else -> Vec3.ZERO }
                 val lightOn = tint * exp(-d / (cs * 0.32f))
-                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), pal.floor * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
+                base[a * (sub + 1) + b] = mb.vertex(pt, surface.normal(pt), cellFloor(c) * (tone * (0.45f + 0.55f * ao)) + lightOn, Vec3.ZERO, -1f, tile)
             }
             for (a in 0 until sub) for (b in 0 until sub) {
                 mb.quad(base[a * (sub + 1) + b], base[(a + 1) * (sub + 1) + b], base[(a + 1) * (sub + 1) + b + 1], base[a * (sub + 1) + b + 1])
             }
         }
+        if (pal.themeId == 2) tyreMarks(mb)          // rubber on the asphalt: part of the matte floor
         return mb
     }
 
@@ -148,6 +158,8 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
     private object WallStyle { const val NONE = 0; const val HEDGE = 1; const val ROOT = 2; const val ROCK = 3; const val BLOCKS = 4; const val BEADS = 5; const val PILLOW = 6; const val CASTLE = 7; const val FRIES = 8; const val TOWERS = 9 }
     /** 1 = full wall detail; lower quality settings use fewer segments along the shaped walls. */
     var wallDetail = 1f
+    /** Medieval layout (courtyards, turrets) when this level has one. */
+    var castle: com.maze3d.core.Landscape.Castle? = null
     private val wallStyle = when (pal.themeId) {
         7, 12 -> WallStyle.HEDGE          // snowy hedges, autumn hedgerows
         10, 11 -> WallStyle.ROOT          // jungle roots and vines, glowing mycelium logs
@@ -787,6 +799,34 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
                 used.add(p0); nb++
             }
         }
+        // 2f. castle: a tree, lawn tufts and flowers in each courtyard; a crenellated crown, flag and torches on each turret top
+        castle?.let { cas ->
+            for ((yi, yard) in cas.courtyards.withIndex()) {
+                var mid = Vec3.ZERO; for (c in yard) mid += maze.centers[c]; mid = mid / yard.size.toFloat()
+                val ctr = yard.minByOrNull { (maze.centers[it] - mid).length() } ?: continue
+                val n = surface.normal(maze.centers[ctr])
+                val treeAt = surface.project(maze.centers[ctr])
+                placed.add(Placed(if (yi % 3 == 2) PropLibrary.well() else PropLibrary.oakTree(), treeAt, n, tangent(n, hash(ctr + 9)), cs * (if (yi % 3 == 2) 0.7f else 1.5f), 0.3f))
+                obstacles.add(Obstacle(ctr, treeAt, cs * (if (yi % 3 == 2) 0.2f else 0.1f)))
+                for (c in yard) {
+                    if (c == ctr) continue
+                    val q = surface.project(maze.centers[c] + tangent(n, hash(c + 77)) * (cs * 0.22f))
+                    val nq = surface.normal(q)
+                    placed.add(Placed(if (hash(c + 5) < 0.55f) PropLibrary.grassTuft() else PropLibrary.flowerPatch(), q, nq, tangent(nq, hash(c + 3)), cs * 0.5f, 0.3f))
+                }
+            }
+            for (t in cas.turrets) {
+                val i = t.cells.indexOf(t.top)
+                val c0 = maze.centers[t.top]
+                val n = surface.normal(c0)
+                fun dirTo(c: Int) = (maze.centers[c] - c0).let { it - n * (it dot n) }.normalized()
+                val t2 = dirTo(t.cells[i - 1]); val t1 = t2 cross n
+                val nd = dirTo(t.cells[i + 1])
+                val gapNext = kotlin.math.atan2(nd dot t2, nd dot t1)
+                placed.add(Placed(PropLibrary.turretCrown(listOf((PI / 2).toFloat(), gapNext)), c0, n, t2, cs, 0.2f))
+                addLamp(c0 + n * (cs * 0.6f), Vec3(1f, 0.55f, 0.2f), 2.5f)
+            }
+        }
         // 3. landmarks floating around the shape
         val count = 7
         for (i in 0 until count) {
@@ -901,6 +941,45 @@ class SceneBuilder(private val maze: Maze, private val pal: Palette) {
             while (k < ix.size) { mb.tri(base + ix[k], base + ix[k + 1], base + ix[k + 2]); k += 3 }
         }
         return mb
+    }
+
+    /** Rubber laid down on the track: a pair of curved streaks (two wheels) through each corner of the racing line, and
+     *  braking streaks on the straight before it. Laid on the floor (following hills), slightly worn and patchy. */
+    private fun tyreMarks(mb: MeshBuilder) {
+        val path = maze.solution
+        if (path.size < 3) return
+        val lift = cs * 0.003f
+        fun strip(pts: List<Vec3>, off: Float, halfW: Float, seed: Int) {
+            var prev: IntArray? = null
+            for ((i, q0) in pts.withIndex()) {
+                val q = surface.project(q0)
+                val n = surface.normal(q)
+                val tan = (pts[minOf(i + 1, pts.size - 1)] - pts[maxOf(i - 1, 0)]).let { it - n * (it dot n) }.normalized()
+                val side = (tan cross n).normalized()
+                val c = q + side * off + n * lift
+                val wear = 0.55f + 0.45f * hash(seed * 31 + i)
+                val col = pal.floor * (0.16f + 0.22f * (1f - wear))
+                val hw = halfW * (0.7f + 0.3f * wear)
+                val a = mb.vertex(surface.project(c - side * hw) + n * lift, n, col)
+                val b = mb.vertex(surface.project(c + side * hw) + n * lift, n, col)
+                prev?.let { pv -> if (hash(seed * 17 + i) > 0.12f) mb.quad(pv[0], pv[1], b, a) }       // a few gaps: worn, patchy rubber
+                prev = intArrayOf(a, b)
+            }
+        }
+        for (i in 1 until path.size - 1) {
+            val pa = maze.centers[path[i - 1]]; val pc = maze.centers[path[i]]; val pb = maze.centers[path[i + 1]]
+            val din = (pc - pa).normalized(); val dout = (pb - pc).normalized()
+            if ((din dot dout) > 0.7f) continue                                 // straight: nothing to mark
+            if (hash(path[i] + 3131) > 0.85f) continue
+            val e0 = (pa + pc) * 0.5f; val e1 = (pc + pb) * 0.5f
+            val arc = (0..10).map { k -> val t = k / 10f; e0 * ((1 - t) * (1 - t)) + pc * (2 * (1 - t) * t) + e1 * (t * t) }
+            for (w in floatArrayOf(-1f, 1f)) strip(arc, w * cs * 0.1f, cs * 0.028f, path[i] * 2 + (if (w > 0) 1 else 0))
+            // braking streaks on the approach
+            if (hash(path[i] + 4242) < 0.6f) {
+                val br = (0..6).map { k -> Vec3.lerp(pa, e0, k / 6f) }
+                for (w in floatArrayOf(-1f, 1f)) strip(br, w * cs * 0.1f, cs * 0.022f, path[i] * 5 + (if (w > 0) 1 else 0))
+            }
+        }
     }
 
     /** 0 until n in a repeatable shuffled order, so a cap on how many props are placed thins them evenly over the whole shape. */

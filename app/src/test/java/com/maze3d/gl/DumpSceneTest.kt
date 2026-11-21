@@ -68,7 +68,17 @@ class DumpSceneTest {
         val marble = Marble(maze)
         // let the marble roll a little so it is mid-maze
         repeat(1) { marble.step(com.maze3d.core.Vec3(0f, -3f, 0f), 1f / 60f) }
+        var castle: com.maze3d.core.Landscape.Castle? = null
+        when (pal.themeId) {
+            2 -> maze.mesh.surface.lift = com.maze3d.core.Landscape.racing(maze, 11)
+            19 -> { val (el, cas) = com.maze3d.core.Landscape.castle(maze, 11); maze.mesh.surface.lift = el; castle = cas }
+        }
+        if (maze.mesh.surface.lift != null) maze.applyLift()
+        var look = maze.solution[0] to maze.solution[1]
+        castle?.turrets?.firstOrNull()?.let { t -> if (System.getenv("MAZE_AT_TURRET") != null) { marble.reset(t.cells[0]); look = t.cells[0] to t.cells[2] } }
+        if (maze.mesh.surface.lift != null && System.getenv("MAZE_AT_TURRET") == null) marble.reset(maze.start)
         val b = SceneBuilder(maze, pal)
+        b.castle = castle
         val rn = com.maze3d.core.Rain(maze, java.util.Random(4))
         for (i in rn.level.indices) rn.level[i] = 0.35f + 0.65f * ((i * 37) % 10) / 10f
         val hz = com.maze3d.core.Hazards(maze, java.util.Random(5), true, true)
@@ -98,7 +108,7 @@ class DumpSceneTest {
         val sb = StringBuilder("{")
         run {
             val n0 = maze.mesh.surface.normal(marble.position)
-            val to = maze.centers[maze.solution[1]] - maze.centers[maze.solution[0]]
+            val to = maze.centers[look.second] - maze.centers[look.first]
             val f0 = (to - n0 * (to dot n0)).normalized()
             sb.append("\"chase\":{\"cs\":${maze.cellSize},\"n\":${arr(floatArrayOf(n0.x, n0.y, n0.z))},\"f\":${arr(floatArrayOf(f0.x, f0.y, f0.z))}},")
         }
@@ -115,7 +125,15 @@ class DumpSceneTest {
                 }
                 var q = 0; while (q < pm.idx.size) { mb.tri(base + pm.idx[q], base + pm.idx[q + 1], base + pm.idx[q + 2]); q += 3 }
             }
-            add(HazardModels.bridgeFrame(0.36f), -1.4f, 0f)
+            if (System.getenv("MAZE_HAZGAL") == "draw") {
+                add(HazardModels.gatehouse(), -1.2f, 0f); add(HazardModels.moatWater(), -1.2f, 0f)
+                add(PropMesh(FloatArray(HazardModels.drawbridgeDeck().pos.size) { val pm = HazardModels.drawbridgeDeck(); if (it % 3 == 0) pm.pos[it] + HazardModels.DRAW_HINGE else pm.pos[it] }, HazardModels.drawbridgeDeck().nrm, HazardModels.drawbridgeDeck().col, HazardModels.drawbridgeDeck().idx), -1.2f, 0f)
+                add(HazardModels.gatehouse(), 1.2f, 0f)
+                val dk = HazardModels.drawbridgeDeck()       // raised: rotate 80 degrees about the hinge
+                val ca = kotlin.math.cos(1.4f); val sa = kotlin.math.sin(1.4f)
+                add(PropMesh(FloatArray(dk.pos.size) { i -> val v = i / 3; val x = dk.pos[v * 3]; val z = dk.pos[v * 3 + 2]
+                    when (i % 3) { 0 -> x * ca + z * sa + HazardModels.DRAW_HINGE; 1 -> dk.pos[i]; else -> -x * sa + z * ca } }, dk.nrm, dk.col, dk.idx), 1.2f, 0f)
+            } else {
             add(HazardModels.gantry(0.5f), 0f, 0f)
             val hm = HazardModels.hammer()
             // hang the hammer from the gantry pivot
@@ -123,6 +141,7 @@ class DumpSceneTest {
             add(moved, 0f, 0.0f)
             add(HazardModels.gantry(0.5f), 1.6f, 0f)
             add(PropMesh(FloatArray(hm.pos.size) { if (it % 3 == 2) hm.pos[it] + HazardModels.HAMMER_PIVOT else hm.pos[it] }, hm.nrm, hm.col, hm.idx), 1.6f, 0.9f)
+            }
         } else if (gal) b.gallery(if (System.getenv("MAZE_PREVIEWSET") != null) PropLibrary.previewSet().let { ps -> System.getenv("MAZE_PREVIEWONE")?.toInt()?.let { i -> if (i < ps.first.size) listOf(ps.first[i]) to emptyList<PropLibrary.Bird>() else emptyList<PropMesh>() to listOf(ps.second[i - ps.first.size]) } ?: ps } else null) else b.props()
         sb.append("\"props\":${mesh(propsMesh)},")
         val med = System.getenv("MAZE_MEDIUM")
