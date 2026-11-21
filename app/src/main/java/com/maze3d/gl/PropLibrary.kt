@@ -139,10 +139,12 @@ object PropLibrary {
 
     private fun medieval(): ThemeProps {
         val cf = campfire(); val bn = banner(); val ca = cage(); val sw = swordInStone(); val sh = shieldStand(); val cs = castle()
+        val gd = groundDragon()
         return ThemeProps(bn, sw, sh, cs, ca, bn,
             mapOf(part(cf, flame(0.12f, 0.36f), Anim.FLICKER, listOf(Vec3(0f, 0f, 0.08f)), 1.1f), flagPart(bn, gonfalonCloth, -0.52f, listOf(Vec3(0.02f, 0f, 0.865f)), 0.07f, 0.9f, 0.6f), whole(ca, Anim.NOD, 0.7f, 0.5f),
-                flagPart(cs, castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f, 1.4f)),
-            dragon(), listOf(cf, cf, ca, sw), birds2 = bird(c(40, 40, 46), c(30, 30, 36), 4, 0.45f, 2.6f, 6f))
+                flagPart(cs, castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f, 1.4f),
+                whole(gd, Anim.NOD, 0.35f, 0.35f)),
+            dragon(), listOf(cf, cf, ca, sw, gd, gd), birds2 = bird(c(40, 40, 46), c(30, 30, 36), 4, 0.45f, 2.6f, 6f))
     }
 
     // ---------------------------------------------------------------- shared animated parts
@@ -245,7 +247,7 @@ object PropLibrary {
 
     /** Preview harness only: the props and flocks being worked on, shown side by side. */
     /** Preview harness only: the props being worked on, shown side by side. */
-    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(monkey(), dino(), idol(), trafficCone(), raptor()) to emptyList()
+    internal fun previewSet(): Pair<List<PropMesh>, List<Bird>> = listOf(groundDragon(), monkey(), dino(), idol(), trafficCone()) to listOf(dragon(), dragonfly(), mosquito())
     internal fun previewSetFlags(): Pair<List<PropMesh>, List<Bird>> {
         fun withFlag(host: PropMesh, sp: AnimSpec, ph: Float): PropMesh {
             val parts = listOf(host) + sp.at.map { o -> flagPose(sp, ph + o.x * 5f).let { m -> PropMesh(FloatArray(m.pos.size) { i -> m.pos[i] + when (i % 3) { 0 -> o.x; 1 -> o.y; else -> o.z } }, m.nrm, m.col, m.idx) } }
@@ -260,43 +262,93 @@ object PropLibrary {
             withFlag(cs, flagSpec(castlePennantA, 0.16f, listOf(Vec3(0.306f, 0.3f, 1.03f), Vec3(-0.294f, 0.3f, 1.03f), Vec3(0.306f, -0.3f, 1.03f), Vec3(-0.294f, -0.3f, 1.03f)), 0.12f, 1.4f), 1.9f)) to emptyList()
     }
 
-    /** A big dragonfly: long banded abdomen, huge compound eyes, two pairs of long clear wings with dark tip spots. */
+    /** A big dragonfly: ten-segment abdomen in electric blue with black dorsal marks and tail appendages, a striped thorax,
+     *  huge wrap-round compound eyes, spiny legs folded under, and four clear veined wings with amber bases and dark spots. */
     private fun dragonfly(): Bird {
         val body = PM().apply {
-            col = c(30, 110, 150); tube((0..10).map { Vec3(-0.03f - 0.44f * it / 10f, 0f, 0f) }, 0.022f, 10,
-                colorFn = { v -> if (((v * 10f).toInt() % 2) == 0) c(40, 150, 190) else c(20, 50, 70) }, taper = { 1f - 0.4f * it })
-            col = c(40, 120, 90); at(0.03f, 0f, 0f) { scale(1.3f, 0.9f, 1f); sphere(0.045f, 12, 8) }                    // thorax
-            col = c(60, 200, 170) * 1.1f; for (sgn in intArrayOf(-1, 1)) at(0.09f, sgn * 0.028f, 0.01f) { sphere(0.032f, 12, 8) }   // compound eyes
-            col = c(30, 30, 30); for (sgn in intArrayOf(-1, 1)) for (k in 0 until 3)
-                tube(listOf(Vec3(0.04f - k * 0.02f, sgn * 0.02f, -0.03f), Vec3(0.05f - k * 0.02f, sgn * 0.05f, -0.07f)), 0.004f, 4)
+            for (sgm in 0 until 10) {                                                                       // abdomen segments
+                val x0 = -0.03f - sgm * 0.044f; val r = 0.021f * (1f - sgm * 0.035f)
+                col = if (sgm < 2) c(40, 130, 170) else c(40, 150, 200)
+                at(x0 - 0.022f, 0f, 0f) { scale(1f, 1f, 0.95f); push(); rotY((PI / 2).toFloat()); translate(0f, 0f, -0.022f); cylinder(r, 0.042f, 12, r * 0.93f); pop() }
+                col = c(14, 18, 24); at(x0 - 0.003f, 0f, 0f) { push(); rotY((PI / 2).toFloat()); torus(r * 0.98f, 0.003f, 12, 3); pop() }   // segment joint
+                col = c(18, 22, 30); at(x0 - 0.022f, 0f, r * 0.75f) { scale(1.4f, 0.55f, 0.35f); sphere(r * 0.55f, 8, 4) }              // black dorsal mark
+            }
+            col = c(20, 24, 30); for (sg in intArrayOf(-1, 1)) tube(listOf(Vec3(-0.47f, sg * 0.004f, 0f), Vec3(-0.5f, sg * 0.014f, 0.004f)), 0.003f, 4)   // claspers
+            col = c(60, 140, 80); at(0.03f, 0f, 0.005f) { scale(1.35f, 0.95f, 1.05f); sphere(0.042f, 16, 12) }                        // thorax
+            col = c(16, 20, 20); for (k in 0 until 3) at(0.01f + k * 0.02f, 0f, 0.01f) { push(); rotX((PI / 2).toFloat()); scale(1f, 1f, 1f); torus(0.04f, 0.004f, 14, 3); pop() }   // thorax stripes
+            col = c(60, 200, 190) * 1.05f; for (sg in intArrayOf(-1, 1)) at(0.092f, sg * 0.024f, 0.012f) { scale(1f, 1f, 1.05f); sphere(0.031f, 14, 10) }   // compound eyes
+            col = c(20, 50, 60); for (sg in intArrayOf(-1, 1)) at(0.094f, sg * 0.024f, 0.03f) { scale(1f, 1f, 0.45f); sphere(0.027f, 12, 6) }   // darker eye tops
+            col = c(220, 240, 250) * 1.2f; for (sg in intArrayOf(-1, 1)) at(0.11f, sg * 0.03f, 0.024f) { sphere(0.005f, 4, 3) }
+            col = c(150, 180, 120); at(0.114f, 0f, -0.004f) { scale(0.5f, 1f, 0.8f); sphere(0.02f, 10, 8) }                          // face
+            col = c(30, 30, 30); for (sg in intArrayOf(-1, 1)) for (k in 0 until 3) {                                                // spiny legs folded under
+                val x = 0.05f - k * 0.02f
+                tube(listOf(Vec3(x, sg * 0.015f, -0.03f), Vec3(x + 0.02f, sg * 0.035f, -0.055f), Vec3(x + 0.045f, sg * 0.03f, -0.06f)), 0.0035f, 4)
+                for (j in 0 until 2) at(x + 0.01f + j * 0.012f, sg * 0.03f, -0.05f) { rotY(2.6f); cone(0.0015f, 0.008f, 3) }
+            }
         }.build()
-        fun wing(sgn: Float) = PM().apply {
-            for ((x, span, chord) in listOf(Triple(0.05f, 0.34f, 0.055f), Triple(0.0f, 0.3f, 0.065f))) {
-                col = c(178, 204, 222); push(); translate(x, sgn * span * 0.5f, 0.02f); scale(chord, span * 0.5f, 0.004f); sphere(1f, 14, 6); pop()
-                col = c(40, 30, 24); at(x, sgn * span * 0.9f, 0.024f) { scale(0.018f, 0.025f, 0.004f); sphere(1f, 6, 4) }   // tip spot
+        fun wing(sg: Float) = PM().apply {
+            for ((x, span, chord, hind) in listOf(listOf(0.05f, 0.34f, 0.055f, 0f), listOf(-0.005f, 0.31f, 0.072f, 1f))) {
+                // outline: a long narrow wing, the hindwing broader at its base
+                val n = 14
+                val out = (0..n).map { k -> val t = k / n.toFloat(); val w = chord * (0.55f + 0.45f * kotlin.math.sin(t * PI.toFloat() * 0.92f + 0.12f)) * (1f + hind * 0.6f * (1f - t) * (1f - t))
+                    Vec3(x - w * 0.5f, sg * span * t, 0.02f) to Vec3(x + w * 0.5f - hind * 0.01f, sg * span * t, 0.02f) }
+                for (k in 0 until n) {
+                    val (a0, b0) = out[k]; val (a1, b1) = out[k + 1]
+                    val t = k / n.toFloat()
+                    col = if (t < 0.12f) c(210, 170, 90) else c(205, 222, 232) * (0.95f + 0.05f * (k % 2))                         // amber base, clear glassy membrane
+                    flat(a0, b0, b1, a1)
+                }
+                col = c(50, 46, 40)                                                                           // veins: leading edge, a mid vein, cross veins, nodus
+                tube(out.map { it.second + Vec3(0f, 0f, 0.0015f) }, 0.0022f, 3)
+                tube(out.map { (it.first + it.second) * 0.5f + Vec3(0f, 0f, 0.0015f) }, 0.0012f, 3)
+                for (k in 1 until n step 1) tube(listOf(out[k].first + Vec3(0f, 0f, 0.0015f), out[k].second + Vec3(0f, 0f, 0.0015f)), 0.0007f, 3)
+                col = c(40, 26, 20); val p = out[n - 2]; at((p.first.x + p.second.x) * 0.5f + 0.012f, p.first.y, 0.0225f) { scale(0.012f, 0.025f, 0.002f); sphere(1f, 6, 4) }   // pterostigma
             }
         }.build()
         return Bird(body, wing(1f), wing(-1f), 3, 0.95f, 1.4f, 22f)
     }
 
-    /** A giant mosquito: humped striped body, long needle proboscis, feathery antennae, narrow wings and long dangling legs. */
+    /** A giant mosquito: humped thorax with a pale lyre pattern, a ringed black-and-white abdomen, dark compound eyes, palps and
+     *  a long needle proboscis, bushy antennae, six long jointed legs banded in white, and narrow veined wings with fringed edges. */
     private fun mosquito(): Bird {
         val body = PM().apply {
-            col = c(70, 60, 52); at(0.02f, 0f, 0.01f) { scale(1.2f, 0.85f, 1.1f); sphere(0.04f, 12, 8) }                 // thorax hump
-            tube((0..8).map { Vec3(-0.02f - 0.26f * it / 8f, 0f, -0.01f - 0.05f * it / 8f) }, 0.022f, 10,
-                colorFn = { v -> if (((v * 8f).toInt() % 2) == 0) c(64, 56, 50) else c(220, 216, 206) }, taper = { 1f - 0.5f * it })
-            col = c(50, 44, 40); at(0.075f, 0f, 0f) { sphere(0.025f, 10, 8) }                                            // head
-            col = c(30, 26, 24); tube(listOf(Vec3(0.095f, 0f, -0.005f), Vec3(0.2f, 0f, -0.04f), Vec3(0.27f, 0f, -0.07f)), 0.004f, 4)   // proboscis
-            for (sgn in intArrayOf(-1, 1)) tube(listOf(Vec3(0.09f, sgn * 0.01f, 0.015f), Vec3(0.15f, sgn * 0.04f, 0.05f)), 0.006f, 4)   // antennae
-            col = c(56, 48, 44)
-            for (sgn in intArrayOf(-1, 1)) for (k in 0 until 3) {
-                val x0 = 0.03f - k * 0.025f
-                tube(listOf(Vec3(x0, sgn * 0.02f, -0.02f), Vec3(x0 + 0.03f - k * 0.04f, sgn * 0.1f, 0.02f), Vec3(x0 + 0.05f - k * 0.09f, sgn * 0.15f, -0.16f)), 0.004f, 4,
-                    colorFn = { v -> if (((v * 6f).toInt() % 2) == 0) c(56, 48, 44) else c(200, 196, 186) })
+            col = c(46, 40, 36); at(0.02f, 0f, 0.012f) { scale(1.25f, 0.85f, 1.15f); sphere(0.04f, 16, 12) }                       // thorax
+            col = c(235, 232, 220); for (sg in intArrayOf(-1, 1)) tube((0..6).map { k -> val v = k / 6f; Vec3(0.05f - 0.06f * v, sg * (0.008f + 0.012f * kotlin.math.sin(v * 3f)), 0.05f - 0.005f * v) }, 0.0028f, 4)   // lyre
+            tube(listOf(Vec3(0.045f, 0f, 0.052f), Vec3(-0.01f, 0f, 0.05f)), 0.0022f, 4)
+            for (sgm in 0 until 8) {                                                                       // ringed abdomen, drooping slightly
+                val t = sgm / 8f; val x = -0.02f - 0.032f * sgm; val z = -0.012f - 0.055f * t * t; val r = 0.022f * (1f - 0.35f * t)
+                col = c(40, 36, 34); at(x - 0.016f, 0f, z) { scale(1.1f, 1f, 0.9f); sphere(r, 12, 8) }
+                col = c(230, 226, 214); at(x - 0.002f, 0f, z) { push(); rotY((PI / 2).toFloat()); torus(r * 0.92f, 0.003f, 12, 3); pop() }
             }
+            col = c(30, 26, 24); at(0.072f, 0f, 0f) { sphere(0.024f, 12, 10) }                                                       // head
+            col = c(70, 20, 20); for (sg in intArrayOf(-1, 1)) at(0.08f, sg * 0.014f, 0.006f) { scale(0.9f, 0.8f, 1f); sphere(0.016f, 10, 8) }   // compound eyes
+            col = c(24, 20, 20); tube(listOf(Vec3(0.094f, 0f, -0.004f), Vec3(0.18f, 0f, -0.032f), Vec3(0.27f, 0f, -0.07f)), 0.004f, 5, taper = { 1f - 0.7f * it })   // proboscis
+            for (sg in intArrayOf(-1, 1)) tube(listOf(Vec3(0.094f, sg * 0.006f, -0.002f), Vec3(0.15f, sg * 0.012f, -0.02f)), 0.0025f, 4)   // palps
+            for (sg in intArrayOf(-1, 1)) {                                                                // bushy antennae
+                val ant = (0..6).map { k -> val v = k / 6f; Vec3(0.09f + 0.06f * v, sg * (0.008f + 0.03f * v), 0.012f + 0.045f * v) }
+                col = c(40, 34, 30); tube(ant, 0.0022f, 3)
+                col = c(90, 80, 70); for (k in 1 until 6) { val q = ant[k]; for (w in 0 until 4) { val a = w * 1.57f
+                    tube(listOf(q, q + Vec3(0f, kotlin.math.cos(a) * 0.01f, kotlin.math.sin(a) * 0.01f)), 0.0008f, 3) } }
+            }
+            for (sg in intArrayOf(-1, 1)) for (k in 0 until 3) {                                          // long jointed legs, white bands at the joints
+                val x0 = 0.03f - k * 0.022f
+                val hip = Vec3(x0, sg * 0.02f, -0.02f); val knee = Vec3(x0 + 0.04f - k * 0.05f, sg * 0.11f, 0.04f)
+                val ankle = Vec3(x0 + 0.06f - k * 0.1f, sg * 0.16f, -0.12f); val foot = Vec3(x0 + 0.07f - k * 0.13f, sg * 0.18f, -0.2f)
+                col = c(46, 40, 36); tube(listOf(hip, knee), 0.0045f, 4); tube(listOf(knee, ankle), 0.0035f, 4); tube(listOf(ankle, foot), 0.0025f, 4)
+                col = c(235, 232, 220); for (q in listOf(knee, ankle)) at(q.x, q.y, q.z) { sphere(0.005f, 5, 4) }
+                at(foot.x, foot.y, foot.z) { sphere(0.003f, 4, 3) }
+            }
+            col = c(180, 170, 150); for (sg in intArrayOf(-1, 1)) at(-0.01f, sg * 0.03f, 0.02f) { sphere(0.006f, 5, 4) }          // halteres
         }.build()
-        fun wing(sgn: Float) = PM().apply {
-            col = c(190, 196, 200); push(); translate(-0.02f, sgn * 0.12f, 0.03f); rotZ(sgn * 0.35f); scale(0.035f, 0.12f, 0.004f); sphere(1f, 12, 6); pop()
+        fun wing(sg: Float) = PM().apply {
+            val n = 10
+            val out = (0..n).map { k -> val t = k / n.toFloat(); val w = 0.042f * kotlin.math.sin(t * PI.toFloat() * 0.95f + 0.1f)
+                val y = sg * 0.24f * t; val x = -0.01f - 0.07f * t
+                Vec3(x - w * 0.5f, y, 0.03f) to Vec3(x + w * 0.5f, y, 0.03f) }
+            for (k in 0 until n) { val (a0, b0) = out[k]; val (a1, b1) = out[k + 1]; col = c(200, 206, 210) * (0.94f + 0.06f * (k % 2)); flat(a0, b0, b1, a1) }
+            col = c(60, 56, 50)
+            tube(out.map { it.second + Vec3(0f, 0f, 0.001f) }, 0.0015f, 3); tube(out.map { (it.first + it.second) * 0.5f + Vec3(0f, 0f, 0.001f) }, 0.001f, 3)
+            col = c(120, 112, 100); for (k in 1 until n) tube(listOf(out[k].first, out[k].first + Vec3(-0.006f, 0f, -0.002f)), 0.0008f, 3)   // fringe of scales on the trailing edge
         }.build()
         return Bird(body, wing(1f), wing(-1f), 4, 0.75f, 1.1f, 30f)
     }
@@ -2384,24 +2436,129 @@ object PropLibrary {
         col = c(214, 168, 70); at(0.33f, 0f, 0.87f) { sphere(0.014f, 6, 4) }
     }.build()
 
+    // ---------------------------------------------------------------- dragons (shared pieces)
+    private val dRed = c(168, 26, 22); private val dDark = c(110, 14, 14); private val dGold = c(226, 176, 92); private val dBone = c(236, 220, 186)
+    private fun dHash(i: Int) = (((i * 2654435761L) ushr 9) % 1000).toInt() / 1000f
+    private fun crSpline(ctrl: List<Vec3>, rad: FloatArray, per: Int): Pair<List<Vec3>, List<Float>> {
+        fun cr(a: Vec3, b: Vec3, c2: Vec3, d: Vec3, t: Float): Vec3 { val t2 = t * t; val t3 = t2 * t
+            return (b * 2f + (c2 - a) * t + (a * 2f - b * 5f + c2 * 4f - d) * t2 + (b * 3f - a - c2 * 3f + d) * t3) * 0.5f }
+        val path = ArrayList<Vec3>(); val rr = ArrayList<Float>()
+        for (i in 0 until ctrl.size - 1) for (k in 0 until per) {
+            val t = k / per.toFloat()
+            path.add(cr(ctrl[maxOf(i - 1, 0)], ctrl[i], ctrl[i + 1], ctrl[minOf(i + 2, ctrl.size - 1)], t)); rr.add(rad[i] + (rad[i + 1] - rad[i]) * (t * t * (3f - 2f * t)))
+        }
+        path.add(ctrl.last()); rr.add(rad.last())
+        return path to rr
+    }
+    /** Red dragon hide along a spine: banded tone, a row of dorsal spikes, gold belly plates underneath, and many scales. */
+    private fun PM.dragonHide(path: List<Vec3>, rr: List<Float>, spikesFrom: Int, spikesTo: Int, scales: Int, seed: Int, spikeK: Float = 1f) {
+        val nP = path.size
+        col = dRed
+        tube(path, 1f, 22, colorFn = { v -> val ring = (v * (nP - 1)).toInt(); dRed * (0.9f + 0.14f * dHash(ring * 7 + seed)) },
+            taper = { v -> rr[minOf((v * (nP - 1)).toInt(), nP - 1)] })
+        for (i in 2 until nP - 2 step 2) {                                                                 // belly plates
+            val q = path[i]; val tng = (path[i + 1] - path[i - 1]).normalized()
+            col = if ((i / 2) % 2 == 0) dGold else dGold * 0.86f
+            push(); translate(q.x, q.y, q.z - rr[i] * 0.9f); rotY(-kotlin.math.atan2(tng.z, tng.x)); scale(1.5f, 1.6f, 0.45f); sphere(rr[i] * 0.42f, 10, 6); pop()
+        }
+        for (i in spikesFrom until minOf(spikesTo, nP - 1) step 2) {                                       // dorsal spikes, shrinking to the tail
+            val q = path[i]; val tng = (path[i + 1] - path[i - 1]).normalized()
+            col = if (i % 4 == 0) dBone else dBone * 0.85f
+            push(); translate(q.x, q.y, q.z + rr[i] * 0.85f); rotY(-0.55f - kotlin.math.atan2(tng.z, tng.x) * 0.5f); cone((rr[i] * 0.28f + 0.006f) * spikeK, (rr[i] * 0.75f + 0.02f) * spikeK, 5); pop()
+        }
+        for (k in 0 until scales) {                                                                        // scales: darker and glinting
+            val i = 3 + (dHash(k * 3 + seed * 977) * (nP - 6)).toInt().coerceAtMost(nP - 7); val q = path[i]; val a = -1.4f + 2.8f * dHash(k * 5 + seed * 131 + 1)   // scattered, not in rows
+            col = if (k % 4 == 0) dDark * 0.8f else if (k % 7 == 0) c(140, 20, 18) else dDark * 1.1f
+            push(); translate(q.x, q.y + sin(a) * rr[i] * 0.98f, q.z + cos(a) * rr[i] * 0.98f); rotX(-a); scale(1.2f, 1f, 0.32f); sphere(rr[i] * 0.09f + 0.006f, 6, 4); pop()
+        }
+    }
+    /** Horned dragon head facing +x at [h]: long snout, open jaws with teeth and an ember glow, slit-pupil eyes, swept-back horns. */
+    private fun PM.dragonHead(h: Vec3, sc: Float, open: Float) {
+        push(); translate(h.x, h.y, h.z); scale(sc)
+        col = dRed
+        at(0f, 0f, 0f) { scale(1.2f, 0.95f, 0.9f); sphere(0.07f, 18, 12) }                                                  // skull
+        at(0.1f, 0f, 0.0f) { scale(1.9f, 0.7f, 0.55f); sphere(0.055f, 18, 10) }                                            // upper snout
+        col = dGold; push(); translate(0.05f, 0f, -0.035f - open * 0.03f); rotY(open * 0.6f); scale(1.9f, 0.62f, 0.35f); sphere(0.05f, 16, 8); pop()   // lower jaw
+        col = c(90, 10, 10); at(0.09f, 0f, -0.03f - open * 0.012f) { scale(1.8f, 0.5f, 0.3f); sphere(0.04f, 12, 6) }           // mouth
+        col = c(255, 110, 20) * 2.2f; at(0.06f, 0f, -0.03f - open * 0.01f) { scale(1.2f, 0.4f, 0.25f); sphere(0.03f, 8, 6) }  // ember glow in the throat
+        col = dBone; for (k in 0 until 6) for (sg in intArrayOf(-1, 1)) {
+            at(0.04f + k * 0.022f, sg * 0.028f * (1f - k * 0.06f), -0.022f) { rotX(PI.toFloat()); cone(0.006f, 0.022f, 4) }
+            at(0.05f + k * 0.02f, sg * 0.026f * (1f - k * 0.06f), -0.045f - open * 0.03f + k * open * 0.006f) { cone(0.005f, 0.018f, 4) } }
+        col = c(40, 8, 8); for (sg in intArrayOf(-1, 1)) at(0.19f, sg * 0.016f, 0.012f) { scale(1.3f, 1f, 0.7f); sphere(0.008f, 6, 4) }   // nostrils
+        for (sg in intArrayOf(-1, 1)) {
+            col = dDark; at(0.035f, sg * 0.05f, 0.04f) { scale(1.6f, 0.6f, 0.5f); sphere(0.025f, 10, 6) }                       // brow ridge
+            col = c(255, 180, 30) * 1.7f; at(0.045f, sg * 0.058f, 0.025f) { scale(1.3f, 0.6f, 0.8f); sphere(0.015f, 10, 8) }    // eye
+            col = c(20, 10, 4); at(0.05f, sg * 0.067f, 0.025f) { scale(0.3f, 0.3f, 1.2f); sphere(0.01f, 6, 6) }                 // slit pupil
+            col = dBone                                                                                                          // swept-back horns
+            tube((0..6).map { k -> val v = k / 6f; Vec3(-0.02f - 0.13f * v, sg * (0.04f + 0.03f * v), 0.05f + 0.06f * v - 0.05f * v * v) }, 0.014f, 6, taper = { 1f - 0.92f * it })
+            tube((0..4).map { k -> val v = k / 4f; Vec3(-0.03f - 0.06f * v, sg * (0.06f + 0.03f * v), -0.01f - 0.01f * v) }, 0.008f, 5, taper = { 1f - 0.9f * it })   // cheek horns
+            for (k in 0 until 3) at(0.02f - k * 0.03f, sg * 0.06f, -0.04f) { rotX(sg * 2.4f); cone(0.007f, 0.02f, 4) }          // jaw spikes
+        }
+        pop()
+    }
+    /** A bat wing on the right (+y, mirrored by [sg]): arm bone and elbow, four finger bones, and a membrane with a scalloped trailing edge. */
+    private fun PM.dragonWing(root: Vec3, sg: Float, span: Float, lift: Float, sweep: Float) {
+        val elbow = root + Vec3(-0.08f * span, sg * 0.35f * span, 0.18f * lift * span)
+        val wrist = elbow + Vec3(0.12f * span, sg * 0.3f * span, 0.12f * lift * span)
+        val tips = (0 until 4).map { f -> val a = 0.25f + f * 0.36f + sweep
+            wrist + Vec3(-kotlin.math.sin(a) * 0.62f * span * (1f - f * 0.12f), sg * kotlin.math.cos(a) * 0.5f * span * (1f - f * 0.1f), -0.06f * f * lift * span) }
+        col = dDark
+        tube(listOf(root, elbow), 0.022f * span, 8, taper = { 1f - 0.3f * it }); tube(listOf(elbow, wrist), 0.017f * span, 8)
+        at(wrist.x, wrist.y, wrist.z) { sphere(0.02f * span, 8, 6) }
+        col = dBone; at(wrist.x + 0.02f * span, wrist.y, wrist.z + 0.02f * span) { rotY(-0.5f); cone(0.01f * span, 0.05f * span, 5) }   // thumb claw
+        col = dDark; for (t in tips) tube(listOf(wrist, (wrist + t) * 0.5f + Vec3(0f, 0f, 0.02f * span), t), 0.009f * span, 5, taper = { 1f - 0.75f * it })
+        // membrane: between successive fingers, sagging a little, and from the last finger back to the body
+        val anchors = listOf(elbow) + tips + listOf(root + Vec3(-0.32f * span, sg * 0.05f * span, -0.02f * span))
+        for (f in 0 until anchors.size - 1) {
+            val a = anchors[f]; val b = anchors[f + 1]
+            val sag = (a + b) * 0.5f + (wrist - (a + b) * 0.5f) * 0.28f - Vec3(0f, 0f, 0.03f * span)              // the scalloped edge pulls in towards the wrist
+            col = if (f % 2 == 0) c(150, 36, 28) else c(132, 28, 22)
+            flat(wrist, a, sag, sag); flat(wrist, sag, b, b)
+            col = c(190, 70, 40); flat(sag, a, a + (sag - a) * 0.15f, sag)                                          // lighter veins near the edge
+        }
+    }
+
+    /** A red dragon at rest on the castle grounds, built like the Brachiosaurus (spine curve and leg columns) but crouched
+     *  and muscular: S-curved neck and a horned head with open jaws and an ember glow, half-raised bat wings, a spiked back,
+     *  a spade-tipped tail, clawed feet, gold belly plates and scaly red hide. Facing +x, about one unit long. */
+    fun groundDragon() = PM().apply {
+        val (path, rr) = crSpline(listOf(Vec3(-0.92f, 0.1f, 0.05f), Vec3(-0.68f, 0.06f, 0.1f), Vec3(-0.42f, 0f, 0.24f), Vec3(-0.18f, 0f, 0.34f), Vec3(0.08f, 0f, 0.36f),
+            Vec3(0.22f, 0f, 0.46f), Vec3(0.27f, 0f, 0.62f), Vec3(0.34f, 0f, 0.74f), Vec3(0.44f, 0f, 0.78f)),
+            floatArrayOf(0.012f, 0.04f, 0.12f, 0.16f, 0.15f, 0.09f, 0.07f, 0.065f, 0.06f), 8)
+        dragonHide(path, rr, 6, path.size - 6, 260, 3)
+        // spade at the tail tip
+        col = dDark; push(); translate(-0.95f, 0.1f, 0.05f); rotX((PI / 2).toFloat())
+        prism(listOf(floatArrayOf(0.04f, 0f), floatArrayOf(-0.03f, 0.05f), floatArrayOf(-0.08f, 0f), floatArrayOf(-0.03f, -0.05f)), 0.012f); pop()
+        dragonHead(Vec3(0.5f, 0f, 0.8f), 1.15f, 0.7f)
+        // legs: muscular thighs/shoulders, bent knees, clawed feet
+        for ((lx, top, front) in listOf(Triple(0.06f, 0.36f, true), Triple(-0.36f, 0.27f, false))) for (sg in intArrayOf(-1, 1)) {
+            col = dRed
+            at(lx, sg * 0.13f, top - 0.04f) { scale(if (front) 0.8f else 1.1f, 0.6f, 1.15f); sphere(if (front) 0.085f else 0.11f, 16, 12) }
+            val knee = Vec3(lx + (if (front) -0.05f else 0.09f), sg * 0.17f, top * 0.45f)
+            val ankle = Vec3(lx + (if (front) 0.02f else -0.02f), sg * 0.17f, 0.06f)
+            tube((0..10).map { k -> val t = k / 10f; val a = Vec3(lx, sg * 0.14f, top - 0.08f)
+                if (t < 0.5f) Vec3.lerp(a, knee, t * 2f) else Vec3.lerp(knee, ankle, (t - 0.5f) * 2f) }, 0.055f, 14, taper = { t -> 1f - 0.35f * t })
+            col = dRed * 0.9f; at(ankle.x + 0.03f, ankle.y, 0.03f) { scale(1.5f, 1f, 0.55f); sphere(0.05f, 12, 8) }                    // foot
+            col = c(40, 30, 28); for (t in -1..1) at(ankle.x + 0.09f, ankle.y + t * 0.03f, 0.02f) { rotY(1.6f); cone(0.012f, 0.05f, 5) }   // claws
+        }
+        dragonWing(Vec3(0.02f, 0.1f, 0.48f), 1f, 1f, 1.3f, 0.2f); dragonWing(Vec3(0.02f, -0.1f, 0.48f), -1f, 1f, 1.3f, 0.2f)
+    }.build()
+
     private fun dragon(): Bird {
-        // a red dragon: long body and tail, horned head, bat-like wings with fingers and membrane
+        // the flying dragon: streamlined scaly body with gold belly plates and a spiked back, outstretched neck and horned
+        // head, legs tucked up, a spade-tipped tail, and articulated bat wings (arm, elbow, four fingers, scalloped membrane)
         val body = PM().apply {
-            col = c(170, 30, 26)
-            tube((0..10).map { k -> val v = k / 10f; Vec3(0.3f - 0.9f * v, 0f, 0.04f * kotlin.math.sin(v * 6f)) }, 0.07f, 10, taper = { v -> if (v < 0.2f) 0.8f + v else 1.2f - 1.1f * v })
-            tube(listOf(Vec3(0.3f, 0f, 0f), Vec3(0.4f, 0f, 0.06f), Vec3(0.46f, 0f, 0.08f)), 0.045f, 8)
-            at(0.5f, 0f, 0.08f) { scale(1.5f, 0.8f, 0.7f); sphere(0.05f, 10, 8) }
-            col = c(240, 220, 160); for (s in intArrayOf(-1, 1)) at(0.48f, s * 0.03f, 0.13f) { rotY(-0.9f); cone(0.012f, 0.08f, 5) }
-            col = c(255, 200, 40) * 1.6f; for (s in intArrayOf(-1, 1)) at(0.53f, s * 0.03f, 0.1f) { sphere(0.01f, 5, 4) }
-            col = c(120, 20, 18); at(-0.62f, 0f, 0f) { scale(1f, 1f, 0.3f); cone(0.06f, 0.1f, 4) }
-            col = c(240, 200, 120); for (k in 0 until 5) at(0.2f - k * 0.12f, 0f, 0.075f) { cone(0.02f, 0.05f, 4) }
+            val (path, rr) = crSpline(listOf(Vec3(-0.75f, 0f, -0.02f), Vec3(-0.5f, 0f, 0.0f), Vec3(-0.22f, 0f, 0.02f), Vec3(0.0f, 0f, 0.02f), Vec3(0.18f, 0f, 0.03f),
+                Vec3(0.32f, 0f, 0.07f), Vec3(0.44f, 0f, 0.1f)), floatArrayOf(0.01f, 0.03f, 0.07f, 0.085f, 0.075f, 0.045f, 0.04f), 7)
+            dragonHide(path, rr, 4, path.size - 4, 160, 9, 0.5f)
+            col = dDark; push(); translate(-0.78f, 0f, -0.02f); prism(listOf(floatArrayOf(0.04f, 0f), floatArrayOf(-0.02f, 0.04f), floatArrayOf(-0.06f, 0f), floatArrayOf(-0.02f, -0.04f)), 0.008f); pop()
+            dragonHead(Vec3(0.48f, 0f, 0.11f), 0.75f, 0.35f)
+            for ((lx, sg) in listOf(0.08f to 1, 0.08f to -1, -0.24f to 1, -0.24f to -1)) {                                       // tucked legs
+                col = dRed; tube(listOf(Vec3(lx, sg * 0.05f, -0.04f), Vec3(lx - 0.06f, sg * 0.06f, -0.09f), Vec3(lx - 0.13f, sg * 0.05f, -0.08f)), 0.02f, 8, taper = { 1f - 0.4f * it })
+                col = c(40, 30, 28); at(lx - 0.15f, sg * 0.05f, -0.08f) { rotY(PI.toFloat() / 2f); cone(0.008f, 0.03f, 4) }
+            }
         }.build()
-        fun wing(sgn: Float) = PM().apply {
-            col = c(110, 20, 20)
-            for (f in 0 until 4) tube(listOf(Vec3(0.02f, 0f, 0f), Vec3(0.05f - f * 0.08f, sgn * 0.45f, 0.02f)), 0.01f, 4)
-            col = c(200, 60, 40)
-            for (f in 0 until 3) flat(Vec3(0.02f, 0f, 0f), Vec3(0.05f - f * 0.08f, sgn * 0.45f, 0.02f), Vec3(0.05f - (f + 1) * 0.08f, sgn * 0.45f, 0.02f), Vec3(-0.1f, sgn * 0.05f, 0f))
-        }.build()
+        fun wing(sg: Float) = PM().apply { dragonWing(Vec3(0.06f, sg * 0.04f, 0.04f), sg, 0.85f, 0.25f, 0.05f) }.build()
         return Bird(body, wing(1f), wing(-1f), 2, 1.5f, 4.5f, 2.6f, glide = true)
     }
 
